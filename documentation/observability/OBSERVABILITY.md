@@ -39,12 +39,12 @@
    - **GCP Harcama & Bütçe Koruması (Bu Ay):** 0.00 TL Free Tier durumunu ve bütçe alarmlarını denetler.
    - **App Check İstek Doğrulama (Canlı - >= %95):** Sahte bot ve korsan scraping isteklerini kapıda engeller.
 3. **🤖 Botlar & Servis Durumu (GCP VM & Telegram MTProto):**
-   - **Otonom Telegram Botu Sağlık Durumu (Anlık Sinyal):** Son 15 dakikalık kalp atışıdır; botun donup donmadığını gösterir.
+   - **Otonom Telegram Botu Sağlık Durumu (Anlık Sinyal):** 3 kademeli kalp atışı kontrolüdür (<15 dk: 🟢 Online, 15-60 dk: 🟡 Sinyal Gecikmeli, >60 dk: 🔴 Çevrimdışı); botun anlık durumunu ve Node.js Heap RAM kullanımını gösterir.
    - **HTTP Canlılık Probu (Anlık Ping):** Bot sunucusuna anlık ping atarak ağ yanıt hızını (ms) ve uptime'ı test eder.
-   - **Oturum Sayaçları (Son Başlatmadan Beri):** Yakalanan ham mesaj (`msgCount`), paylaşılan fırsat (`dealCount`), elenen çift mesaj (`dupCount`) ve hata sayısı (`errCount`).
+   - **Oturum Sayaçları (Son Başlatmadan Beri):** Yakalanan ham mesaj (`msgCount`), paylaşılan fırsat (`dealCount`), elenen çift mesaj (`dupCount`), hata sayısı (`errCount`) ve Node.js Heap RAM (MB) telemetrisi.
    - **SSH Müdahale Rehberi:** Bot kilitlendiğinde sunucuda 3 hazır komutla yeniden başlatma sağlar.
 4. **🚨 Kararlılık, Hatalar & Konsol Köprüleri (Stability & Bridges):**
-   - **Sistem Hataları (Canlı - Son 50 Kayıt):** Mobil ve sunucuda karşılaşılan açık hataları ve çözülme durumunu listeler.
+   - **Sistem Hataları (Canlı - Son 50 Kayıt):** Mobil ve sunucuda karşılaşılan teknik hataları (`createdAt` sıralı) listeler; çözülmemiş aktif hata sayısını (`unresolved / total`) başlık rozetinde anlık gösterir.
    - **Firebase Crashlytics (Canlı & Sürümler):** Ölümcül çökmeleri izler; hedef %99.5 çökmesiz kullanıcı oranını korumaktır.
    - **Firebase Performance (Canlı Gözlem):** Açılış hızı (<2 sn), donan kareler ve mağaza yönlendirme gecikmelerini denetler.
    - **GCP Cloud Logging (Canlı Loglar):** 26 fonksiyonun ham backend loglarını ve gizli kalan hataları sorgular.
@@ -72,8 +72,8 @@
 | **Bot Canlılık & Kalp Atışı** | **Web Admin Modül 1** | [PROD Dashboard](https://firsatkolik.app/admin/) | [DEV Dashboard](https://sicak-firsatlar-e6eae.web.app/admin/) | `lastHeartbeat` yeşil/kırmızı canlılık durumu |
 | **Sunucu Sağlık Probu** | HTTP Health Endpoint | `http://34.135.181.112:8082/health` | `http://34.135.181.112:8081/health` | Bot konteynerinin HTTP 200 uptime kontrolü |
 | **VM CPU/RAM & PM2 Logları** | Compute Engine & SSH | [PROD VM Konsolu](https://console.cloud.google.com/compute/instances?project=firsatkolik-prod-e6eae) | — | `pm2 status` ve `pm2 logs` ile MTProto akışı |
-| **Derinlemesine Backend Logları**| GCP Cloud Logging | [PROD Logs Explorer](https://console.cloud.google.com/logs/viewer?project=firsatkolik-prod-e6eae) | [DEV Logs Explorer](https://console.cloud.google.com/logs/viewer?project=sicak-firsatlar-e6eae) | Functions `error_logger` ve `functions.logger` |
-| **Aylık Fatura ve Bütçe** | GCP Cloud Billing | [GCP Billing Paneli](https://console.cloud.google.com/billing) | — | 0 TL Free Tier koruması & 500 TL alarm eşiği |
+| **Derinlemesine Backend Logları**| GCP Cloud Logging | [PROD Logs Explorer](https://console.cloud.google.com/logs/query?project=firsatkolik-prod-e6eae) | [DEV Logs Explorer](https://console.cloud.google.com/logs/query?project=sicak-firsatlar-e6eae) | Functions `error_logger` ve `functions.logger` |
+| **Aylık Fatura ve Bütçe** | GCP Cloud Billing | [PROD Billing Raporu](https://console.cloud.google.com/billing/reports?project=firsatkolik-prod-e6eae) | [DEV Billing Raporu](https://console.cloud.google.com/billing/reports?project=sicak-firsatlar-e6eae) | 0 TL Free Tier koruması & 500 TL alarm eşiği |
 
 ---
 

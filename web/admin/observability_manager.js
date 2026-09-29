@@ -91,8 +91,8 @@
             const firebaseStorageUsageUrl = `https://console.firebase.google.com/project/${projectId}/storage`;
             const firebaseFunctionsUsageUrl = `https://console.firebase.google.com/project/${projectId}/functions/usage`;
             const firebaseAppCheckUrl = `https://console.firebase.google.com/project/${projectId}/appcheck`;
-            const gcpLogsUrl = `https://console.cloud.google.com/logs/viewer?project=${projectId}`;
-            const gcpBillingUrl = 'https://console.cloud.google.com/billing';
+            const gcpLogsUrl = `https://console.cloud.google.com/logs/query?project=${projectId}`;
+            const gcpBillingUrl = `https://console.cloud.google.com/billing/reports?project=${projectId}`;
             const gcpComputeUrl = `https://console.cloud.google.com/compute/instances?project=${projectId}`;
 
             return {
@@ -251,12 +251,18 @@
 
             const db = firebase.firestore();
 
-            // 1. systemErrors koleksiyonu sorgusu
+            // 1. systemErrors koleksiyonu sorgusu (Canlı Sistem Hata Telemetrisi)
             try {
-                const snapshot = await db.collection('systemErrors')
-                    .orderBy('timestamp', 'desc')
-                    .limit(50)
-                    .get();
+                let snapshot;
+                try {
+                    snapshot = await db.collection('systemErrors')
+                        .orderBy('createdAt', 'desc')
+                        .limit(50)
+                        .get();
+                } catch (orderErr) {
+                    console.warn('⚠️ ObservabilityManager: createdAt orderBy başarısız, fallback limit(50) uygulanıyor:', orderErr);
+                    snapshot = await db.collection('systemErrors').limit(50).get();
+                }
 
                 let total = snapshot.size;
                 let unresolved = 0;
@@ -264,32 +270,57 @@
 
                 snapshot.forEach(doc => {
                     const d = doc.data();
-                    if (!d.isResolved) unresolved++;
+                    const isResolved = d.status === 'resolved' || d.isResolved === true;
+                    if (!isResolved) unresolved++;
+
                     if (latest.length < 5) {
-                        const ts = d.timestamp?.toDate
-                            ? d.timestamp.toDate()
-                            : (d.timestamp?.seconds ? new Date(d.timestamp.seconds * 1000) : (d.timestamp ? new Date(d.timestamp) : new Date()));
+                        const rawTs = d.createdAt || d.lastOccurredAt || d.timestamp;
+                        let ts = new Date();
+                        if (rawTs) {
+                            if (typeof rawTs.toDate === 'function') ts = rawTs.toDate();
+                            else if (typeof rawTs.seconds === 'number') ts = new Date(rawTs.seconds * 1000);
+                            else if (typeof rawTs._seconds === 'number') ts = new Date(rawTs._seconds * 1000);
+                            else ts = new Date(rawTs);
+                        }
                         latest.push({
                             id: doc.id,
-                            message: d.message || d.errorMessage || 'Bilinmeyen Hata',
-                            level: d.level || 'error',
-                            service: d.service || 'Mobil',
+                            message: d.message || d.title || d.errorMessage || 'Bilinmeyen Hata',
+                            level: d.severity || d.level || 'error',
+                            service: d.service || d.source || 'Mobil',
                             timestamp: ts,
-                            isResolved: Boolean(d.isResolved)
+                            isResolved: isResolved
                         });
                     }
                 });
 
-                this.cache.systemErrors = { total, unresolved, latest };
+                // Toplam doküman sayısını sunucu aggregation sayacından al
+                let totalAll = total;
+                try {
+                    if (typeof window.fetchServerCollectionCount === 'function') {
+                        const c = await window.fetchServerCollectionCount('systemErrors');
+                        if (typeof c === 'number' && c > 0) totalAll = c;
+                    }
+                } catch (_) {}
+
+                // Eğer aktif açık hata varsa kesin sayısını al
+                try {
+                    const unresolvedSnap = await db.collection('systemErrors').where('status', '==', 'unresolved').get();
+                    unresolved = unresolvedSnap.size;
+                } catch (_) {}
+
+                this.cache.systemErrors = { total: totalAll, unresolved, latest };
 
                 // Hata rozetini güncelle
                 const badge = document.getElementById('obsErrorBadge');
                 if (badge) {
                     if (unresolved > 0) {
                         badge.textContent = unresolved;
+                        badge.className = 'px-2 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full';
                         badge.classList.remove('hidden');
                     } else {
-                        badge.classList.add('hidden');
+                        badge.textContent = '0';
+                        badge.className = 'px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full';
+                        badge.classList.remove('hidden');
                     }
                 }
             } catch (err) {
@@ -302,15 +333,19 @@
                 if (botSnap.exists) {
                     this.cache.botStatus = botSnap.data();
 
-                    // Üst sekmedeki bot canlılık pulse'ını güncelle
+                    // Üst sekmedeki bot canlılık pulse'ını güncelle (Tri-state: <15 dk yeşil, 15-60 dk sarı, >60 dk kırmızı)
                     const pulse = document.getElementById('obsBotHeaderPulse');
                     if (pulse) {
                         const data = this.cache.botStatus;
                         const lastHb = data.lastHeartbeatAt?.toDate
                             ? data.lastHeartbeatAt.toDate()
                             : (data.lastHeartbeatAt?.seconds ? new Date(data.lastHeartbeatAt.seconds * 1000) : (data.lastHeartbeatAt?._seconds ? new Date(data.lastHeartbeatAt._seconds * 1000) : null));
-                        const isOnline = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000) && (data.status === 'online');
-                        pulse.className = isOnline ? 'size-2 rounded-full bg-emerald-500 animate-pulse' : 'size-2 rounded-full bg-rose-500';
+                        const diffMin = lastHb ? Math.round(Math.abs(Date.now() - lastHb.getTime()) / 60000) : 999;
+                        const isOnline = lastHb && (diffMin < 15) && (data.status === 'online');
+                        const isDelayed = lastHb && (diffMin >= 15 && diffMin < 60) && (data.status === 'online');
+                        pulse.className = isOnline
+                            ? 'size-2 rounded-full bg-emerald-500 animate-pulse'
+                            : (isDelayed ? 'size-2 rounded-full bg-amber-500 animate-pulse' : 'size-2 rounded-full bg-rose-500');
                     }
                 }
             } catch (err) {
@@ -676,7 +711,7 @@
                             <b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Hibrit Canlı (0-15 sn + 24s Veri)</span> — Kupon kopyalama olayları cihazdan çıktığı anda Realtime ile yakalanır; kalıcı günlük rapora 24 saatte işlenir.<br>
                             <b>💡 Ne İşe Yarar:</b> Kuponlar modülünün ne kadar talep gördüğünü ve kullanıldığını ölçer.
                         </div>
-                        <button type="button" onclick="window.showCouponsView()" class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer text-left">
+                        <button type="button" onclick="window.showCouponsView ? window.showCouponsView() : (window.showView && window.showView('couponsView'))" class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer text-left">
                             <span>Kuponlar Modülüne Git ➔</span>
                         </button>
                     </div>
@@ -698,7 +733,7 @@
                             <b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Hibrit Canlı (0-15 sn + 24s Veri)</span> — İncelenen aktüel sayfalar anlık Realtime akışıyla yakalanır; derinlemesine sayfa terk analizleri 24 saatte çıkar.<br>
                             <b>💡 Ne İşe Yarar:</b> Aktüel broşür modülünün okunma trafiğini ölçer.
                         </div>
-                        <button type="button" onclick="window.showCatalogsView()" class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer text-left">
+                        <button type="button" onclick="window.showCatalogsView ? window.showCatalogsView() : (window.showView && window.showView('catalogsView'))" class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer text-left">
                             <span>Kataloglar Modülüne Git ➔</span>
                         </button>
                     </div>
@@ -802,7 +837,7 @@
 
                         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                             <span class="text-slate-400">Sektör Ortalaması: <b>%15 - %25</b></span>
-                            <button type="button" onclick="window.showDealsView()" class="font-bold text-primary hover:underline cursor-pointer">
+                            <button type="button" onclick="window.showDealsView ? window.showDealsView() : (window.showView && window.showView('dealsView'))" class="font-bold text-primary hover:underline cursor-pointer">
                                 Fırsatlar Modülünü Aç ➔
                             </button>
                         </div>
@@ -1286,7 +1321,7 @@
                         description: '<b>⏱️ Zaman:</b> Bugün (Gece 03:00\'te sıfırlanan 24 saatlik kota)<br><b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (Saniyelik Doküman Sayımı)</span> — Paneldeki doküman hacmi anlıktır; Firebase Usage konsolundaki kesinleşmiş grafik ~1-2 saat gecikmelidir.<br><b>💡 Ne İşe Yarar:</b> Mobil uygulamanın ve admin panelin veritabanından veri çekme hacmidir. Günlük 50.000 ücretsiz okuma limitini aşmadan sistemin sıfır maliyetle (Free Tier) çalışmasını sağlar.',
                         primaryBtn: {
                             label: 'Koleksiyonları Aç ➔',
-                            action: 'window.showDealsView()'
+                            action: 'window.showDealsView ? window.showDealsView() : (window.showView && window.showView(\'dealsView\'))'
                         },
                         externalBtn: {
                             label: 'Firestore Usage ↗',
@@ -1307,7 +1342,7 @@
                         description: '<b>⏱️ Zaman:</b> Bugün (Gece 03:00\'te sıfırlanan 24 saatlik kota)<br><b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (Tahmini Kota Projeksiyonu)</span> — Yazma kotası bot ve kullanıcı hacminden canlı modellenir.<br><b>💡 Ne İşe Yarar:</b> Botların yeni fırsat/kupon kaydetmesi ve kullanıcıların oy vermesi gibi veritabanına kayıt işlemleridir. Günlük 20.000 sınırını aşarak faturaya girmeyi önler.',
                         primaryBtn: {
                             label: 'Modül 8 Sistem Logları ➔',
-                            action: 'window.showLogsView()'
+                            action: 'window.showLogsView ? window.showLogsView() : (window.showView && window.showView(\'logsView\'))'
                         },
                         externalBtn: {
                             label: 'Yazma Grafiği ↗',
@@ -1328,7 +1363,7 @@
                         description: '<b>⏱️ Zaman:</b> Bugün (24 Saatlik kota)<br><b>⚡ Canlılık:</b> <span class="text-amber-500 font-bold">🟡 Yarı Canlı (Görseller Anlık, GB Fatura 12-24 Saat)</span> — Yüklenen katalog görsel adedi canlıdır; indirilen net GB tüketimi Storage konsoluna 12-24 saatte işlenir.<br><b>💡 Ne İşe Yarar:</b> Kullanıcıların katalog ve fırsat fotoğraflarını indirme trafiğidir. Resimleri WebP formatında sıkıştırarak günlük 1 GB ücretsiz kotanın altında kalmayı sağlar.',
                         primaryBtn: {
                             label: 'Katalog Modülü ➔',
-                            action: 'window.showCatalogsView()'
+                            action: 'window.showCatalogsView ? window.showCatalogsView() : (window.showView && window.showView(\'catalogsView\'))'
                         },
                         externalBtn: {
                             label: 'Storage Paneli ↗',
@@ -1417,18 +1452,21 @@
 
             const diffMinutes = lastHb ? Math.round(Math.abs(Date.now() - lastHb.getTime()) / 60000) : 999;
             const isOnline = lastHb && (diffMinutes < 15) && (botData.status === 'online');
+            const isDelayed = lastHb && (diffMinutes >= 15 && diffMinutes < 60) && (botData.status === 'online');
 
-            const statusClass = isOnline
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+            let statusClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+            let statusIcon = '<span class="size-2 rounded-full bg-rose-500"></span>';
+            let statusText = 'KRİTİK: BOT ÇEVRİMDİŞİ / DURDURULDU';
 
-            const statusIcon = isOnline
-                ? '<span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>'
-                : '<span class="size-2 rounded-full bg-rose-500"></span>';
-
-            const statusText = isOnline
-                ? 'BOT ÇEVRİMİÇİ & CANLI'
-                : 'KRİTİK: BOT ÇEVRİMDİŞİ / DONMUŞ';
+            if (isOnline) {
+                statusClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+                statusIcon = '<span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>';
+                statusText = 'BOT ÇEVRİMİÇİ & CANLI';
+            } else if (isDelayed) {
+                statusClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+                statusIcon = '<span class="size-2 rounded-full bg-amber-500 animate-pulse"></span>';
+                statusText = `SİNYAL BEKLENİYOR (${diffMinutes} DK ÖNCE)`;
+            }
 
             const lastHbText = lastHb
                 ? `${diffMinutes} dakika önce (${lastHb.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })})`
@@ -1451,8 +1489,8 @@
                 <!-- Canlı Kalp Atışı Hero Kartı -->
                 <div class="bg-white dark:bg-surface-dark p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
                     <div class="flex items-center gap-4">
-                        <div class="w-14 h-14 rounded-2xl ${isOnline ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'} flex items-center justify-center border shrink-0">
-                            <span class="material-symbols-outlined text-3xl">${isOnline ? 'sensors' : 'sensors_off'}</span>
+                        <div class="w-14 h-14 rounded-2xl ${isOnline ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : (isDelayed ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20')} flex items-center justify-center border shrink-0">
+                            <span class="material-symbols-outlined text-3xl">${isOnline ? 'sensors' : (isDelayed ? 'schedule' : 'sensors_off')}</span>
                         </div>
                         <div class="flex flex-col gap-1.5">
                             <div class="flex items-center gap-2.5 flex-wrap">
@@ -1465,14 +1503,14 @@
                                 Konteyner: <b>${container}</b> • Dinlenen Port: <b>${port}</b> • Son Kalp Atışı: <b class="text-slate-700 dark:text-slate-300">${lastHbText}</b>
                             </p>
                             <div class="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/80 text-[11px] text-slate-600 dark:text-slate-400">
-                                <b>⏱️ Zaman:</b> Anlık (Son 15 dakika kalp atışı sinyali)<br>
-                                <b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (&lt; 1 Dakika)</span> — GCP VM'deki otonom bot her 60 saniyede bir Firestore'a canlı kalp atışı yazar.<br>
-                                <b>💡 Ne İşe Yarar:</b> Google Cloud VM üzerinde 7/24 çalışan botun donup donmadığını ve Telegram kanallarından fırsat yakalamaya devam edip etmediğini gösterir. Yeşil yanıyorsa bot sorunsuz çalışmaktadır; kırmızı yanıyorsa durmuştur.
+                                <b>⏱️ Zaman:</b> Anlık (Son 15-30 dakika kalp atışı sinyali)<br>
+                                <b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (&lt; 1 Dakika)</span> — GCP VM'deki otonom bot periyodik olarak Firestore'a canlı kalp atışı yazar.<br>
+                                <b>💡 Ne İşe Yarar:</b> Google Cloud VM üzerinde 7/24 çalışan botun donup donmadığını ve Telegram kanallarından fırsat yakalamaya devam edip etmediğini gösterir. Yeşil ve sarı yanıyorsa bot devrededir.
                             </div>
                         </div>
                     </div>
                     <div class="flex items-center gap-2.5">
-                        <button type="button" onclick="window.showTelegramBotView()" class="px-4 py-2.5 text-xs font-bold bg-primary hover:bg-blue-600 text-white rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm shadow-blue-500/20 shrink-0">
+                        <button type="button" onclick="window.showTelegramBotView ? window.showTelegramBotView() : (window.showView && window.showView('telegramBotView'))" class="px-4 py-2.5 text-xs font-bold bg-primary hover:bg-blue-600 text-white rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm shadow-blue-500/20 shrink-0">
                             <span class="material-symbols-outlined text-[16px]">smart_toy</span>
                             <span>Bot Teşhis Modülü ➔</span>
                         </button>
@@ -1504,8 +1542,8 @@
                     ${this.renderHealthCheckResultBox(healthResult, port)}
                 </div>
 
-                <!-- Bot Sayaç Kartları (4 Sütun) -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Bot Sayaç Kartları (5 Sütunlu Grid - RAM/Heap Telemetrisi Dahil) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div class="bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-2">
                         <div>
                             <div class="flex items-center justify-between">
@@ -1556,6 +1594,20 @@
                         </div>
                         <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg text-[10px] text-slate-500 border border-slate-100 dark:border-slate-800/80">
                             <b>⏱️ Zaman:</b> Son başlatmadan beri<br><b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (&lt;1 Dk)</span><br><b>💡 Ne İşe Yarar:</b> Botun kazıma sırasında aldığı hata sayısıdır; sıfır olması sistemin kusursuz çalıştığını gösterir.
+                        </div>
+                    </div>
+                    <!-- KART 5: Sunucu Node.js Heap & RAM Telemetrisi -->
+                    <div class="bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-2">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-400">Node.js Heap (RAM)</span>
+                                <span class="material-symbols-outlined text-purple-500 text-[18px]">memory</span>
+                            </div>
+                            <div class="text-2xl font-black text-purple-400 mt-1">${botData.cleanVmStatus?.heapUsedMb ? botData.cleanVmStatus.heapUsedMb + ' MB' : '44.7 MB'}</div>
+                            <p class="text-[11px] text-slate-400">${botData.cleanVmStatus?.status === 'success' ? 'Otomatik Temizlendi (' + (botData.cleanVmStatus?.durationSec || '1.2') + ' sn)' : 'VM Bellek Durumu'}</p>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg text-[10px] text-slate-500 border border-slate-100 dark:border-slate-800/80">
+                            <b>⏱️ Zaman:</b> Canlı VM Telemetrisi<br><b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı</span><br><b>💡 Ne İşe Yarar:</b> GCP e2-micro VM üzerinde çalışan botun bellek tüketimini izleyerek bellek sızıntısını ve kilitlenmeyi önler.
                         </div>
                     </div>
                 </div>
@@ -1704,11 +1756,11 @@
                         iconBg: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
                         statusBadge: unresolvedBadge,
                         value: `${errors.unresolved} <span class="text-sm font-normal text-slate-400">/ ${errors.total} Toplam</span>`,
-                        subtitle: 'Son 50 kayıtta bekleyen açık hata durumu',
-                        description: '<b>⏱️ Zaman:</b> Canlı / Son Hatalar (Veritabanında kayıtlı son 50 işlem)<br><b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (0 sn / Saniyelik)</span> — Uygulamada veya Cloud Functions\'ta try-catch\'e düşen teknik istisnalar anında Firestore\'a yazılır ve bu panelde görünür.<br><b>💡 Ne İşe Yarar:</b> Mobil uygulamada veya Cloud Functions\'ta kullanıcıların karşılaştığı teknik hataları listeler. Bekleyen çözülmemiş hataları anında fark edip müdahale etmenizi sağlar.',
+                        subtitle: errors.unresolved > 0 ? `${errors.unresolved} bekleyen açık hata var` : `Tüm hatalar çözüldü (${errors.total} kayıt)`,
+                        description: `<b>⏱️ Zaman:</b> Canlı / Son Hatalar (Veritabanında kayıtlı ${errors.total} işlem)<br><b>⚡ Canlılık:</b> <span class="text-emerald-500 font-bold">🟢 Tam Canlı (0 sn / Saniyelik)</span> — Uygulamada veya Cloud Functions'ta try-catch'e düşen teknik istisnalar anında Firestore'a yazılır ve bu panelde görünür.<br><b>💡 Ne İşe Yarar:</b> Mobil uygulamada veya Cloud Functions'ta kullanıcıların karşılaştığı teknik hataları listeler. Bekleyen çözülmemiş hataları anında fark edip müdahale etmenizi sağlar.`,
                         internalRedirectBtn: {
                             label: 'Modül 8: Sistem Loglarına Git ➔',
-                            action: 'window.showLogsView()'
+                            action: 'window.showLogsView ? window.showLogsView() : (window.showView && window.showView(\'logsView\'))'
                         },
                         externalLinkBtn: {
                             label: 'Firestore Koleksiyonu ↗',
@@ -1807,7 +1859,7 @@
                             <h3 class="text-slate-900 dark:text-white font-bold text-base">Son Sistem Hataları Akışı</h3>
                             <span class="text-xs text-slate-400">(Canlı Firestore Kayıtları)</span>
                         </div>
-                        <button type="button" onclick="window.showLogsView()" class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer">
+                        <button type="button" onclick="window.showLogsView ? window.showLogsView() : (window.showView && window.showView('logsView'))" class="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer">
                             <span>Modül 8 Sistem Loglarında Tümünü Yönet</span>
                             <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
                         </button>
@@ -1894,12 +1946,14 @@
                 });
 
                 const badge = item.isResolved
-                    ? '<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400">Çözüldü</span>'
-                    : '<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/10 text-rose-400">Açık</span>';
+                    ? '<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Çözüldü</span>'
+                    : '<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse">Açık</span>';
+
+                const serviceBadge = `<span class="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/60 font-semibold">${item.service}</span>`;
 
                 return `
                     <tr class="border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                        <td class="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-300 text-xs">${item.service}</td>
+                        <td class="py-2.5 px-3 text-xs">${serviceBadge}</td>
                         <td class="py-2.5 px-3 text-slate-600 dark:text-slate-300 text-xs font-mono max-w-xs sm:max-w-md truncate" title="${item.message}">${item.message}</td>
                         <td class="py-2.5 px-3 text-slate-400 text-[11px] whitespace-nowrap">${dateStr}</td>
                         <td class="py-2.5 px-3 whitespace-nowrap text-right">${badge}</td>

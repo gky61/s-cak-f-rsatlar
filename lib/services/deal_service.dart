@@ -469,14 +469,19 @@ class DealService {
       );
     } catch (e, stack) {
       _log('Deal oluşturma hatası: $e');
-      SystemLogService.instance.logError(
-        category: 'submit_deal',
-        subCategory: store,
-        errorType: 'DealCreateException',
-        message: e.toString(),
-        stack: stack,
-        metadata: {'title': title, 'store': store, 'userId': userId},
-      );
+      final errorStr = e.toString();
+      final isBusinessValidation = errorStr.contains('already_shared:') ||
+          errorStr.contains('pending_approval:');
+      if (!isBusinessValidation) {
+        SystemLogService.instance.logError(
+          category: 'submit_deal',
+          subCategory: store,
+          errorType: 'DealCreateException',
+          message: errorStr,
+          stack: stack,
+          metadata: {'title': title, 'store': store, 'userId': userId},
+        );
+      }
       if (e is FirebaseException && e.code == 'permission-denied') {
         throw Exception('Fırsat paylaşım izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
       } else if (e.toString().contains('permission-denied')) {

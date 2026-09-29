@@ -517,19 +517,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
         
         final ctx = navigatorKey.currentContext;
         if (mounted && ctx != null) {
-          ScaffoldMessenger.of(ctx).showSnackBar(
+          final messenger = ScaffoldMessenger.of(ctx);
+          messenger.removeCurrentSnackBar();
+          messenger.showSnackBar(
             SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.block, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
-                      style: TextStyle(color: Colors.white),
+              content: KeyedSubtree(
+                key: UniqueKey(),
+                child: const Row(
+                  children: [
+                    Icon(Icons.block, color: Colors.white),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               backgroundColor: Colors.red[600],
               behavior: SnackBarBehavior.floating,
@@ -582,19 +587,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
             
             final ctx = navigatorKey.currentContext;
             if (mounted && ctx != null) {
-              ScaffoldMessenger.of(ctx).showSnackBar(
+              final messenger = ScaffoldMessenger.of(ctx);
+              messenger.removeCurrentSnackBar();
+              messenger.showSnackBar(
                 SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.block, color: Colors.white),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
-                          style: TextStyle(color: Colors.white),
+                  content: KeyedSubtree(
+                    key: UniqueKey(),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.block, color: Colors.white),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   backgroundColor: Colors.red[600],
                   behavior: SnackBarBehavior.floating,

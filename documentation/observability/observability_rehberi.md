@@ -183,6 +183,18 @@ Firestore ücretsiz kotasını (günlük 20.000 yazma) korumak için tasarlanmı
 3. **Çevrimdışı Koruma:** `SocketException`, `network is unreachable` gibi internet yokluğu hataları veritabanına yazılmaz (çünkü internet yokken Firestore'a yazmaya çalışmak ikinci bir hata doğurur).
 4. **Yalnızca 'error' ve 'fatal' Seviyeleri:** 'info' ve 'warning' seviyeleri yalnızca yerel `kDebugMode` konsoluna yazılır, veritabanına gitmez.
 
+### 5.3 Crashlytics Çözülmüş Kritik Çökme Kalıpları ve Mimari Çözüm Standartları
+
+DEV ortamında tespit edilen ve kod tabanında kalıcı olarak çözülen 5 temel çökme senaryosu ve projedeki standart kuralları:
+
+| Hata / İstisna | Kök Neden Analizi | Uygulanan Mimari Çözüm | İlgili Dosya |
+| :--- | :--- | :--- | :--- |
+| **`ViewGroup$LayoutParams.width on a null object reference` / `Double.doubleValue()`** | AdMob PlatformView unmount edilirken native view'in erken dispose edilmesi veya geçersiz sıfır genişlikte render pass. | `_isDisposed` bayrağı eklendi; `ad.dispose()` çağrıları `WidgetsBinding.instance.addPostFrameCallback` içine alındı ve `LayoutBuilder` ile pozitif genişlik kontrolü getirildi. | `lib/widgets/ad_native_widget.dart` |
+| **`This AdWidget is already in the Widget tree`** | Liste/Grid yenilenmelerinde statik Key kullanımı sonucu aynı `NativeAd` nesnesinin birden fazla `AdWidget`'a bağlanması. | Benzersiz Key delegasyonu (`adKey = key != null ? ValueKey('ad_native_widget_$key') : null`) uygulandı. | `lib/widgets/ad_deal_card.dart` |
+| **`UnsatisfiedLinkError (libflutter.so: EM_AARCH64 instead of EM_X86_64)`** | Test emülatörlerinde (x86_64) NDK ABI eşleşmeme hatası. | `android/app/build.gradle` `defaultConfig` içine `abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'` eklendi. | `android/app/build.gradle` |
+| **`Dismissible assertion failed: secondaryBackground == null \|\| background != null`** | Okunmuş bildirimlerde `background: null` atanırken `secondaryBackground` tanımlı bırakılması. | Okunmamışta çift yönlü (`background: okundu`, `secondaryBackground: sil`), okunmuşta tek yönlü (`direction: endToStart`, `background: sil`, `secondaryBackground: null`) kuralına bağlandı. | `lib/screens/admin_notifications_screen.dart` |
+| **`There are multiple heroes that share the same tag (<SnackBar Hero tag - Row...>)`** | Art arda SnackBar gösteriminde `hideCurrentSnackBar()` çıkış animasyonundayken yeni SnackBar'ın aynı Hero tag'iyle gelmesi. | `removeCurrentSnackBar()` ve `KeyedSubtree(key: UniqueKey())` ile anında temizlik ve tekil subtree kimliği sağlandı. | `lib/screens/admin_notifications_screen.dart`, `lib/main.dart` |
+
 ---
 
 ## 6. ⚡ Performans, Gecikme ve Darboğaz Takibi (Firebase Performance)
@@ -484,7 +496,7 @@ Kullanıcıların uygulamada yaşadığı donmalar, çökmeler ve backend/istemc
 | **Kullanıcı Film Şeridi (Breadcrumbs)** | `AnalyticsService` & `Crashlytics.log` | [Crashlytics Issue ➔ Logs](https://console.firebase.google.com/project/firsatkolik-prod-e6eae/crashlytics) | Hata Anında | Çökmeden önceki son 5 adımı görmek (`User clicked deal 123`, `User opened browser`). | Kullanıcının çökme anında hangi ekranda ve hangi butonda olduğunu birebir tekrarlayarak hatayı çözmek. |
 | **Çökme Ortam Anahtarları (`customKeys`)** | `Crashlytics.setCustomKey` (`flavor`, `platform`, `patch`) | [Crashlytics Issue ➔ Keys](https://console.firebase.google.com/project/firsatkolik-prod-e6eae/crashlytics) | Hata Anında | Hatanın hangi flavor (`prod`/`dev`), hangi platform ve hangi Shorebird patch'inde olduğunu saptamak. | Hata sadece belli bir patch veya Android 14+ sürümünde oluyorsa sorunun kapsamı izole edilir. |
 | **İstemci Mantıksal Hataları (`systemErrors` Koleksiyonu)** | `SystemLogService` (Saatte maks 5 log kota korumalı) | **Web Admin Paneli Modül 8**<br>[firsatkolik.app/admin/](https://firsatkolik.app/admin/) | Günde 2 Kez | İstemcinin çökmediği ama resim yüklenememesi, bozuk JSON yanıtı gibi sessiz hataları görmek. | Web Admin Modül 8'den hata incelenip düzeltildikten sonra "Çözüldü" olarak işaretlenir. |
-| **Cloud Functions Hataları (`systemErrors` Koleksiyonu)** | `error_logger.js` (`wrapTrigger`, `wrapRequest`) | **Web Admin Modül 8** & [GCP Logs Explorer](https://console.cloud.google.com/logs/viewer?project=firsatkolik-prod-e6eae) | Günlük | Backend fonksiyonlarında oluşan istisnaları tek merkezden izlemek. | Firestore tetikleyicisi sonsuz döngüye giriyorsa fonksiyon hemen incelenir. |
+| **Cloud Functions Hataları (`systemErrors` Koleksiyonu)** | `error_logger.js` (`wrapTrigger`, `wrapRequest`) | **Web Admin Modül 8** & [GCP Logs Explorer](https://console.cloud.google.com/logs/query?project=firsatkolik-prod-e6eae) | Günlük | Backend fonksiyonlarında oluşan istisnaları tek merkezden izlemek. | Firestore tetikleyicisi sonsuz döngüye giriyorsa fonksiyon hemen incelenir. |
 
 ---
 
@@ -644,13 +656,13 @@ graph TD
 * **App Check İstek Doğrulama (Canlı):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (0 - 5 sn)` — Gelen API istekleri Play Integrity ile anlık kriptografik doğrulanır.
 
 #### 3. 🤖 Botlar & Servis Durumu (Autonomous Bots & Service Uptime)
-* **Telegram Dinleyicisi Kalp Atışı (Anlık Sinyal):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (< 1 Dakika)` — GCP VM'deki bot her 60 saniyede bir Firestore'a kalp atışı basar.
-* **İnteraktif HTTP Uptime Probu (/health Ping):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (Milisaniyelik 50-200ms)` — Butona basıldığı an bot konteynerine canlı HTTP isteği atılarak yanıt süresi test edilir.
-* **Operasyonel Telemetri Sayaçları (Son Başlatmadan Beri):** `⏱️ Zaman: Oturum Boyu` • `⚡ Canlılık: 🟢 Tam Canlı (< 1 Dakika)` — Botun RAM'indeki `msgCount`, `dealCount`, `dupCount` ve `errCount` sayaçları her kalp atışında güncellenir.
+* **Telegram Dinleyicisi Kalp Atışı (Anlık Sinyal):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (< 1 Dakika)` — GCP VM'deki bot her 60 saniyede bir Firestore'a kalp atışı basar. Panel 3 kademeli durum hesaplar: `< 15 dk (🟢 Aktif / Online)`, `15 - 60 dk (🟡 Sinyal Gecikmeli)`, `> 60 dk (🔴 Çevrimdışı / Donmuş)`.
+* **İnteraktif HTTP Uptime Probu (/health Ping):** `⏱️ Zaman: Anlık` • `⚡ Canlılık: 🟢 Tam Canlı (Milisaniyelik 50-200ms)` — Butona basıldığı an bot konteynerine canlı HTTP isteği atılarak yanıt süresi test edilir (Port kapalıysa güvenli SSH konsol rehberi sunulur).
+* **Operasyonel Telemetri Sayaçları (Son Başlatmadan Beri):** `⏱️ Zaman: Oturum Boyu` • `⚡ Canlılık: 🟢 Tam Canlı (< 1 Dakika)` — Botun RAM'indeki `msgCount`, `dealCount`, `dupCount`, `errCount` sayaçları ve canlı Node.js Heap RAM (`heapUsedMb`) tüketimi her kalp atışında güncellenir.
 * **Acil Müdahale Komutları:** Sunucuya SSH ile bağlanıp tek komutla botu yeniden başlatma rehberidir.
 
 #### 4. 🚨 Kararlılık, Hatalar & Konsol Köprüleri (Stability & Deep-Link Bridges)
-* **Canlı Sistem Hata Günlükleri (Son 50 Kayıt):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟢 Tam Canlı (0 sn / Saniyelik)` — Try-catch ile yakalanan teknik hatalar anında Firestore `systemErrors` koleksiyonuna yazılır.
+* **Canlı Sistem Hata Günlükleri (Son 50 Kayıt):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟢 Tam Canlı (0 sn / Saniyelik)` — Try-catch ile yakalanan teknik hatalar anında Firestore `systemErrors` koleksiyonuna yazılır. `createdAt` azalan sırasıyla son 50 kayıt çekilir; aktif çözülmemiş hata sayısı başlık rozetinde (`unresolved / total`) anlık gösterilir.
 * **Firebase Crashlytics (Canlı & Sürümler):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟡 Gecikmeli (5 - 15 Dk / Sonraki Açılışta)` — Çökme raporu uygulamanın bir sonraki açılışında iletilir; konsola 5-15 dakikada işlenir.
 * **Firebase Performance (Canlı Gözlem):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🔴 Gecikmeli (24 - 48 Saat)` — Cold start ve ağ gecikmeleri Google sunucularında 24-48 saatte işlenir.
 * **GCP Cloud Logging (Canlı Sunucu Logları):** `⏱️ Zaman: Canlı` • `⚡ Canlılık: 🟢 Tam Canlı (0 - 2 sn)` — Cloud Functions logları 2 saniye içinde Cloud Logging'e akar.
@@ -675,7 +687,8 @@ Observability Hub, çalıştığı alan adını ve seçili ortamı dinamik olara
 | **PM2 Servis Adı** | `dev-bot` | `prod-bot` |
 | **Firebase Crashlytics Linki** | `.../project/sicak-firsatlar-e6eae/crashlytics` | `.../project/firsatkolik-prod-e6eae/crashlytics` |
 | **Firebase Perf Linki** | `.../project/sicak-firsatlar-e6eae/performance` | `.../project/firsatkolik-prod-e6eae/performance` |
-| **GCP Logs Explorer Linki** | `.../logs/viewer?project=sicak-firsatlar-e6eae` | `.../logs/viewer?project=firsatkolik-prod-e6eae` |
+| **GCP Logs Explorer Linki** | `https://console.cloud.google.com/logs/query?project=sicak-firsatlar-e6eae` | `https://console.cloud.google.com/logs/query?project=firsatkolik-prod-e6eae` |
+| **GCP Billing Rapor Linki** | `https://console.cloud.google.com/billing/reports?project=sicak-firsatlar-e6eae` | `https://console.cloud.google.com/billing/reports?project=firsatkolik-prod-e6eae` |
 | **Firestore Koleksiyonları** | DEV Firestore Veritabanı | PROD Canlı Firestore Veritabanı |
 
 ---

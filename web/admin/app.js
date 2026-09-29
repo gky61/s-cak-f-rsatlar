@@ -2854,6 +2854,8 @@ async function showDealModal(deal) {
         const saveBtnEl = document.getElementById('saveBtn');
         const cancelBtnEl = document.getElementById('cancelBtn');
 
+        if (!currentDeal) return;
+
         if (saveBtnEl) {
             const isNew = Boolean(currentDeal._isNew || currentDeal._isPreGeneratedId || !currentDeal.id || currentDeal.id === '');
             const isApproved = currentDeal.isApproved === true;
@@ -3449,6 +3451,7 @@ function showView(viewId) {
         }
     });
 }
+window.showView = showView;
 
 function showDashboardView() {
     currentView = 'dashboard';
@@ -3456,6 +3459,7 @@ function showDashboardView() {
     updateMenuActiveState('dashboard');
     loadDashboardData();
 }
+window.showDashboardView = showDashboardView;
 
 
 function showDealsView() {
@@ -3476,6 +3480,7 @@ function showDealsView() {
         renderDeals();
     }
 }
+window.showDealsView = showDealsView;
 
 function showUsersView(query = '') {
     currentView = 'users';
@@ -3518,6 +3523,7 @@ function showUsersView(query = '') {
         }
     }, 100);
 }
+window.showUsersView = showUsersView;
 
 // ==========================================
 // MESAJLAŞMA & SİMÜLATÖR SİSTEMİ (TEST CENTER)
@@ -3577,6 +3583,7 @@ function showMessagesView() {
     updateMenuActiveState('messages');
     window.switchMessagesTab(simCurrentTab === 'moderation' ? 'simulator' : (simCurrentTab || 'simulator'));
 }
+window.showMessagesView = showMessagesView;
 
 function loadMessages() {
     window.switchMessagesTab(simCurrentTab === 'moderation' ? 'simulator' : (simCurrentTab || 'simulator'));
@@ -5064,7 +5071,7 @@ window.renderAutoModAlarms = function() {
                 <td class="px-6 py-4 whitespace-nowrap text-right">
                     <div class="flex items-center justify-end gap-1.5">
                         ${m.dealId ? `
-                            <button onclick="window.editDeal('${escapeHtml(m.dealId)}')" class="p-1.5 text-slate-500 hover:text-primary transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" title="Fırsatı Gör / Düzenle">
+                            <button onclick="window.showDealDetail('${escapeHtml(m.dealId)}')" class="p-1.5 text-slate-500 hover:text-primary transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" title="Fırsatı Gör / Düzenle">
                                 <span class="material-symbols-outlined text-[18px]">visibility</span>
                             </button>
                         ` : ''}
@@ -9363,6 +9370,14 @@ window.openDealEditModal = function(dealId) {
     }
 };
 
+window.editDeal = function(dealId) {
+    if (typeof window.showDealDetail === 'function') {
+        window.showDealDetail(dealId);
+    } else if (typeof window.openDealEditModal === 'function') {
+        window.openDealEditModal(dealId);
+    }
+};
+
 // Category normalization helper for FırsatKolik canonical taxonomy
 function normalizeCategory(rawCat) {
     if (!rawCat || typeof rawCat !== 'string') return { key: 'diger', title: 'Diğer' };
@@ -11462,6 +11477,7 @@ let selectedLogUserObj = null;
 let selectedLogTimeRange = 'all';
 let selectedLogPlatform = 'all';
 let logFilterUsersCache = [];
+let currentFilteredErrorsList = [];
 
 function showLogsView() {
     currentView = 'logs';
@@ -11753,6 +11769,47 @@ window.switchLogCategoryTab = function(tabKey) {
     renderSystemLogs();
 };
 
+// Standartlaştırılmış Merkezi Kategori ve Servis Çözümleyici (Kibana APM Standardı)
+function resolveLogPrimaryCategory(e) {
+    if (!e) return 'backend';
+    const service = (e.service || '').toLowerCase();
+    const category = (e.category || '').toLowerCase();
+    const errorType = (e.errorType || '').toLowerCase();
+
+    // 1. Mobil Uygulama (Flutter client, app_crash, submit_deal, renderflex overflow vb.)
+    if (service === 'mobile' || category === 'mobile' || category === 'app_crash' || category === 'submit_deal' || errorType.includes('flutter') || errorType.includes('zonedguarded')) {
+        return 'mobile';
+    }
+
+    // 2. Web Admin Paneli
+    if (service === 'admin' || service === 'web' || category === 'admin' || category === 'web') {
+        return 'admin';
+    }
+
+    // 3. Otonom Telegram Botu (GCP VM MTProto dinleyicisi)
+    if (service === 'bot' || category === 'bot' || category === 'ai' || category === 'telegram' || category === 'mtproto') {
+        return 'ai';
+    }
+
+    // 4. Mağaza Kazıyıcılar (Akakçe, Trendyol vb. WAF kazıma servisleri)
+    if (category === 'scraper' || service === 'scraper' || (e.subCategory && String(e.subCategory).toLowerCase().includes('scraper'))) {
+        return 'scraper';
+    }
+
+    // 5. Katalog & Kupon Modülü
+    if (category === 'catalogs_coupons' || category === 'catalogs' || category === 'coupons' || category === 'aktuel') {
+        return 'catalogs_coupons';
+    }
+
+    // 6. Push Bildirimleri (FCM HTTP v1)
+    if (category === 'notifications' || category === 'fcm' || service === 'notifications') {
+        return 'notifications';
+    }
+
+    // 7. Cloud Functions / Backend
+    return 'backend';
+}
+
 function renderSystemLogs() {
     const tbody = document.getElementById('logsTableBody');
     if (!tbody) return;
@@ -11772,16 +11829,24 @@ function renderSystemLogs() {
 
     // 1. Calculate Environment Matching
     const envFilteredList = allErrorsList.filter(e => {
-        const itemEnv = e.environment || 'dev'; // Legacy logs default to dev
+        const itemEnv = (e.environment || e.metadata?.environment || 'dev').toLowerCase();
         if (envFilter === 'all') return true;
         if (envFilter === 'dev') return itemEnv === 'dev';
         if (envFilter === 'prod') return itemEnv === 'prod';
         return itemEnv === currentEnv; // 'current'
     });
 
-    // 2. Calculate Category Tab Badges (based on current env)
+    // 2. Calculate Category Tab Badges (seçili durum filtresine göre tam senkronize)
+    const statusFilteredForBadges = envFilteredList.filter(e => {
+        const itemStatus = e.status || 'unresolved';
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'unresolved') return itemStatus === 'unresolved';
+        if (statusFilter === 'resolved') return itemStatus === 'resolved';
+        return true;
+    });
+
     const categoryCounts = {
-        all: envFilteredList.length,
+        all: statusFilteredForBadges.length,
         mobile: 0,
         scraper: 0,
         catalogs_coupons: 0,
@@ -11791,17 +11856,13 @@ function renderSystemLogs() {
         admin: 0
     };
 
-    envFilteredList.forEach(e => {
-        const cat = e.category || e.service || 'backend';
-        if (cat === 'mobile') categoryCounts.mobile++;
-        else if (cat === 'scraper') categoryCounts.scraper++;
-        else if (cat === 'catalogs_coupons') categoryCounts.catalogs_coupons++;
-        else if (cat === 'ai') categoryCounts.ai++;
-        else if (cat === 'notifications') categoryCounts.notifications++;
-        else if (cat === 'backend' || cat === 'functions') categoryCounts.backend++;
-        else if (cat === 'admin' || cat === 'web') categoryCounts.admin++;
-        else if (e.service === 'bot') categoryCounts.scraper++;
-        else categoryCounts.backend++;
+    statusFilteredForBadges.forEach(e => {
+        const cat = resolveLogPrimaryCategory(e);
+        if (categoryCounts[cat] !== undefined) {
+            categoryCounts[cat]++;
+        } else {
+            categoryCounts.backend++;
+        }
     });
 
     Object.keys(categoryCounts).forEach(k => {
@@ -11810,13 +11871,14 @@ function renderSystemLogs() {
     });
 
     // 3. Calculate 4 Bento Metric Cards (based on active environment)
-    const unresolvedErrors = envFilteredList.filter(e => e.status === 'unresolved');
-    const fatalErrors = envFilteredList.filter(e => e.status === 'unresolved' && e.severity === 'fatal');
+    const unresolvedErrors = envFilteredList.filter(e => (e.status || 'unresolved') === 'unresolved');
+    const fatalErrors = envFilteredList.filter(e => (e.status || 'unresolved') === 'unresolved' && (e.severity || 'error') === 'fatal');
     
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const todayErrors = envFilteredList.filter(e => {
-        if (!e.createdAt) return false;
-        const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+        const rawTime = e.lastOccurredAt || e.createdAt;
+        if (!rawTime) return false;
+        const d = rawTime.toDate ? rawTime.toDate() : new Date(rawTime);
         return d >= oneDayAgo;
     });
 
@@ -11827,10 +11889,11 @@ function renderSystemLogs() {
     const statTodayEl = document.getElementById('logsStatToday');
     if (statTodayEl) statTodayEl.textContent = todayErrors.length;
 
-    // Determine Top Error Category
+    // Determine Top Error Category (Aktif filtrelenen duruma göre veya açık hatalara göre)
     const categoryFrequencies = {};
-    unresolvedErrors.forEach(e => {
-        const catName = getCategoryDisplayName(e.category || e.service);
+    const errorSetForTopCat = (statusFilter === 'unresolved') ? unresolvedErrors : statusFilteredForBadges;
+    errorSetForTopCat.forEach(e => {
+        const catName = getCategoryDisplayName(resolveLogPrimaryCategory(e));
         categoryFrequencies[catName] = (categoryFrequencies[catName] || 0) + 1;
     });
     let topCatName = '-';
@@ -11849,56 +11912,91 @@ function renderSystemLogs() {
     const filteredRows = envFilteredList.filter(e => {
         // Tab Filter
         if (currentLogCategoryTab !== 'all') {
-            const cat = e.category || e.service || 'backend';
-            let isTabMatch = false;
-            if (currentLogCategoryTab === 'mobile' && cat === 'mobile') isTabMatch = true;
-            else if (currentLogCategoryTab === 'scraper' && (cat === 'scraper' || e.service === 'bot')) isTabMatch = true;
-            else if (currentLogCategoryTab === 'catalogs_coupons' && cat === 'catalogs_coupons') isTabMatch = true;
-            else if (currentLogCategoryTab === 'ai' && cat === 'ai') isTabMatch = true;
-            else if (currentLogCategoryTab === 'notifications' && cat === 'notifications') isTabMatch = true;
-            else if (currentLogCategoryTab === 'backend' && (cat === 'backend' || cat === 'functions')) isTabMatch = true;
-            else if (currentLogCategoryTab === 'admin' && (cat === 'admin' || cat === 'web')) isTabMatch = true;
-            if (!isTabMatch) return false;
+            const primaryCat = resolveLogPrimaryCategory(e);
+            if (primaryCat !== currentLogCategoryTab) return false;
         }
 
         // Service Filter
         if (serviceFilter !== 'all') {
-            const matchService = (e.service === serviceFilter) || (e.category === serviceFilter);
+            const primaryCat = resolveLogPrimaryCategory(e);
+            const itemService = (e.service || '').toLowerCase();
+            const itemCat = (e.category || '').toLowerCase();
+            let matchService = false;
+            switch (serviceFilter) {
+                case 'mobile':
+                    matchService = (primaryCat === 'mobile' || itemService === 'mobile');
+                    break;
+                case 'bot':
+                case 'ai':
+                    matchService = (primaryCat === 'ai' || itemService === 'bot');
+                    break;
+                case 'scraper':
+                    matchService = (primaryCat === 'scraper' || itemService === 'scraper');
+                    break;
+                case 'catalogs_coupons':
+                    matchService = (primaryCat === 'catalogs_coupons');
+                    break;
+                case 'notifications':
+                    matchService = (primaryCat === 'notifications');
+                    break;
+                case 'backend':
+                    matchService = (primaryCat === 'backend' || itemService === 'functions' || itemService === 'backend');
+                    break;
+                case 'admin':
+                    matchService = (primaryCat === 'admin' || itemService === 'web' || itemService === 'admin');
+                    break;
+                default:
+                    matchService = (itemService === serviceFilter || itemCat === serviceFilter);
+            }
             if (!matchService) return false;
         }
 
         // Severity Filter
         if (severityFilter !== 'all') {
-            const sev = e.severity || 'error';
+            const sev = (e.severity || 'error').toLowerCase();
             if (sev !== severityFilter) return false;
         }
 
         // Status Filter
         if (statusFilter !== 'all') {
-            if (statusFilter === 'unresolved' && e.status !== 'unresolved') return false;
-            if (statusFilter === 'resolved' && e.status !== 'resolved') return false;
+            const itemStatus = e.status || 'unresolved';
+            if (statusFilter === 'unresolved' && itemStatus !== 'unresolved') return false;
+            if (statusFilter === 'resolved' && itemStatus !== 'resolved') return false;
         }
 
-        // Time Range Filter (Kibana Style)
-        if (selectedLogTimeRange !== 'all' && e.createdAt) {
-            const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+        // Time Range Filter (Kibana Style - lastOccurredAt ve createdAt destekli)
+        if (selectedLogTimeRange !== 'all') {
+            const rawTime = e.lastOccurredAt || e.createdAt;
+            if (!rawTime) return false;
+            const d = rawTime.toDate ? rawTime.toDate() : new Date(rawTime);
+            if (isNaN(d.getTime())) return false;
             const diffMs = now.getTime() - d.getTime();
-            if (selectedLogTimeRange === '15m' && diffMs > 15 * 60 * 1000) return false;
-            if (selectedLogTimeRange === '1h' && diffMs > 60 * 60 * 1000) return false;
-            if (selectedLogTimeRange === '24h' && diffMs > 24 * 60 * 60 * 1000) return false;
-            if (selectedLogTimeRange === '7d' && diffMs > 7 * 24 * 60 * 60 * 1000) return false;
-            if (selectedLogTimeRange === '30d' && diffMs > 30 * 24 * 60 * 60 * 1000) return false;
+            if (diffMs > 0) {
+                if (selectedLogTimeRange === '15m' && diffMs > 15 * 60 * 1000) return false;
+                if (selectedLogTimeRange === '1h' && diffMs > 60 * 60 * 1000) return false;
+                if (selectedLogTimeRange === '24h' && diffMs > 24 * 60 * 60 * 1000) return false;
+                if (selectedLogTimeRange === '7d' && diffMs > 7 * 24 * 60 * 60 * 1000) return false;
+                if (selectedLogTimeRange === '30d' && diffMs > 30 * 24 * 60 * 60 * 1000) return false;
+            }
         }
 
         // Platform Filter
         if (selectedLogPlatform !== 'all') {
             const itemPlatform = (e.platform || e.metadata?.platform || '').toLowerCase();
             const itemService = (e.service || '').toLowerCase();
-            if (selectedLogPlatform === 'android' && itemPlatform !== 'android') return false;
-            if (selectedLogPlatform === 'ios' && itemPlatform !== 'ios') return false;
-            if (selectedLogPlatform === 'web' && itemPlatform !== 'web' && itemService !== 'web' && itemService !== 'admin') return false;
-            if (selectedLogPlatform === 'backend' && itemService !== 'backend' && itemService !== 'functions') return false;
-            if (selectedLogPlatform === 'bot' && itemService !== 'bot') return false;
+            const primaryCat = resolveLogPrimaryCategory(e);
+
+            if (selectedLogPlatform === 'android') {
+                if (itemPlatform !== 'android' && !(primaryCat === 'mobile' && !itemPlatform)) return false;
+            } else if (selectedLogPlatform === 'ios') {
+                if (itemPlatform !== 'ios') return false;
+            } else if (selectedLogPlatform === 'web') {
+                if (itemPlatform !== 'web' && primaryCat !== 'admin' && itemService !== 'web' && itemService !== 'admin') return false;
+            } else if (selectedLogPlatform === 'backend') {
+                if (primaryCat !== 'backend' && itemService !== 'backend' && itemService !== 'functions') return false;
+            } else if (selectedLogPlatform === 'bot') {
+                if (primaryCat !== 'ai' && itemService !== 'bot') return false;
+            }
         }
 
         // User ID Filter (Kibana APM Style)
@@ -11906,16 +12004,18 @@ function renderSystemLogs() {
             const target = selectedLogUserIdFilter.toLowerCase();
             const itemUid = (e.userId || e.metadata?.userId || e.metadata?.uid || '').toLowerCase();
             const itemEmail = (e.userEmail || e.metadata?.userEmail || e.metadata?.email || '').toLowerCase();
+            const itemDisplayName = (e.metadata?.userDisplayName || '').toLowerCase();
             const inMessage = (e.message || '').toLowerCase().includes(target);
-            if (itemUid !== target && !itemEmail.includes(target) && !inMessage) {
+            if (itemUid !== target && !itemEmail.includes(target) && !itemDisplayName.includes(target) && !inMessage) {
                 return false;
             }
             userMatchCount++;
         }
 
-        // Search Filter (Message, Type, Category, Service, Stack, Store, User)
+        // Search Filter (Message, Type, Category, Service, Stack, Store, User, ID, Fingerprint, ResolutionNote)
         if (searchVal) {
             const targetText = [
+                e.id || '',
                 e.errorType || '',
                 e.message || '',
                 e.category || '',
@@ -11923,9 +12023,13 @@ function renderSystemLogs() {
                 e.subCategory || '',
                 e.userId || '',
                 e.userEmail || '',
+                e.fingerprint || '',
+                e.resolutionNote || '',
+                e.resolvedBy || '',
                 e.metadata?.store || '',
                 e.metadata?.userId || '',
                 e.metadata?.uid || '',
+                e.metadata?.userDisplayName || '',
                 e.stack || ''
             ].join(' ').toLowerCase();
             if (!targetText.includes(searchVal)) return false;
@@ -11947,8 +12051,46 @@ function renderSystemLogs() {
         }
     }
 
+    currentFilteredErrorsList = filteredRows;
+    const aiCopyBtn = document.getElementById('logsAiCopyBtn');
+    const aiCopyBtnText = document.getElementById('logsAiCopyBtnText');
+    if (aiCopyBtnText) {
+        aiCopyBtnText.textContent = filteredRows.length > 0 
+            ? `Hataları AI İçin Kopyala (${filteredRows.length})` 
+            : 'Hataları AI İçin Kopyala (0)';
+    }
+    if (aiCopyBtn) {
+        if (filteredRows.length === 0) {
+            aiCopyBtn.classList.add('opacity-60');
+        } else {
+            aiCopyBtn.classList.remove('opacity-60');
+        }
+    }
+
     if (filteredRows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500">Kriterlere uygun sistem logu bulunamadı.</td></tr>`;
+        if (statusFilter === 'unresolved' && unresolvedErrors.length === 0 && envFilteredList.length > 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-6 py-14 text-center">
+                        <div class="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+                            <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shadow-inner">
+                                <span class="material-symbols-outlined text-3xl">verified</span>
+                            </div>
+                            <div class="space-y-1">
+                                <h4 class="font-bold text-sm text-slate-900 dark:text-white">Harika! Çözülmemiş Aktif Hata Bulunmuyor</h4>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Şu anda sistemde açık bir hata kaydı yok. Çözülmüş veya arşivlenmiş logları incelemek için durum filtresini değiştirebilirsiniz.</p>
+                            </div>
+                            <button type="button" onclick="window.showAllResolvedLogsArchive()" class="mt-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">history</span>
+                                <span>Çözülmüş Hata Arşivini Görüntüle (${envFilteredList.length} Kayıt)</span>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        } else {
+            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400 dark:text-slate-500"><div class="flex flex-col items-center justify-center gap-2"><span class="material-symbols-outlined text-3xl opacity-40">filter_list_off</span><p>Kriterlere uygun sistem logu bulunamadı.</p></div></td></tr>`;
+        }
         return;
     }
 
@@ -11967,7 +12109,7 @@ function renderSystemLogs() {
             ? `<span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-rose-500/10 text-rose-500 border border-rose-500/20">PROD</span>`
             : `<span class="px-1.5 py-0.2 rounded text-[10px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">DEV</span>`;
 
-        const serviceBadge = getServiceBadgeHtml(e.service, e.category);
+        const serviceBadge = getServiceBadgeHtml(e.service, e.category, e.errorType);
         const severityBadge = getSeverityBadgeHtml(e.severity);
 
         const occurrenceBadge = (e.occurrenceCount && e.occurrenceCount > 1)
@@ -12046,10 +12188,10 @@ function renderSystemLogs() {
 function getCategoryDisplayName(cat) {
     switch (cat) {
         case 'mobile': return 'Mobil Uygulama';
-        case 'bot': return 'Telegram Botu';
+        case 'ai':
+        case 'bot': return 'Otonom / Bot';
         case 'scraper': return 'Mağaza Kazıyıcılar';
         case 'catalogs_coupons': return 'Katalog & Kupon';
-        case 'ai': return 'Otonom / Bot';
         case 'notifications': return 'Bildirim Motoru';
         case 'backend':
         case 'functions': return 'Cloud Functions';
@@ -12059,23 +12201,21 @@ function getCategoryDisplayName(cat) {
     }
 }
 
-function getServiceBadgeHtml(service, category) {
-    const key = category || service || 'backend';
-    switch (key) {
+function getServiceBadgeHtml(service, category, errorType) {
+    const primary = resolveLogPrimaryCategory({ service, category, errorType });
+    switch (primary) {
         case 'mobile':
             return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300">📱 Mobil</span>`;
+        case 'ai':
         case 'bot':
-            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">📡 Bot</span>`;
+            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">🤖 Otonom / Bot</span>`;
         case 'scraper':
             return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">🕷️ Scraper</span>`;
         case 'catalogs_coupons':
             return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">📰 Katalog</span>`;
-        case 'ai':
-            return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950/40 dark:text-fuchsia-300">🧠 AI</span>`;
         case 'notifications':
             return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300">🔔 Push</span>`;
         case 'admin':
-        case 'web':
             return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">💻 Admin</span>`;
         default:
             return `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">⚡ Functions</span>`;
@@ -12253,21 +12393,230 @@ window.toggleErrorResolved = async function(errorId) {
     }
 };
 
+// -------------------------------------------------------------
+// AI AGENT EXPORT & DİĞER DIŞA AKTARMA MOTORU (ANTIGRAVITY FORMATI)
+// -------------------------------------------------------------
+function formatErrorForAI(e, index = null) {
+    if (!e) return '';
+    const numPrefix = index !== null ? `### [HATA #${index + 1}] ` : `### [HATA RAPORU] `;
+    const createdDate = e.createdAt ? (e.createdAt.toDate ? e.createdAt.toDate().toISOString() : new Date(e.createdAt).toISOString()) : 'Bilinmiyor';
+    const lastDate = e.lastOccurredAt ? (e.lastOccurredAt.toDate ? e.lastOccurredAt.toDate().toISOString() : new Date(e.lastOccurredAt).toISOString()) : createdDate;
+    const cat = resolveLogPrimaryCategory(e);
+    const service = e.service || cat;
+    const category = e.category || cat;
+    const platform = (e.platform || e.metadata?.platform || (cat === 'mobile' ? 'android' : (cat === 'admin' ? 'web' : 'backend'))).toLowerCase();
+    const env = (e.environment || e.metadata?.environment || 'dev').toUpperCase();
+    const severity = (e.severity || 'error').toLowerCase();
+    const status = e.status || 'unresolved';
+    const count = e.occurrenceCount || 1;
+
+    let metaLines = [];
+    if (e.metadata && typeof e.metadata === 'object') {
+        Object.entries(e.metadata).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== '' && k !== 'platform') {
+                metaLines.push(`  - **${k}**: \`${typeof v === 'object' ? JSON.stringify(v) : v}\``);
+            }
+        });
+    }
+
+    const lines = [
+        `${numPrefix}${e.errorType || 'Sistem Hatası'}`,
+        `- **Firestore Belge ID:** \`${e.id || 'N/A'}\``,
+        `- **Ortam:** \`${env}\` | **Platform:** \`${platform}\` | **Önem Derecesi:** \`${severity}\``,
+        `- **Servis / Kategori:** \`${service}\` / \`${category}\`${e.subCategory ? ` (Alt: \`${e.subCategory}\`)` : ''}`,
+        `- **Durum:** \`${status}\` | **Tekrar:** \`${count} kez\``,
+        `- **İlk Görülme:** ${createdDate}`,
+        `- **Son Görülme:** ${lastDate}`,
+    ];
+
+    if (e.userId || e.metadata?.userId || e.metadata?.uid) {
+        lines.push(`- **Kullanıcı UID:** \`${e.userId || e.metadata?.userId || e.metadata?.uid}\``);
+    }
+    if (e.userEmail || e.metadata?.userEmail) {
+        lines.push(`- **Kullanıcı E-Posta:** \`${e.userEmail || e.metadata?.userEmail}\``);
+    }
+    if (e.fingerprint) {
+        lines.push(`- **Parmak İzi (Fingerprint):** \`${e.fingerprint}\``);
+    }
+    if (e.resolvedBy) {
+        lines.push(`- **Çözen Mimar / Kişi:** \`${e.resolvedBy}\``);
+    }
+    if (e.resolutionNote) {
+        lines.push(`- **Çözüm Notu:** *${e.resolutionNote}*`);
+    }
+    if (metaLines.length > 0) {
+        lines.push(`- **Metadata / Bağlam:**\n${metaLines.join('\n')}`);
+    }
+
+    lines.push(`- **Hata Mesajı:**\n\`\`\`\n${e.message || 'Mesaj bulunmuyor'}\n\`\`\``);
+
+    if (e.stack) {
+        const stackLang = (platform === 'android' || platform === 'ios' || cat === 'mobile') ? 'dart' : 'javascript';
+        lines.push(`- **Stack Trace:**\n\`\`\`${stackLang}\n${e.stack}\n\`\`\``);
+    } else {
+        lines.push(`- **Stack Trace:** *Yok*`);
+    }
+
+    return lines.join('\n');
+}
+
+function formatMultipleErrorsForAI(errors) {
+    const currentEnv = getAdminCurrentEnvironment().toUpperCase();
+    const nowStr = new Date().toLocaleString('tr-TR');
+    const statusFilter = document.getElementById('logsStatusFilter')?.value || 'unresolved';
+    const statusText = statusFilter === 'unresolved' ? 'Çözülmemiş (Açık) Hatalar' : (statusFilter === 'resolved' ? 'Çözülmüş Hatalar' : 'Tüm Hata Arşivi');
+
+    const header = `# 🚨 FIRSATKOLİK SİSTEM HATA RAPORU & AI DÜZELTME TALEBİ
+> **Oluşturulma Zamanı:** ${nowStr}
+> **Ortam:** ${currentEnv}
+> **Filtre Modu:** ${statusText}
+> **Toplam Hata Sayısı:** ${errors.length} adet
+
+Merhaba Antigravity AI,
+Aşağıda Web Admin panelimizdeki "Sistem Kontrol & Hata Logları" ekranından derlenen **${errors.length} adet** hata kaydı bulunmaktadır.
+
+Lütfen bu hataları tek tek incele:
+1. Her bir hatanın kök neden analizini yap ve projedeki ilgili kaynak dosyaları tespit et.
+2. Tüm hatalar için dünya standartlarında kalıcı mimari çözümleri projeye uygula.
+3. Çözümleri tamamladıktan sonra yapılan değişiklikleri ve detayları bana adım adım açıkla.
+
+================================================================================
+`;
+
+    const body = errors.map((e, idx) => formatErrorForAI(e, idx)).join('\n\n---\n\n');
+    return `${header}\n${body}\n\n================================================================================\n# RAPOR SONU`;
+}
+
+window.showAllResolvedLogsArchive = function() {
+    const statusSelect = document.getElementById('logsStatusFilter');
+    if (statusSelect) {
+        statusSelect.value = 'all';
+    }
+    renderSystemLogs();
+};
+
+window.copyFilteredErrorsForAI = function() {
+    if (!currentFilteredErrorsList || currentFilteredErrorsList.length === 0) {
+        showError('⚠️ Ekranda filtrelenmiş herhangi bir hata kaydı bulunmuyor. Kopyalamak için lütfen filtre kriterlerini (örneğin Durum: Tümü) seçiniz.');
+        return;
+    }
+    const aiPrompt = formatMultipleErrorsForAI(currentFilteredErrorsList);
+    navigator.clipboard.writeText(aiPrompt).then(() => {
+        showSuccess(`🤖 ${currentFilteredErrorsList.length} adet hata AI prompt formatında kopyalandı! Doğrudan sohbete yapıştırabilirsiniz.`);
+    }).catch(err => {
+        console.error('Kopyalama hatası:', err);
+        showError('Panoya kopyalanamadı: ' + err.message);
+    });
+};
+
+window.copyModalErrorForAI = function() {
+    if (!currentSelectedError) {
+        showError('Seçili hata bulunamadı.');
+        return;
+    }
+    const singleAiPrompt = `# 🚨 FIRSATKOLİK TEKİL HATA İNCELEME & DÜZELTME TALEBİ\n\n` + formatErrorForAI(currentSelectedError);
+    navigator.clipboard.writeText(singleAiPrompt).then(() => {
+        showSuccess('🤖 Bu hata AI prompt formatında kopyalandı! Doğrudan sohbete yapıştırabilirsiniz.');
+    }).catch(err => {
+        console.error('Kopyalama hatası:', err);
+        showError('Panoya kopyalanamadı: ' + err.message);
+    });
+};
+
 window.copyErrorSummary = function(errorId) {
     const error = allErrorsList.find(e => e.id === errorId);
     if (!error) return;
-    const summary = `[${error.environment || 'DEV'}] [${error.service}/${error.category}] ${error.errorType}\nMesaj: ${error.message}\nTarih: ${error.createdAt?.toDate ? error.createdAt.toDate().toISOString() : ''}`;
-    navigator.clipboard.writeText(summary).then(() => {
-        showSuccess('📋 Hata özeti kopyalandı.');
+    const singleAiPrompt = `# 🚨 FIRSATKOLİK TEKİL HATA İNCELEME & DÜZELTME TALEBİ\n\n` + formatErrorForAI(error);
+    navigator.clipboard.writeText(singleAiPrompt).then(() => {
+        showSuccess('🤖 Hata detayı AI formatında panoya kopyalandı.');
+    }).catch(err => {
+        showError('Kopyalama hatası: ' + err.message);
     });
+};
+
+window.toggleLogsExportDropdown = function() {
+    const popover = document.getElementById('logsExportDropdownPopover');
+    if (!popover) return;
+    popover.classList.toggle('hidden');
+};
+
+window.closeLogsExportDropdown = function() {
+    const popover = document.getElementById('logsExportDropdownPopover');
+    if (popover) popover.classList.add('hidden');
+};
+
+window.downloadFilteredErrorsAsJson = function() {
+    if (!currentFilteredErrorsList || currentFilteredErrorsList.length === 0) {
+        showError('⚠️ Ekranda indirilecek filtrelenmiş hata kaydı bulunmuyor.');
+        return;
+    }
+    const cleanList = currentFilteredErrorsList.map(e => {
+        const copy = { ...e };
+        if (copy.createdAt && copy.createdAt.toDate) copy.createdAt = copy.createdAt.toDate().toISOString();
+        if (copy.lastOccurredAt && copy.lastOccurredAt.toDate) copy.lastOccurredAt = copy.lastOccurredAt.toDate().toISOString();
+        if (copy.resolvedAt && copy.resolvedAt.toDate) copy.resolvedAt = copy.resolvedAt.toDate().toISOString();
+        return copy;
+    });
+    const blob = new Blob([JSON.stringify(cleanList, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const dlAnchor = document.createElement('a');
+    dlAnchor.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    dlAnchor.download = `firsatkolik-errors-${getAdminCurrentEnvironment()}-${dateStr}.json`;
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    URL.revokeObjectURL(url);
+    showSuccess(`📥 ${currentFilteredErrorsList.length} adet hata JSON dosyası olarak indirildi.`);
+    window.closeLogsExportDropdown();
+};
+
+window.downloadFilteredErrorsAsMarkdown = function() {
+    if (!currentFilteredErrorsList || currentFilteredErrorsList.length === 0) {
+        showError('⚠️ Ekranda indirilecek filtrelenmiş hata kaydı bulunmuyor.');
+        return;
+    }
+    const mdContent = formatMultipleErrorsForAI(currentFilteredErrorsList);
+    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const dlAnchor = document.createElement('a');
+    dlAnchor.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    dlAnchor.download = `firsatkolik-errors-${getAdminCurrentEnvironment()}-${dateStr}.md`;
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    URL.revokeObjectURL(url);
+    showSuccess(`📝 ${currentFilteredErrorsList.length} adet hata Markdown raporu (.md) olarak indirildi.`);
+    window.closeLogsExportDropdown();
+};
+
+window.copyFilteredErrorsAsJson = function() {
+    if (!currentFilteredErrorsList || currentFilteredErrorsList.length === 0) {
+        showError('⚠️ Ekranda kopyalanacak filtrelenmiş hata kaydı bulunmuyor.');
+        return;
+    }
+    const cleanList = currentFilteredErrorsList.map(e => {
+        const copy = { ...e };
+        if (copy.createdAt && copy.createdAt.toDate) copy.createdAt = copy.createdAt.toDate().toISOString();
+        if (copy.lastOccurredAt && copy.lastOccurredAt.toDate) copy.lastOccurredAt = copy.lastOccurredAt.toDate().toISOString();
+        if (copy.resolvedAt && copy.resolvedAt.toDate) copy.resolvedAt = copy.resolvedAt.toDate().toISOString();
+        return copy;
+    });
+    navigator.clipboard.writeText(JSON.stringify(cleanList, null, 2)).then(() => {
+        showSuccess(`📋 ${currentFilteredErrorsList.length} adet hata JSON formatında panoya kopyalandı.`);
+    }).catch(err => {
+        showError('Kopyalama başarısız: ' + err.message);
+    });
+    window.closeLogsExportDropdown();
 };
 
 window.resolveAllErrors = async function() {
     const currentEnv = getAdminCurrentEnvironment();
     const envFilter = document.getElementById('logsEnvironmentFilter')?.value || 'current';
     const unresolved = allErrorsList.filter(e => {
-        if (e.status !== 'unresolved') return false;
-        const itemEnv = e.environment || 'dev';
+        if ((e.status || 'unresolved') !== 'unresolved') return false;
+        const itemEnv = (e.environment || e.metadata?.environment || 'dev').toLowerCase();
         if (envFilter === 'all') return true;
         if (envFilter === 'dev') return itemEnv === 'dev';
         if (envFilter === 'prod') return itemEnv === 'prod';
@@ -12452,22 +12801,31 @@ function initLogsEventListeners() {
         });
     }
 
-    // Click outside user dropdown popover to close it
+    // Click outside user dropdown or export popover to close it
     document.addEventListener('click', (e) => {
-        const popover = document.getElementById('logsUserDropdownPopover');
-        const btn = document.getElementById('logsUserDropdownBtn');
-        if (popover && !popover.classList.contains('hidden')) {
-            if (!popover.contains(e.target) && !btn.contains(e.target)) {
-                popover.classList.add('hidden');
+        const userPopover = document.getElementById('logsUserDropdownPopover');
+        const userBtn = document.getElementById('logsUserDropdownBtn');
+        if (userPopover && !userPopover.classList.contains('hidden')) {
+            if (!userPopover.contains(e.target) && !userBtn?.contains(e.target)) {
+                userPopover.classList.add('hidden');
+            }
+        }
+
+        const exportPopover = document.getElementById('logsExportDropdownPopover');
+        const exportBtn = document.getElementById('logsExportDropdownBtn');
+        if (exportPopover && !exportPopover.classList.contains('hidden')) {
+            if (!exportPopover.contains(e.target) && !exportBtn?.contains(e.target)) {
+                exportPopover.classList.add('hidden');
             }
         }
     });
 
-    // Global keyboard listener (ESC to close modal or dropdown)
+    // Global keyboard listener (ESC to close modal or dropdowns)
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeLogDetailModal();
             window.closeLogsUserDropdown();
+            window.closeLogsExportDropdown();
         }
     });
 
@@ -12615,21 +12973,6 @@ window.cleanupTestDataAdmin = async function() {
     }
 };
 
-// ==========================================
-// COUPONS MANAGEMENT SECTION (KUPONLAR)
-// ==========================================
-
-function showCouponsView() {
-    currentView = 'coupons';
-    showView('couponsView');
-    updateMenuActiveState('coupons');
-    if (coupons.length === 0) {
-        loadCoupons();
-    } else {
-        renderCoupons();
-    }
-}
-
 // =========================================================================
 // FAZ 5 - KUPONLAR YÖNETİMİ (COUPONS SUBSYSTEM - TOPLULUK VS RADAR)
 // =========================================================================
@@ -12649,6 +12992,7 @@ function showCouponsView() {
         renderCoupons();
     }
 }
+window.showCouponsView = showCouponsView;
 
 function loadCoupons() {
     const loadingEl = document.getElementById('couponsLoadingIndicator');
@@ -13351,6 +13695,7 @@ function showCatalogsView() {
         renderCatalogs();
     }
 }
+window.showCatalogsView = showCatalogsView;
 
 function loadCatalogs() {
     const loadingEl = document.getElementById('catalogsLoadingIndicator');

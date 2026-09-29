@@ -1293,7 +1293,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              'Bu ürün Amazon Depo satıcılıdır. Ürün yenilenmiş veya ikinci el olabilir.',
+                                              'Bu ürün Amazon Depo satıcılıdır. Ürün iade edilmiş, ambalajı açılmış veya yenilenmiş olabilir.',
                                               style: TextStyle(
                                                 fontSize: 11.5,
                                                 fontWeight: FontWeight.w500,

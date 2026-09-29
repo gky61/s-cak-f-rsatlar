@@ -45,16 +45,17 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
   static const int _maxRetries = 1;
   DateTime? _loadStartTime;
   Timer? _timeoutTimer;
+  bool _isDisposed = false;
 
   @override
-  bool get wantKeepAlive => _isAdLoaded;
+  bool get wantKeepAlive => _isAdLoaded && !_isDisposed;
 
   @override
   void initState() {
     super.initState();
     AdManagerService.instance.addListener(_onAdSettingsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadAd();
+      if (mounted && !_isDisposed) _loadAd();
     });
   }
 
@@ -63,26 +64,34 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     super.didUpdateWidget(oldWidget);
     if (widget.adUnitId != oldWidget.adUnitId || widget.viewMode != oldWidget.viewMode) {
       _timeoutTimer?.cancel();
-      _nativeAd?.dispose();
+      final adToDispose = _nativeAd;
       _nativeAd = null;
       _isAdLoaded = false;
       _isAdFailed = false;
       _isLoading = false;
       _retryCount = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          adToDispose?.dispose();
+        } catch (_) {}
+      });
       _loadAd();
     }
   }
 
   void _onAdSettingsChanged() {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
     final adManager = AdManagerService.instance;
     if (!adManager.isAdsEnabled || !adManager.nativeEnabled) {
       _timeoutTimer?.cancel();
       _isLoading = false;
-      if (_nativeAd != null) {
-        _nativeAd?.dispose();
-        _nativeAd = null;
-      }
+      final adToDispose = _nativeAd;
+      _nativeAd = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          adToDispose?.dispose();
+        } catch (_) {}
+      });
       if (_isAdLoaded) {
         setState(() {
           _isAdLoaded = false;
@@ -149,12 +158,17 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
 
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(seconds: 8), () {
-      if (mounted && !_isAdLoaded && _nativeAd != null) {
+      if (mounted && !_isDisposed && !_isAdLoaded && _nativeAd != null) {
         _log('⏱️ Native Ad yükleme zaman aşımı (8 saniye) → Fallback tetikleniyor');
-        _nativeAd?.dispose();
+        final adToDispose = _nativeAd;
         _nativeAd = null;
         _isLoading = false;
-        if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            adToDispose?.dispose();
+          } catch (_) {}
+        });
+        if (mounted && !_isDisposed) {
           setState(() {
             _isAdLoaded = false;
             _isAdFailed = true;
@@ -224,9 +238,13 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
           _isLoading = false;
 
           // Eğer bu callback anında ad örneği güncel aktif adInstance değilse veya widget unmount olduysa dispose et
-          if (!mounted || ad != adInstance) {
+          if (!mounted || _isDisposed || ad != adInstance) {
             _log('⚠️ Eski veya geçersiz ad örneği yüklendi, güvenle temizleniyor');
-            ad.dispose();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              try {
+                ad.dispose();
+              } catch (_) {}
+            });
             return;
           }
 
@@ -237,11 +255,13 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
           adManager.recordAdSuccess(widget.adUnitId);
           _retryCount = 0;
 
-          setState(() {
-            _nativeAd = adInstance;
-            _isAdLoaded = true;
-            _isAdFailed = false;
-          });
+          if (mounted && !_isDisposed) {
+            setState(() {
+              _nativeAd = adInstance;
+              _isAdLoaded = true;
+              _isAdFailed = false;
+            });
+          }
         },
         onPaidEvent: (Ad ad, double valueMicros, PrecisionType precision, String currencyCode) {
           adManager.handlePaidEvent(
@@ -258,16 +278,20 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
           _isLoading = false;
           _log('❌ Native Ad yüklenemedi: [${error.code}] ${error.message}');
           adManager.recordAdFailure(widget.adUnitId, error);
-          ad.dispose();
           if (adInstance == _nativeAd) {
             _nativeAd = null;
           }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try {
+              ad.dispose();
+            } catch (_) {}
+          });
 
           if (error.code != 3 && _retryCount < _maxRetries) {
             _retryCount++;
             _log('🔄 Native Ad yükleme 15 saniye sonra tekrar denenecek...');
             Future.delayed(const Duration(seconds: 15), () {
-              if (mounted && _nativeAd == null && !_isLoading) {
+              if (mounted && !_isDisposed && _nativeAd == null && !_isLoading) {
                 _loadAd();
               }
             });
@@ -275,7 +299,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
             _retryCount = 0;
           }
 
-          if (mounted) {
+          if (mounted && !_isDisposed) {
             setState(() {
               _isAdLoaded = false;
               _isAdFailed = true;
@@ -309,12 +333,24 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
 
   @override
   void dispose() {
+    _isDisposed = true;
     AdManagerService.instance.removeListener(_onAdSettingsChanged);
     _timeoutTimer?.cancel();
     _isLoading = false;
-    _nativeAd?.dispose();
+    final adToDispose = _nativeAd;
     _nativeAd = null;
+    _isAdLoaded = false;
     super.dispose();
+    // NativeAd nesnesi, widget ağacı ve Android platform view katmanı tamamen unmount
+    // edildikten sonra post-frame callback içinde güvenle dispose edilir.
+    // Bu sayede RenderAndroidView._sizePlatformView ve ViewGroup$LayoutParams.width null çökmesi %100 önlenir.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        adToDispose?.dispose();
+      } catch (e) {
+        if (kDebugMode) print('⚠️ Safe Ad dispose exception: $e');
+      }
+    });
   }
 
   Widget _buildSkeleton(BuildContext context, bool isDark) {
@@ -412,8 +448,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
       return const SizedBox.shrink();
     }
 
-    // Reklam henüz yükleniyorsa skeleton placeholder gösterilir
-    if (!_isAdLoaded || _nativeAd == null) {
+    // Reklam henüz yükleniyorsa veya dispose aşamasındaysa skeleton placeholder gösterilir
+    if (!_isAdLoaded || _nativeAd == null || _isDisposed) {
       return _buildSkeleton(context, isDark);
     }
 
@@ -436,13 +472,21 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: double.infinity,
-          height: innerHeight,
-          child: AdWidget(
-            key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
-            ad: _nativeAd!,
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Android PlatformView'e sıfır veya negatif genişlik gönderilmesi NullPointerException fırlatır
+            if (constraints.maxWidth <= 0) {
+              return _buildSkeleton(context, isDark);
+            }
+            return SizedBox(
+              width: constraints.maxWidth,
+              height: innerHeight,
+              child: AdWidget(
+                key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
+                ad: _nativeAd!,
+              ),
+            );
+          },
         ),
       );
     } else {
@@ -460,11 +504,21 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: SizedBox.expand(
-          child: AdWidget(
-            key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
-            ad: _nativeAd!,
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Unconstrained veya sıfır boyutlu grid render aşamalarında platform view çökmesini önler
+            if (constraints.maxWidth <= 0 || constraints.maxHeight <= 0) {
+              return _buildSkeleton(context, isDark);
+            }
+            return SizedBox(
+              width: constraints.maxWidth,
+              height: constraints.maxHeight,
+              child: AdWidget(
+                key: ValueKey('ad_widget_${widget.adUnitId}_${_nativeAd.hashCode}'),
+                ad: _nativeAd!,
+              ),
+            );
+          },
         ),
       );
     }

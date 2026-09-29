@@ -568,44 +568,56 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     );
   }
 
+  /// Güvenli, tekil Hero etiketli ve mükerrer çakışmayı önleyen SnackBar gösterici
+  void _showFeedbackSnackBar({
+    required Widget content,
+    Color backgroundColor = const Color(0xFF10B981),
+    Duration duration = const Duration(seconds: 2),
+  }) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // Eski SnackBar'ı animasyon beklemeden anında temizle (Hero tag çakışmasını kesin önler)
+    messenger.removeCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: KeyedSubtree(
+          key: UniqueKey(),
+          child: content,
+        ),
+        backgroundColor: backgroundColor,
+        behavior: SnackBarBehavior.floating,
+        duration: duration,
+        margin: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
   Future<void> _markAllAsRead(String currentUserId) async {
     try {
       HapticFeedback.lightImpact();
       await _firestoreService.markAllNotificationsAsRead(currentUserId);
       AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.done_all_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text('Tüm bildirimler okundu olarak işaretlendi'),
-            ],
-          ),
-          backgroundColor: const Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-          margin: const EdgeInsets.all(12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+      _showFeedbackSnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.done_all_rounded, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Tüm bildirimler okundu olarak işaretlendi'),
+          ],
         ),
+        backgroundColor: const Color(0xFF10B981),
+        duration: const Duration(seconds: 2),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Hata oluştu: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
+      _showFeedbackSnackBar(
+        content: Text('Hata oluştu: $e'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
       );
     }
   }
@@ -1095,92 +1107,105 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           }
         }
 
+        // Dismissible yön ve arka plan mimarisi:
+        // Flutter Dismissible sözleşmesinde 'secondaryBackground == null || background != null' zorunludur.
+        // isUnread == true:
+        //   direction: DismissDirection.horizontal (Sağa: Okundu [background], Sola: Sil [secondaryBackground])
+        // isUnread == false:
+        //   direction: DismissDirection.endToStart (Yalnızca sola kaydır: Sil [background])
+        //   secondaryBackground = null (Assertion hatasını %100 önler)
+        final dismissDirection = isUnread ? DismissDirection.horizontal : DismissDirection.endToStart;
+
+        final okunduBackground = Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.only(left: 20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF10B981), Color(0xFF059669)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.done_all_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Okundu',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        final silBackground = Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFEF5350), Color(0xFFD32F2F)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.red.withValues(alpha: 0.25),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                'Sil',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              SizedBox(width: 8),
+              Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ],
+          ),
+        );
+
         return Dismissible(
           key: Key(notifId),
-          direction: isUnread ? DismissDirection.horizontal : DismissDirection.endToStart,
+          direction: dismissDirection,
           dismissThresholds: const {
             DismissDirection.startToEnd: 0.3,
             DismissDirection.endToStart: 0.3,
           },
-          // Sağa kaydırırken sol tarafta beliren OKUNDU aksiyonu (Yalnızca okunmamış bildirimlerde aktiftir)
-          background: Container(
-            margin: const EdgeInsets.symmetric(vertical: 2),
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: 20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF10B981), Color(0xFF059669)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.25),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.done_all_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'Okundu',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Sola kaydırırken sağ tarafta beliren SİL aksiyonu
-          secondaryBackground: Container(
-            margin: const EdgeInsets.symmetric(vertical: 2),
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFEF5350), Color(0xFFD32F2F)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.red.withValues(alpha: 0.25),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  'Sil',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                SizedBox(width: 8),
-                Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
+          // Okunmamışta sağa kaydırma 'Okundu', okunmuşta tek yön sola kaydırma 'Sil'
+          background: isUnread ? okunduBackground : silBackground,
+          // Okunmamışta sola kaydırma 'Sil', okunmuşta null (assertion ihlali oluşturmaz)
+          secondaryBackground: isUnread ? silBackground : null,
           confirmDismiss: (direction) async {
             if (direction == DismissDirection.startToEnd) {
               // ─── Sağa Kaydırma: Yalnızca Okunmamış Bildirimleri Okundu İşaretle ───
@@ -1190,24 +1215,16 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
 
               if (context.mounted) {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Row(
-                      children: [
-                        Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                        SizedBox(width: 8),
-                        Text('Okundu olarak işaretlendi'),
-                      ],
-                    ),
-                    backgroundColor: const Color(0xFF10B981),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(milliseconds: 1500),
-                    margin: const EdgeInsets.all(12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                _showFeedbackSnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text('Okundu olarak işaretlendi'),
+                    ],
                   ),
+                  backgroundColor: const Color(0xFF10B981),
+                  duration: const Duration(milliseconds: 1500),
                 );
               }
               // Kart yaylanarak yerine döner; 'read: true' verisi geldiğinde otomatik olarak
@@ -1240,17 +1257,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               }
 
               if (context.mounted) {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('"$notifTitle" silindi'),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    margin: const EdgeInsets.all(12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
+                _showFeedbackSnackBar(
+                  content: Text('"$notifTitle" silindi'),
+                  backgroundColor: const Color(0xFF334155),
+                  duration: const Duration(seconds: 2),
                 );
               }
             }
@@ -1471,19 +1481,15 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         await _firestoreService.deleteNotification(userId, item['id'] as String);
         AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bildirim silindi'),
-            backgroundColor: Color(0xFF10B981),
-          ),
+        _showFeedbackSnackBar(
+          content: const Text('Bildirim silindi'),
+          backgroundColor: const Color(0xFF10B981),
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Silme hatası: $e'),
-            backgroundColor: Colors.red,
-          ),
+        _showFeedbackSnackBar(
+          content: Text('Silme hatası: $e'),
+          backgroundColor: Colors.red,
         );
       }
     }
@@ -1535,24 +1541,19 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
         if (!mounted) return;
         Navigator.pop(context); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tüm bildirimler silindi'),
-            backgroundColor: Color(0xFF10B981),
-            duration: Duration(seconds: 2),
-          ),
+        _showFeedbackSnackBar(
+          content: const Text('Tüm bildirimler silindi'),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 2),
         );
       } catch (e) {
         if (!mounted) return;
         Navigator.pop(context); // Close loading dialog
         final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Bildirimler silinirken hata oluştu: $cleanMsg'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
+        _showFeedbackSnackBar(
+          content: Text('Bildirimler silinirken hata oluştu: $cleanMsg'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
         );
       }
     }

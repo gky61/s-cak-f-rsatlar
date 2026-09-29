@@ -42,8 +42,16 @@ class AdDealCard extends StatelessWidget {
           return _buildHousePromoCard(context);
         }
 
+        // Her reklam kartının widget ağacında benzersiz bir kimliğe (Key) sahip olmasını sağla.
+        // Eğer üst widget (ListView/GridView) bir Key vermişse, bunu AdNativeWidget'a aktar.
+        // Key verilmemişse identityHashCode yerine null bırakarak her build'de State'in gereksiz
+        // yeniden başlatılmasını ve reklamın sıfırdan istenmesini önle.
+        final Key? adKey = key != null
+            ? ValueKey('ad_native_widget_$key')
+            : null;
+
         return AdNativeWidget(
-          key: ValueKey('ad_native_widget_${placement}_${viewMode.name}_${adUnitId ?? "default"}'),
+          key: adKey,
           viewMode: viewMode,
           adUnitId: adUnitId ?? DefaultFirebaseOptions.nativeAdUnitId,
           placement: placement == 'kuponlar'
