@@ -2,6 +2,9 @@ import os
 import sys
 import subprocess
 
+# Ensure gcloud uses current Python interpreter on Windows
+os.environ["CLOUDSDK_PYTHON"] = sys.executable
+
 def run_command(command, cwd=None):
     print(f"Running: {command}")
     subprocess.check_call(command, shell=True, cwd=cwd)
@@ -27,10 +30,16 @@ try:
     # Current working directory (cloud-run-bot directory)
     cwd = os.path.dirname(os.path.abspath(__file__))
 
+    # Check if build step should be skipped
+    skip_build = "--skip-build" in sys.argv
+
     # 1. Submit build to Cloud Build (builds Docker container in the cloud)
-    print("\n[INFO] Step 1: Submitting build to Google Cloud Build...")
-    build_cmd = f"gcloud builds submit --tag gcr.io/{project_id}/{service_name}:latest --project {project_id} ."
-    run_command(build_cmd, cwd=cwd)
+    if not skip_build:
+        print("\n[INFO] Step 1: Submitting build to Google Cloud Build...")
+        build_cmd = f"gcloud builds submit --tag gcr.io/{project_id}/{service_name}:latest --project {project_id} ."
+        run_command(build_cmd, cwd=cwd)
+    else:
+        print("\n[INFO] Step 1: Skipping Cloud Build (--skip-build specified, reusing latest image)...")
 
     # 2. Deploy to VM as a Docker container
     print("\n[INFO] Step 2: Running deployment commands on VM via SSH...")
