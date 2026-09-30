@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sicak_firsatlar/models/deal.dart';
-import 'package:sicak_firsatlar/screens/deal_detail/deal_share_sheet.dart';
 import 'package:sicak_firsatlar/utils/share_helper.dart';
 
 void main() {

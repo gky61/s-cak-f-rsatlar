@@ -616,8 +616,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
       if (!mounted) return;
       _showFeedbackSnackBar(
-        content: const Row(
-          children: [
+        content: Row(
+          key: UniqueKey(),
+          children: const [
             Icon(Icons.done_all_rounded, color: Colors.white, size: 18),
             SizedBox(width: 8),
             Text('Tüm bildirimler okundu olarak işaretlendi'),
@@ -1280,8 +1281,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
               if (context.mounted) {
                 _showFeedbackSnackBar(
-                  content: const Row(
-                    children: [
+                  content: Row(
+                    key: UniqueKey(),
+                    children: const [
                       Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
                       SizedBox(width: 8),
                       Text('Okundu olarak işaretlendi'),

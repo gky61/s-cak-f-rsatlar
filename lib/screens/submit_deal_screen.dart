@@ -252,6 +252,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(icon, color: Colors.white, size: 20),
             const SizedBox(width: 12),

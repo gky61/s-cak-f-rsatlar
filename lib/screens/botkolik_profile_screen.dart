@@ -48,10 +48,12 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
 
   StreamSubscription<dynamic>? _authSub;
 
+  Future<void>? _inFlightFollowLoad;
+
   @override
   void initState() {
     super.initState();
-    _loadFollowStatus();
+    // _authSub dinleyicisi ilk karesinde anında tetiklenerek _loadFollowStatus() çağrısını yapar.
     _authSub = _authService.authStateChanges.listen((user) {
       if (mounted) {
         _loadFollowStatus();
@@ -76,6 +78,16 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null) return;
 
+    if (_inFlightFollowLoad != null) {
+      return await _inFlightFollowLoad;
+    }
+
+    _inFlightFollowLoad = _fetchFollowStatus(currentUserId);
+    await _inFlightFollowLoad;
+    _inFlightFollowLoad = null;
+  }
+
+  Future<void> _fetchFollowStatus(String currentUserId) async {
     try {
       final isFollowing = await _firestoreService.isFollowing(currentUserId, 'botkolik');
       final isNotificationEnabled = await _firestoreService.isFollowNotificationEnabled(currentUserId, 'botkolik');
@@ -94,6 +106,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(
               isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,

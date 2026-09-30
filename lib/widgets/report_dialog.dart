@@ -156,15 +156,16 @@ class _ReportDialogState extends State<ReportDialog> {
       if (success) {
         Navigator.pop(context); // Dialog'u kapat
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
-              children: [
+              key: UniqueKey(),
+              children: const [
                 Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
                 SizedBox(width: 8),
                 Expanded(child: Text('Bildiriminiz incelenmek üzere alındı. Teşekkür ederiz.')),
               ],
             ),
-            backgroundColor: Color(0xFF10B981),
+            backgroundColor: const Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
           ),
         );

@@ -40,9 +40,9 @@ class ChatMessagesSkeleton extends StatelessWidget {
           alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
             width: width,
-            height: height,
+            constraints: BoxConstraints(minHeight: height),
             margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: isMe ? sentBg : receivedBg,
               borderRadius: BorderRadius.only(
@@ -60,18 +60,19 @@ class ChatMessagesSkeleton extends StatelessWidget {
             ),
             child: Column(
               crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ShimmerBox(
-                  width: width * 0.75,
-                  height: 11,
+                  width: width * 0.7,
+                  height: 10,
                   borderRadius: 4,
                 ),
                 if (height > 45) ...[
                   const SizedBox(height: 5),
                   ShimmerBox(
                     width: width * 0.45,
-                    height: 10,
+                    height: 9,
                     borderRadius: 4,
                   ),
                 ],

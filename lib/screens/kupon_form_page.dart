@@ -89,6 +89,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(icon, color: Colors.white, size: 20),
             const SizedBox(width: 12),

@@ -171,14 +171,11 @@ class AppUser {
                 .map((e) => e.toString().trim())
                 .where((s) => s.isNotEmpty)
                 .toList();
-            _log('✅ Badges parsed: ${badges.length} rozet - $badges');
           } else if (badgesData is String) {
             // Eğer string olarak saklanmışsa (eski veri)
             badges = [];
             _log('⚠️ Badges string formatında, boş liste döndürülüyor');
           }
-        } else {
-          _log('ℹ️ Badges data null');
         }
       } catch (e) {
         _log('❌ Badges parse hatası: $e');

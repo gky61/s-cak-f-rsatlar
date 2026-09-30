@@ -90,6 +90,7 @@ class NotificationService {
   static String? _lastRegisteredToken;
   static DateTime? _lastDeviceTokenRegisterTime;
   static const Duration _deviceTokenRegisterCooldown = Duration(minutes: 30);
+  static Future<void>? _inFlightTokenSave;
 
   static bool _isAdminTopicSubscribedInSession = false;
   static String? _lastSubscribedAdminUid;
@@ -541,6 +542,16 @@ class NotificationService {
 
   // --- FCM Token Kaydetme (Otomatik İyileştirme & Taze Token Garantisi) ---
   Future<void> saveFCMToken({String? userId, bool forceRefresh = false}) async {
+    // Eşzamanlı (paralel) birden fazla kaydetme çağrısını tek bir Future altında birleştir (Single-Flight Pattern)
+    if (_inFlightTokenSave != null) {
+      _log('⏳ saveFCMToken zaten işlemde, mevcut işlem bekleniyor...');
+      await _inFlightTokenSave;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _inFlightTokenSave = completer.future;
+
     try {
       if (forceRefresh && !kIsWeb) {
         try {
@@ -657,6 +668,11 @@ class NotificationService {
     } catch (e) {
       _log('❌ FCM Token kaydetme hatası: $e');
       if (!kIsWeb) rethrow;
+    } finally {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+      _inFlightTokenSave = null;
     }
   }
 
@@ -936,7 +952,7 @@ class NotificationService {
         _log('👮 Admin kullanıcı tespit edildi - Admin bildirimleri aktifleştiriliyor...');
         
         // Admin için admin topic'ine KESINLIKLE abone ol
-        await subscribeToAdminTopic();
+        await ensureAdminTopicSubscriptionIfAdmin();
         
         // Genel bildirim ayarını kontrol et
         await _setAllDealsSubscription(generalEnabled);
@@ -1328,8 +1344,7 @@ class NotificationService {
   Future<void> resubscribeToTopics() async {
     // FırsatKolik mimarisinde kategori bildirimleri FCM topic'leri yerine
     // doğrudan Firestore 'notificationSubscriptions' koleksiyonu ve tekil cihaz token'ı üzerinden
-    // yönetilmektedir. Gereksiz ağ trafiğini ve pil tüketimini önlemek için döngü optimize edildi.
-    _log('ℹ️ Bildirimler doğrudan Firestore abonelik koleksiyonları ve cihaz token motoru üzerinden yönetilmektedir.');
+    // yönetilmektedir. Gereksiz ağ trafiğini ve pil tüketimini önlemek için no-op olarak optimize edildi.
   }
 
 
@@ -1906,11 +1921,17 @@ class NotificationService {
   }
 
   // Admin bildirimler ekranına yönlendirme
-  void _navigateToAdminNotifications({
+  Future<void> _navigateToAdminNotifications({
     String? initialTab,
     String? highlightNotificationId,
     String? highlightDealId,
-  }) {
+  }) async {
+    final isAdmin = await AuthService().isAdmin();
+    if (!isAdmin) {
+      _log('🛡️ Admin bildirimler yönlendirmesi engellendi: Kullanıcı admin değil');
+      return;
+    }
+
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
       _log('🔔 Admin bildirimler ekranına yönlendiriliyor (tab: $initialTab, notifId: $highlightNotificationId, dealId: $highlightDealId)');
@@ -1935,7 +1956,13 @@ class NotificationService {
   }
 
   // Admin ekranına yönlendirme (onay bekleyen fırsatlar için)
-  void _navigateToAdminScreen({String? dealId, int? tabIndex}) {
+  Future<void> _navigateToAdminScreen({String? dealId, int? tabIndex}) async {
+    final isAdmin = await AuthService().isAdmin();
+    if (!isAdmin) {
+      _log('🛡️ Admin ekranı yönlendirmesi engellendi: Kullanıcı admin değil');
+      return;
+    }
+
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
       _log('🔔 Admin ekranına yönlendiriliyor (onay bekleyen fırsatlar, dealId: $dealId, tabIndex: $tabIndex)');

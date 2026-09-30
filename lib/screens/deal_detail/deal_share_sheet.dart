@@ -32,8 +32,9 @@ class DealShareSheet {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
-            children: [
+          content: Row(
+            key: UniqueKey(),
+            children: const [
               Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
               SizedBox(width: 10),
               Expanded(
@@ -62,8 +63,9 @@ class DealShareSheet {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
-              children: [
+            content: Row(
+              key: UniqueKey(),
+              children: const [
                 Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
                 SizedBox(width: 10),
                 Expanded(
@@ -94,6 +96,7 @@ class DealShareSheet {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
+            key: UniqueKey(),
             children: [
               const Icon(Icons.storefront_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 10),

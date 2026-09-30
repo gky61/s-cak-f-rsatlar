@@ -219,6 +219,7 @@ class _AuthScreenState extends State<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             const Icon(Icons.error_outline, color: Colors.white),
             const SizedBox(width: 12),
@@ -238,6 +239,7 @@ class _AuthScreenState extends State<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             const Icon(Icons.check_circle_outline, color: Colors.white),
             const SizedBox(width: 12),

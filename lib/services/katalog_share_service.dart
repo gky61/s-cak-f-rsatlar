@@ -107,9 +107,10 @@ class KatalogShareService {
     if (context.mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Row(
-            children: [
+            key: UniqueKey(),
+            children: const [
               SizedBox(
                 width: 18,
                 height: 18,
@@ -119,7 +120,7 @@ class KatalogShareService {
               Text('Broşür görseli hazırlanıyor...'),
             ],
           ),
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     }

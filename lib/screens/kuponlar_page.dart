@@ -2261,26 +2261,30 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                     ),
                                     if (isLongDescription) ...[
                                       const SizedBox(height: 2),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            isExpanded ? 'Daha Az Göster' : 'Devamını Göster',
-                                            style: const TextStyle(
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w700,
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              isExpanded ? 'Daha Az Göster' : 'Devamını Göster',
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppTheme.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Icon(
+                                              isExpanded
+                                                  ? Icons.keyboard_arrow_up_rounded
+                                                  : Icons.keyboard_arrow_down_rounded,
+                                              size: 14,
                                               color: AppTheme.primary,
                                             ),
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Icon(
-                                            isExpanded
-                                                ? Icons.keyboard_arrow_up_rounded
-                                                : Icons.keyboard_arrow_down_rounded,
-                                            size: 14,
-                                            color: AppTheme.primary,
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ],

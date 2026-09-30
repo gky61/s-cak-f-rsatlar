@@ -38,6 +38,7 @@ class AuthService {
   static bool? _cachedIsAdmin;
   static String? _cachedAdminUid;
   static DateTime? _lastAdminCheck;
+  static Future<bool>? _inFlightAdminCheck;
   static const Duration _adminCacheTTL = Duration(minutes: 5);
 
   /// Admin önbelleğini sıfırla (Çıkışta veya rol güncellendiğinde çağrılır)
@@ -45,6 +46,7 @@ class AuthService {
     _cachedIsAdmin = null;
     _cachedAdminUid = null;
     _lastAdminCheck = null;
+    _inFlightAdminCheck = null;
   }
   
   // Lazy initialization - sadece gerektiğinde oluştur
@@ -743,7 +745,7 @@ class AuthService {
     }
   }
 
-  // Admin kontrolü (In-Memory TTL önbellekli)
+  // Admin kontrolü (In-Memory TTL önbellekli & Single-Flight Concurrency Korumalı)
   Future<bool> isAdmin({bool forceRefresh = false}) async {
     try {
       final user = currentUser;
@@ -760,28 +762,14 @@ class AuthService {
           DateTime.now().difference(_lastAdminCheck!) < _adminCacheTTL) {
         return _cachedIsAdmin!;
       }
-      
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
-      if (userDoc.exists) {
-        final data = userDoc.data();
-        
-        // Hem isAdmin (büyük A) hem de isadmin (küçük harf) kontrolü yap
-        final adminValue = data?['isAdmin'] ?? data?['isadmin'];
-        final isAdmin = adminValue == true || adminValue == 'true' || adminValue == 1;
-        
-        _cachedIsAdmin = isAdmin;
-        _cachedAdminUid = user.uid;
-        _lastAdminCheck = DateTime.now();
 
-        _log('👮 Admin kontrolü (Firestore güncellendi): isAdmin=$isAdmin');
-        
-        return isAdmin;
+      // Single-Flight Concurrency Lock: Eşzamanlı (login veya sayfa açılışı) gelen çağrıları tek bir operasyona bağla
+      if (_inFlightAdminCheck != null) {
+        return await _inFlightAdminCheck!;
       }
 
-      _cachedIsAdmin = false;
-      _cachedAdminUid = user.uid;
-      _lastAdminCheck = DateTime.now();
-      return false;
+      _inFlightAdminCheck = _fetchAdminStatus(user.uid);
+      return await _inFlightAdminCheck!;
     } catch (e, stack) {
       _log('Admin kontrolü hatası: $e');
       SystemLogService.instance.logError(
@@ -792,7 +780,33 @@ class AuthService {
         severity: SystemErrorSeverity.error,
       );
       return _cachedIsAdmin ?? false;
+    } finally {
+      _inFlightAdminCheck = null;
     }
+  }
+
+  Future<bool> _fetchAdminStatus(String uid) async {
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      final data = userDoc.data();
+      
+      // Hem isAdmin (büyük A) hem de isadmin (küçük harf) kontrolü yap
+      final adminValue = data?['isAdmin'] ?? data?['isadmin'];
+      final isAdmin = adminValue == true || adminValue == 'true' || adminValue == 1;
+      
+      _cachedIsAdmin = isAdmin;
+      _cachedAdminUid = uid;
+      _lastAdminCheck = DateTime.now();
+
+      _log('👮 Admin kontrolü (Firestore güncellendi): isAdmin=$isAdmin');
+      
+      return isAdmin;
+    }
+
+    _cachedIsAdmin = false;
+    _cachedAdminUid = uid;
+    _lastAdminCheck = DateTime.now();
+    return false;
   }
 
   /// Email formatı kontrolü

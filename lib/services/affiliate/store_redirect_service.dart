@@ -157,8 +157,9 @@ class StoreRedirectService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
-              children: [
+            content: Row(
+              key: UniqueKey(),
+              children: const [
                 Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
                 SizedBox(width: 10),
                 Expanded(

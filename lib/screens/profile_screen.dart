@@ -90,9 +90,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isOwnProfile) {
       _loadUnreadMessageCount();
       _loadUnreadAdminMessageCount();
-    } else {
-      _loadFollowStatus();
     }
+    // !_isOwnProfile durumunda _loadFollowStatus hemen alttaki _setupAuthListener()
+    // authStateChanges ilk karesi ile tek seferde güvenle tetiklenir.
 
     _setupAuthListener();
   }
@@ -151,6 +151,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  Future<void>? _inFlightFollowLoad;
+
   Future<void> _loadFollowStatus() async {
     final currentUserId = _authService.currentUser?.uid;
     final targetUserId = widget.userId;
@@ -159,6 +161,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
+    if (_inFlightFollowLoad != null) {
+      return await _inFlightFollowLoad;
+    }
+
+    _inFlightFollowLoad = _fetchFollowStatus(currentUserId, targetUserId);
+    await _inFlightFollowLoad;
+    _inFlightFollowLoad = null;
+  }
+
+  Future<void> _fetchFollowStatus(String currentUserId, String targetUserId) async {
     try {
       _log('📋 _loadFollowStatus çağrıldı: currentUserId=$currentUserId, targetUserId=$targetUserId');
       final isFollowing = await _firestoreService.isFollowing(currentUserId, targetUserId);
@@ -2593,148 +2605,148 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final TextEditingController badgeController = TextEditingController();
     
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            '${user.username} - Rozet Yönetimi',
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w700,
+    try {
+      await showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text(
+              '${user.username} - Rozet Yönetimi',
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Mevcut Rozetler:',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: user.badges.map((badgeId) {
-                      final badge = BadgeHelper.getBadgeInfo(badgeId);
-                      if (badge == null) return const SizedBox.shrink();
-                      return Chip(
-                        avatar: Text(badge.icon),
-                        label: Text(badge.name),
-                        backgroundColor: badge.color.withValues(alpha: 0.2),
-                        deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
-                        onDeleted: () => _removeBadge(user.uid, badgeId),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Yeni Rozet Ekle:',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: badgeController,
-                    style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                    decoration: InputDecoration(
-                      hintText: 'Rozet adı girin (örn: VIP, Moderatör)',
-                      hintStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Mevcut Rozetler:',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
-                      filled: true,
-                      fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
                     ),
-                    onSubmitted: (value) {
-                      if (value.trim().isNotEmpty) {
-                        _addBadge(user.uid, value.trim());
-                        badgeController.clear();
-                        Navigator.pop(context);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        final badgeName = badgeController.text.trim();
-                        if (badgeName.isNotEmpty) {
-                          _addBadge(user.uid, badgeName);
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: user.badges.map((badgeId) {
+                        final badge = BadgeHelper.getBadgeInfo(badgeId);
+                        if (badge == null) return const SizedBox.shrink();
+                        return Chip(
+                          avatar: Text(badge.icon),
+                          label: Text(badge.name),
+                          backgroundColor: badge.color.withValues(alpha: 0.2),
+                          deleteIcon: Icon(Icons.close, size: 16, color: badge.color),
+                          onDeleted: () => _removeBadge(user.uid, badgeId),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Yeni Rozet Ekle:',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: badgeController,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      decoration: InputDecoration(
+                        hintText: 'Rozet adı girin (örn: VIP, Moderatör)',
+                        hintStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
+                      ),
+                      onSubmitted: (value) {
+                        if (value.trim().isNotEmpty) {
+                          _addBadge(user.uid, value.trim());
                           badgeController.clear();
                           Navigator.pop(context);
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final badgeName = badgeController.text.trim();
+                          if (badgeName.isNotEmpty) {
+                            _addBadge(user.uid, badgeName);
+                            badgeController.clear();
+                            Navigator.pop(context);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Rozet Ekle', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
-                      child: const Text('Rozet Ekle', style: TextStyle(fontWeight: FontWeight.w700)),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Önceden Tanımlı Rozetler:',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                    const SizedBox(height: 16),
+                    Text(
+                      'Önceden Tanımlı Rozetler:',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: BadgeHelper.getAllBadgeIds()
-                        .where((badgeId) => !user.badges.contains(badgeId))
-                        .map((badgeId) {
-                      final badge = BadgeHelper.getBadgeInfo(badgeId)!;
-                      return ActionChip(
-                        avatar: Text(badge.icon),
-                        label: Text(badge.name),
-                        backgroundColor: badge.color.withValues(alpha: 0.1),
-                        onPressed: () => _addBadge(user.uid, badgeId),
-                      );
-                    }).toList(),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: BadgeHelper.getAllBadgeIds()
+                          .where((badgeId) => !user.badges.contains(badgeId))
+                          .map((badgeId) {
+                        final badge = BadgeHelper.getBadgeInfo(badgeId)!;
+                        return ActionChip(
+                          avatar: Text(badge.icon),
+                          label: Text(badge.name),
+                          backgroundColor: badge.color.withValues(alpha: 0.1),
+                          onPressed: () => _addBadge(user.uid, badgeId, closeDialog: true),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Kapat',
+                  style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                badgeController.dispose();
-                Navigator.pop(context);
-              },
-              child: Text(
-                'Kapat',
-                style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
-              ),
-            ),
-          ],
         ),
-      ),
-    );
-    badgeController.dispose();
+      );
+    } finally {
+      badgeController.dispose();
+    }
   }
 
-  Future<void> _addBadge(String userId, String badgeId) async {
+  Future<void> _addBadge(String userId, String badgeId, {bool closeDialog = false}) async {
     try {
       final userRef = _firestore.collection('users').doc(userId);
       final userDoc = await userRef.get();
@@ -2749,7 +2761,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           await _loadUserData();
           
           if (mounted) {
-            Navigator.pop(context); // Dialog'u kapat
+            if (closeDialog) {
+              Navigator.pop(context); // Dialog'u kapat
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Rozet eklendi ✅'),
@@ -2805,6 +2819,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(
               isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
@@ -3023,6 +3038,7 @@ class _OtherUserActionBarWidgetState extends State<_OtherUserActionBarWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(
               isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,

@@ -95,10 +95,25 @@ class AnalyticsService {
   /// Genel Özel Olay (Custom Event) Kaydedici
   Future<void> logCustomEvent(String name, [Map<String, Object>? parameters]) async {
     try {
-      await _analytics.logEvent(name: name, parameters: parameters);
-      _recordBreadcrumb(name, parameters);
+      // Firebase Analytics yalnızca String ve num (int, double) kabul eder.
+      // Boolean veya nesne parametrelerini otomatik normalize ederek assertion hatalarını önle
+      Map<String, Object>? sanitizedParams;
+      if (parameters != null) {
+        sanitizedParams = parameters.map((key, value) {
+          if (value is bool) {
+            return MapEntry(key, value ? 1 : 0);
+          } else if (value is String || value is num) {
+            return MapEntry(key, value);
+          } else {
+            return MapEntry(key, value.toString());
+          }
+        });
+      }
+
+      await _analytics.logEvent(name: name, parameters: sanitizedParams);
+      _recordBreadcrumb(name, sanitizedParams ?? parameters);
       if (kDebugMode) {
-        print('📊 [Analytics] Event: $name | Params: $parameters');
+        print('📊 [Analytics] Event: $name | Params: ${sanitizedParams ?? parameters}');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -220,7 +235,7 @@ class AnalyticsService {
     final params = <String, Object>{
       'category': category,
       'store_name': storeName.toLowerCase().trim(),
-      'has_image': hasImage,
+      'has_image': hasImage ? 1 : 0,
     };
     await logCustomEvent('deal_submitted', params);
   }

@@ -780,7 +780,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // Kısa bir gecikme sonrası admin topic'ine abone olduğundan emin ol
         Future.delayed(const Duration(seconds: 2), () async {
           try {
-            await _notificationService.subscribeToAdminTopic();
+            await _notificationService.ensureAdminTopicSubscriptionIfAdmin();
             _log('✅ Admin topic aboneliği doğrulandı');
           } catch (e) {
             _log('⚠️ Admin topic abonelik doğrulama hatası: $e');

@@ -14,6 +14,7 @@ import '../services/user_service.dart';
 import '../services/message_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
+import '../services/auth_service.dart';
 import '../utils/badge_helper.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
@@ -53,6 +54,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   final UserService _userService = UserService();
   final MessageService _messageService = MessageService();
   late TabController _tabController;
+
+  // Güvenlik Muhafızı: Admin yetki doğrulaması
+  bool _isCheckingAdmin = true;
+  bool _isAdmin = false;
   
   // Tab bildirim sayıları
   int _pendingCount = 0;
@@ -138,16 +143,50 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         ? widget.initialTabIndex!
         : 0;
     _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
+    _verifyAdminAccess();
+  }
+
+  /// Admin yetkisini doğrula; yetkisiz ise Firestore stream'lerini başlatmadan sayfayı kapat
+  Future<void> _verifyAdminAccess() async {
+    final isAdmin = await AuthService().isAdmin();
+    if (!mounted) return;
+    if (!isAdmin) {
+      _log('🚫 AdminScreen: Yetkisiz erişim teşebbüsü engellendi.');
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            key: UniqueKey(),
+            children: const [
+              Icon(Icons.security, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Bu sayfaya erişim yetkiniz bulunmamaktadır.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isAdmin = true;
+      _isCheckingAdmin = false;
+    });
+
     _loadTabCounts();
     _loadReportCounts();
     // Admin paneli her açıldığında admin_deals topic'ine abone ol (bildirimlerin gelmesi için)
     _ensureAdminNotificationSubscription();
   }
 
-  /// Admin bildirimlerine (onay bekleyen fırsatlar) abone olmayı garanti et
+  /// Admin bildirimlerine (onay bekleyen fırsatlar) abone olmayı garanti et (Oturum korumalı)
   Future<void> _ensureAdminNotificationSubscription() async {
     try {
-      await NotificationService().subscribeToAdminTopic();
+      await NotificationService().ensureAdminTopicSubscriptionIfAdmin();
       if (kDebugMode) _log('✅ Admin bildirim aboneliği doğrulandı');
     } catch (e) {
       if (kDebugMode) _log('⚠️ Admin bildirim aboneliği: $e');
@@ -157,7 +196,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   /// Kullanıcı manuel olarak admin bildirim aboneliğini yeniler
   Future<void> _refreshAdminNotificationSubscription() async {
     try {
-      await NotificationService().subscribeToAdminTopic();
+      await NotificationService().ensureAdminTopicSubscriptionIfAdmin(force: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -233,6 +272,20 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingAdmin) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (!_isAdmin) {
+      return const Scaffold(
+        body: SizedBox.shrink(),
+      );
+    }
+
     final primaryColor = Theme.of(context).colorScheme.primary;
     return Scaffold(
       appBar: AppBar(

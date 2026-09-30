@@ -156,6 +156,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(icon, color: Colors.white, size: 20),
             const SizedBox(width: 12),

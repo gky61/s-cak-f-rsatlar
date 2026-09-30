@@ -427,8 +427,9 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
-                children: [
+              content: Row(
+                key: UniqueKey(),
+                children: const [
                   Icon(Icons.block, color: Colors.white),
                   SizedBox(width: 12),
                   Expanded(
@@ -490,8 +491,9 @@ class _HomeScreenState extends State<HomeScreen> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Row(
-                    children: [
+                  content: Row(
+                    key: UniqueKey(),
+                    children: const [
                       Icon(Icons.block, color: Colors.white),
                       SizedBox(width: 12),
                       Expanded(
@@ -873,7 +875,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Future.delayed(const Duration(seconds: 2), () async {
           if (!mounted) return;
           try {
-            await _notificationService.subscribeToAdminTopic();
+            await _notificationService.ensureAdminTopicSubscriptionIfAdmin();
             _log('✅ Ana sayfa: Admin bildirim aboneliği doğrulandı');
           } catch (e) {
             _log('⚠️ Admin bildirim aboneliği (Home): $e');

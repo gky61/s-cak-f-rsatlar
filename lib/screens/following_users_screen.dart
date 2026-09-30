@@ -56,6 +56,7 @@ class _FollowingUsersScreenState extends State<FollowingUsersScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          key: UniqueKey(),
           children: [
             Icon(
               isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,

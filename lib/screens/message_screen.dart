@@ -448,8 +448,9 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
-              children: [
+            content: Row(
+              key: UniqueKey(),
+              children: const [
                 Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
                 SizedBox(width: 8),
                 Expanded(
