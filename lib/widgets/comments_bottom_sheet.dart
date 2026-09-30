@@ -86,6 +86,7 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
     _authSub?.cancel();
     _commentController.dispose();
     _commentFocusNode.dispose();
+    _commentKeys.clear();
     super.dispose();
   }
 
@@ -346,8 +347,11 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                       );
                     }
 
-                    // Yorumları al
-                    final comments = snapshot.data ?? [];
+                    // Yorumları al ve olası mükerrer ID'leri deduplicate et (Multiple widgets used the same GlobalKey koruması)
+                    final rawComments = snapshot.data ?? [];
+                    final seenIds = <String>{};
+                    final comments = rawComments.where((c) => c.id.isNotEmpty && seenIds.add(c.id)).toList();
+                    _commentKeys.removeWhere((id, _) => !seenIds.contains(id));
 
                     // Yorumlar boşsa
                     if (comments.isEmpty) {

@@ -186,7 +186,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                     // Sol tarafta görsel - Esnek ve yüksek kaliteli (min. 140px)
                     Container(
                       width: 135,
-                      constraints: const BoxConstraints(minHeight: 140),
+                      constraints: const BoxConstraints(minHeight: 142),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         color: Colors.white, // Beyaz arka plan
@@ -544,7 +544,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           // 5. Alt Bölüm: Fiyat ve İncele Butonu
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

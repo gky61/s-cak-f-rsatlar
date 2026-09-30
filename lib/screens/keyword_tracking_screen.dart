@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
@@ -6,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
-import 'auth_screen.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'home_screen.dart';
 
 void _log(String message) {
@@ -28,6 +29,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   static const int maxKeywordLimit = 30;
 
   List<String> _watchKeywords = [];
+  StreamSubscription<User?>? _authSub;
   bool _isLoading = true;
   bool _isAdding = false;
   bool _isNavigatingToSearch = false;
@@ -48,10 +50,16 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   void initState() {
     super.initState();
     _loadKeywords();
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (mounted) {
+        _loadKeywords();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _keywordController.dispose();
     super.dispose();
   }
@@ -71,83 +79,16 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
     }
   }
 
-  void _showGuestLoginPrompt() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const primaryColor = AppTheme.primary;
-    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
-    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
-    final textMain = isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
-    final textSub = isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: borderColor, width: 1.1),
-        ),
-        backgroundColor: surfaceColor,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.lock_person_rounded, color: primaryColor, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Giriş Yapmalısınız',
-                style: GoogleFonts.roboto(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: textMain,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Fırsat radarına anahtar kelime eklemek ve eşleşen fırsatlarda anlık bildirim alabilmek için hesabınıza giriş yapmanız gerekmektedir.',
-          style: GoogleFonts.roboto(
-            fontSize: 13.5,
-            height: 1.45,
-            color: textSub,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Daha Sonra',
-              style: GoogleFonts.roboto(color: textSub, fontWeight: FontWeight.w600),
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-              );
-            },
-            icon: const Icon(Icons.login_rounded, size: 18),
-            label: const Text('Giriş Yap'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
+  Future<void> _showGuestLoginPrompt() async {
+    final loggedIn = await showGuestLoginBottomSheet(
+      context,
+      title: 'Kelime Radarı',
+      message: 'Fırsat radarına anahtar kelime eklemek ve eşleşen fırsatlarda anlık bildirim alabilmek için lütfen giriş yapın.',
+      primaryButtonText: '🚀 Google ile Giriş Yap',
     );
+    if (loggedIn == true && mounted) {
+      _loadKeywords();
+    }
   }
 
   Future<void> _addKeyword([String? customKeyword]) async {

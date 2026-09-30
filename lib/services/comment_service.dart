@@ -6,6 +6,7 @@ import 'notification_service.dart';
 import 'content_moderation_service.dart';
 import 'message_service.dart';
 import '../utils/asset_path_migration.dart';
+import 'system_log_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -86,11 +87,21 @@ class CommentService {
       }
 
       return true;
-    } catch (e) {
+    } catch (e, stack) {
       _log('Yorum ekleme hatası: $e');
-      if (e is FirebaseException && e.code == 'permission-denied') {
-        throw Exception('Yorum yapma izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
-      } else if (e.toString().contains('permission-denied')) {
+      final isPerm = (e is FirebaseException && e.code == 'permission-denied') || e.toString().contains('permission-denied');
+      final isBanned = e.toString().contains('Topluluk kurallarına uyum') || e.toString().contains('İçerik uygunsuz');
+      if (!isBanned) {
+        SystemLogService.instance.logError(
+          category: 'comment',
+          errorType: isPerm ? 'CommentPermissionDenied' : 'CommentSubmitException',
+          message: 'Yorum eklenemedi (deal: $dealId): $e',
+          stack: stack,
+          severity: SystemErrorSeverity.error,
+          metadata: {'dealId': dealId, 'userId': userId},
+        );
+      }
+      if (isPerm) {
         throw Exception('Yorum yapma izniniz kısıtlanmıştır veya bu işlem için yetkiniz bulunmamaktadır.');
       }
       rethrow;

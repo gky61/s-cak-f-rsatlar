@@ -7,7 +7,6 @@ import '../services/auth_service.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
-import 'auth_screen.dart';
 import 'badges_screen.dart';
 import 'faq_screen.dart';
 import 'home_screen.dart';
@@ -491,7 +490,7 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
       await _authService.signOut();
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthScreen()),
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
           (route) => false,
         );
       }
@@ -615,7 +614,7 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
         await _authService.deleteAccount();
         if (mounted) {
           Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const AuthScreen()),
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
             (route) => false,
           );
         }

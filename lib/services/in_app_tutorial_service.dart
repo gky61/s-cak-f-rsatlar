@@ -87,8 +87,28 @@ class InAppTutorialService {
     } catch (_) {}
   }
 
-  /// FırsatKolik'in 7 temel "Killer Feature" adım listesini oluşturur
-  List<TutorialStep> getTutorialSteps() {
+  /// FırsatKolik'in 8 temel "Killer Feature" adım listesini oluşturur.
+  /// Parametre olarak ilgili HomeScreen State'ine ait izole GlobalKey'leri kabul eder.
+  /// Böylece ekran geçişlerinde singleton GlobalKey çakışması (Multiple widgets used the same GlobalKey) önlenir.
+  List<TutorialStep> getTutorialSteps({
+    GlobalKey? searchBarKey,
+    GlobalKey? aktuelChipKey,
+    GlobalKey? kuponlarChipKey,
+    GlobalKey? firstDealCardKey,
+    GlobalKey? bottomNavPopularKey,
+    GlobalKey? bottomNavSavedKey,
+    GlobalKey? bottomNavAddKey,
+    GlobalKey? bottomNavProfileKey,
+  }) {
+    final sbKey = searchBarKey ?? this.searchBarKey;
+    final aktKey = aktuelChipKey ?? this.aktuelChipKey;
+    final kupKey = kuponlarChipKey ?? this.kuponlarChipKey;
+    final dealKey = firstDealCardKey ?? this.firstDealCardKey;
+    final popKey = bottomNavPopularKey ?? this.bottomNavPopularKey;
+    final addKey = bottomNavAddKey ?? this.bottomNavAddKey;
+    final savKey = bottomNavSavedKey ?? this.bottomNavSavedKey;
+    final profKey = bottomNavProfileKey ?? this.bottomNavProfileKey;
+
     return [
       // 1. ADIM: ARAMA & RADAR (Sıcak Mercan)
       TutorialStep(
@@ -100,7 +120,7 @@ class InAppTutorialService {
         buttonText: 'Devam Et',
         icon: Icons.radar_rounded,
         accentColor: const Color(0xFFF97316),
-        targetKey: searchBarKey,
+        targetKey: sbKey,
         borderRadius: 14,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       ),
@@ -115,7 +135,7 @@ class InAppTutorialService {
         buttonText: 'Sıradaki',
         icon: Icons.auto_stories_rounded,
         accentColor: const Color(0xFF38BDF8),
-        targetKey: aktuelChipKey,
+        targetKey: aktKey,
         borderRadius: 14,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       ),
@@ -130,7 +150,7 @@ class InAppTutorialService {
         buttonText: 'Sıradaki',
         icon: Icons.confirmation_number_rounded,
         accentColor: const Color(0xFFA78BFA),
-        targetKey: kuponlarChipKey,
+        targetKey: kupKey,
         borderRadius: 14,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       ),
@@ -145,7 +165,7 @@ class InAppTutorialService {
         buttonText: 'Sıradaki',
         icon: Icons.local_fire_department_rounded,
         accentColor: const Color(0xFFF87171),
-        targetKey: firstDealCardKey,
+        targetKey: dealKey,
         borderRadius: 16,
         padding: const EdgeInsets.all(4),
       ),
@@ -160,7 +180,7 @@ class InAppTutorialService {
         buttonText: 'Sıradaki',
         icon: Icons.whatshot_rounded,
         accentColor: const Color(0xFFFB923C),
-        targetKey: bottomNavPopularKey,
+        targetKey: popKey,
         borderRadius: 20,
         padding: const EdgeInsets.all(6),
         isCircle: true,
@@ -176,7 +196,7 @@ class InAppTutorialService {
         buttonText: 'Sıradaki',
         icon: Icons.add_circle_outline_rounded,
         accentColor: const Color(0xFFF472B6),
-        targetKey: bottomNavAddKey,
+        targetKey: addKey,
         borderRadius: 20,
         padding: const EdgeInsets.all(6),
         isCircle: true,
@@ -192,7 +212,7 @@ class InAppTutorialService {
         buttonText: 'Sıradaki',
         icon: Icons.bookmark_rounded,
         accentColor: const Color(0xFF34D399),
-        targetKey: bottomNavSavedKey,
+        targetKey: savKey,
         borderRadius: 20,
         padding: const EdgeInsets.all(6),
         isCircle: true,
@@ -208,7 +228,7 @@ class InAppTutorialService {
         buttonText: 'Keşfe Başla 🎉',
         icon: Icons.person_rounded,
         accentColor: const Color(0xFF818CF8),
-        targetKey: bottomNavProfileKey,
+        targetKey: profKey,
         borderRadius: 20,
         padding: const EdgeInsets.all(6),
         isCircle: true,

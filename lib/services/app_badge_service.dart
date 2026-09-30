@@ -52,20 +52,29 @@ class AppBadgeService {
   int _cachedUnreadAdminMessages = 0;
   int _currentBadgeCount = 0;
 
+  DateTime? _lastSyncTime;
+  String? _lastSyncUserId;
+  static const Duration _syncCooldown = Duration(seconds: 45);
+
   int get currentBadgeCount => _currentBadgeCount;
 
-  /// Rozet sayısını doğrudan belirle
+  /// Rozet sayısını doğrudan belirle (Değer aynıysa gereksiz native çağrıyı engeller)
   Future<void> setBadge(int count) async {
     if (kIsWeb) return;
     final targetCount = count < 0 ? 0 : count;
+
+    if (targetCount == 0) {
+      await clearBadge();
+      return;
+    }
+
+    if (_currentBadgeCount == targetCount) {
+      return; // Değer değişmediyse native çağrıyı atla
+    }
+
     _currentBadgeCount = targetCount;
 
     try {
-      if (targetCount == 0) {
-        await clearBadge();
-        return;
-      }
-
       await _channel.invokeMethod('setBadge', {'count': targetCount});
       _log('✅ Rozet sayısı güncellendi: $targetCount');
     } catch (e) {
@@ -73,9 +82,12 @@ class AppBadgeService {
     }
   }
 
-  /// Rozeti tamamen sıfırla (İkon üzerindeki kırmızı sayacı ve Android durum çubuğunu temizler)
-  Future<void> clearBadge() async {
+  /// Rozeti tamamen sıfırla (Zaten sıfırsa mükerrer native çağrıları ve logları engeller)
+  Future<void> clearBadge({bool force = false}) async {
     if (kIsWeb) return;
+    if (!force && _currentBadgeCount == 0) {
+      return; // Zaten temiz ise gereksiz native IPC çağrısı yapma
+    }
     _currentBadgeCount = 0;
 
     try {
@@ -97,12 +109,20 @@ class AppBadgeService {
   }
 
   /// Kullanıcının Firestore'daki gerçek okunmamış bildirim ve mesaj sayısını toplayıp rozeti senkronize eder
-  Future<int> syncBadgeWithFirestore({String? targetUserId}) async {
+  Future<int> syncBadgeWithFirestore({String? targetUserId, bool forceSync = false}) async {
     if (kIsWeb) return 0;
     final uid = targetUserId ?? _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       await clearBadge();
       return 0;
+    }
+
+    // Cooldown / Debounce: Son senkronizasyondan bu yana 45 saniye geçmediyse gereksiz Firestore count sorgularını atla
+    if (!forceSync &&
+        _lastSyncUserId == uid &&
+        _lastSyncTime != null &&
+        DateTime.now().difference(_lastSyncTime!) < _syncCooldown) {
+      return _currentBadgeCount;
     }
 
     try {
@@ -137,6 +157,9 @@ class AppBadgeService {
             .get();
         unreadAdminMessages = adminMsgSnap.count ?? 0;
       } catch (_) {}
+
+      _lastSyncTime = DateTime.now();
+      _lastSyncUserId = uid;
 
       final totalUnread = unreadNotifs + unreadMessages + unreadAdminMessages;
       _log('📊 Firestore senkronizasyonu: $unreadNotifs bildirim + $unreadMessages mesaj + $unreadAdminMessages admin = Toplam $totalUnread');
@@ -215,6 +238,8 @@ class AppBadgeService {
     _cachedUnreadNotifications = 0;
     _cachedUnreadMessages = 0;
     _cachedUnreadAdminMessages = 0;
+    _lastSyncTime = null;
+    _lastSyncUserId = null;
     _log('🛑 Canlı rozet dinleyicileri durduruldu');
   }
 }

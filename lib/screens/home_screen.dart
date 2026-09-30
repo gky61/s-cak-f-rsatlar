@@ -8,6 +8,8 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/app_badge_service.dart';
 import '../services/analytics_service.dart';
+import '../services/system_log_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/theme_service.dart';
 import '../services/deal_search_engine.dart';
 import '../widgets/deal_card.dart';
@@ -97,6 +99,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final ThemeService _themeService = ThemeService();
   final InAppTutorialService _tutorialService = InAppTutorialService();
 
+  // İnteraktif Tur (Tutorial) için yerel hedef GlobalKey'ler (Her HomeScreen örneği için izole)
+  final GlobalKey _searchBarKey = GlobalKey();
+  final GlobalKey _aktuelChipKey = GlobalKey();
+  final GlobalKey _kuponlarChipKey = GlobalKey();
+  final GlobalKey _firstDealCardKey = GlobalKey();
+  final GlobalKey _bottomNavPopularKey = GlobalKey();
+  final GlobalKey _bottomNavSavedKey = GlobalKey();
+  final GlobalKey _bottomNavAddKey = GlobalKey();
+  final GlobalKey _bottomNavProfileKey = GlobalKey();
+
   late int _currentTabIndex;
   String _selectedCategory = 'tumu';
   String? _selectedSubCategory;
@@ -152,7 +164,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _activeState = this;
     _currentTabIndex = widget.initialTabIndex;
-    _tutorialService.refreshKeys();
     _startInitialLoadingTimeout();
     _dealsStream = _firestoreService.getDealsStream();
     _viewMode = _themeService.viewMode;
@@ -253,7 +264,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startInAppTutorial() {
     TutorialSpotlightOverlay.show(
       context: context,
-      steps: _tutorialService.getTutorialSteps(),
+      steps: _tutorialService.getTutorialSteps(
+        searchBarKey: _searchBarKey,
+        aktuelChipKey: _aktuelChipKey,
+        kuponlarChipKey: _kuponlarChipKey,
+        firstDealCardKey: _firstDealCardKey,
+        bottomNavPopularKey: _bottomNavPopularKey,
+        bottomNavSavedKey: _bottomNavSavedKey,
+        bottomNavAddKey: _bottomNavAddKey,
+        bottomNavProfileKey: _bottomNavProfileKey,
+      ),
     );
   }
   
@@ -505,10 +525,17 @@ class _HomeScreenState extends State<HomeScreen> {
           _log('✅ HomeScreen: Kullanıcı engeli kaldırıldı (real-time): $userId');
         }
       }, onError: (error) {
-        if (error.toString().contains('permission-denied')) {
+        final isPerm = error.toString().contains('permission-denied');
+        if (isPerm && FirebaseAuth.instance.currentUser == null) {
           _log('ℹ️ HomeScreen: Blocked user listener çıkış sırasında kapandı (beklenen)');
         } else {
           _log('❌ HomeScreen: Blocked user listener hatası: $error');
+          SystemLogService.instance.logError(
+            category: 'stream_listener',
+            errorType: 'BlockedUserListenerException',
+            message: error.toString(),
+            severity: SystemErrorSeverity.error,
+          );
         }
         _blockedUserListener = null; // Hata durumunda listener'ı sıfırla
       });
@@ -612,11 +639,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final currentUser = _authService.currentUser;
     if (currentUser == null || currentUser.isAnonymous) {
-      showGuestLoginBottomSheet(
+      final loggedIn = await showGuestLoginBottomSheet(
         context,
         title: 'Kelime Takibi İçin Giriş Yapın',
         message: '"$trimmed" aramasını radara alıp yeni fırsat bildirimleri almak için lütfen üye girişi yapın.',
       );
+      if (loggedIn == true && mounted) {
+        _toggleKeywordSubscriptionFromSearch(keyword);
+      }
       return;
     }
 
@@ -1178,7 +1208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Spacer(),
                         // ── İkon grubu: hepsi aynı boyut, aynı stil ──
                         KeyedSubtree(
-                          key: _tutorialService.searchBarKey,
+                          key: _searchBarKey,
                           child: _buildHeaderAction(
                             icon: Icons.search_rounded,
                             onTap: _toggleSearchMode,
@@ -1192,14 +1222,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             _buildHeaderAction(
                               icon: Icons.notifications_none_rounded,
-                              onTap: () {
+                              onTap: () async {
                                 if (_authService.currentUser == null) {
-                                  showGuestLoginBottomSheet(
+                                  final loggedIn = await showGuestLoginBottomSheet(
                                     context,
                                     title: 'Bildirimler İçin Giriş Yap! 🔔',
                                     message: 'Kişiselleştirilmiş fırsat bildirimlerinizi görmek ve yönetmek için giriş yapın.',
                                     primaryButtonText: '🚀 Google ile Giriş Yap',
                                   );
+                                  if (loggedIn == true && mounted) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const AdminNotificationsScreen(),
+                                      ),
+                                    ).then((_) {
+                                      AppBadgeService.instance.syncBadgeWithFirestore();
+                                    });
+                                  }
                                   return;
                                 }
                                 Navigator.push(
@@ -1279,7 +1319,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 KeyedSubtree(
-                                  key: _tutorialService.aktuelChipKey,
+                                  key: _aktuelChipKey,
                                   child: _buildNavChip(
                                     label: 'Aktüel',
                                     icon: Icons.auto_stories_rounded,
@@ -1295,7 +1335,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 if (couponsEnabled) ...[
                                   const SizedBox(width: 8),
                                   KeyedSubtree(
-                                    key: _tutorialService.kuponlarChipKey,
+                                    key: _kuponlarChipKey,
                                     child: _buildNavChip(
                                       label: 'Kuponlar',
                                       icon: Icons.confirmation_number_outlined,
@@ -1898,7 +1938,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     key: ValueKey('deal_list_boundary_${deal.id}'),
                                     child: actualIndex == 0
                                         ? Container(
-                                            key: _tutorialService.firstDealCardKey,
+                                            key: _firstDealCardKey,
                                             child: cardWidget,
                                           )
                                         : cardWidget,
@@ -1973,7 +2013,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: ValueKey('deal_grid_boundary_${deal.id}'),
                   child: globalIndex == 0
                       ? Container(
-                          key: _tutorialService.firstDealCardKey,
+                          key: _firstDealCardKey,
                           child: cardWidget,
                         )
                       : cardWidget,
@@ -2060,7 +2100,10 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildHomeScreenTab(isDark, primaryColor),
             const PopularDealsScreen(isRootTab: true),
             const FavoritesScreen(isRootTab: true),
-            const ProfileScreen(isRootTab: true),
+            ProfileScreen(
+              key: ValueKey('profile_tab_${_authService.currentUser?.uid ?? "guest"}'),
+              isRootTab: true,
+            ),
           ],
         ),
         bottomNavigationBar: Container(
@@ -2121,7 +2164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 // 2. Popüler Fırsatlar (Index 1)
                 _buildBottomNavItem(
-                  targetKey: _tutorialService.bottomNavPopularKey,
+                  targetKey: _bottomNavPopularKey,
                   icon: Icons.whatshot_outlined,
                   activeIcon: Icons.whatshot_rounded,
                   label: 'Popüler',
@@ -2133,12 +2176,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 // 3. Özel Dairesel Orta Buton (Aksiyon: Fırsat Paylaş - Odak Formu)
                 _buildCenterActionButton(
-                  targetKey: _tutorialService.bottomNavAddKey,
+                  targetKey: _bottomNavAddKey,
                   onTap: _handleCenterActionTap,
                 ),
                 // 4. Kaydedilenler (Index 2)
                 _buildBottomNavItem(
-                  targetKey: _tutorialService.bottomNavSavedKey,
+                  targetKey: _bottomNavSavedKey,
                   icon: Icons.bookmark_outline_rounded,
                   activeIcon: Icons.bookmark_rounded,
                   label: 'Kaydedilenler',
@@ -2150,7 +2193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 // 5. Profil (Index 3)
                 _buildBottomNavItem(
-                  targetKey: _tutorialService.bottomNavProfileKey,
+                  targetKey: _bottomNavProfileKey,
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
                   label: 'Profil',
@@ -2251,12 +2294,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _handleCenterActionTap() async {
     final user = _authService.currentUser;
     if (user == null) {
-      showGuestLoginBottomSheet(
+      final loggedIn = await showGuestLoginBottomSheet(
         context,
         title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
         message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
         primaryButtonText: '🚀 Google ile Giriş Yap',
       );
+      if (loggedIn == true && mounted) {
+        _handleCenterActionTap();
+      }
       return;
     }
 

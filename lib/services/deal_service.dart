@@ -35,6 +35,24 @@ class DealService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
 
+  /// Bozuk veya eksik Firestore verisi içeren dokümanları loglar ve güvenli şekilde null döndürür
+  Deal? _safeParseDeal(DocumentSnapshot doc) {
+    try {
+      return Deal.fromFirestore(doc);
+    } catch (e, stack) {
+      _log('❌ Deal parse hatası (doc.id: ${doc.id}): $e');
+      SystemLogService.instance.logError(
+        category: 'data_parsing',
+        errorType: 'DealDeserializationException',
+        message: 'Fırsat dokümanı parse edilemedi (${doc.id}): $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+        metadata: {'docId': doc.id},
+      );
+      return null;
+    }
+  }
+
   // Deals koleksiyonunu dinleme
   Stream<DealsSnapshot> getDealsStream() {
     return _firestore
@@ -47,14 +65,7 @@ class DealService {
       final cutoffTime = now.subtract(const Duration(hours: 48));
       
       final deals = snapshot.docs
-          .map((doc) {
-            try {
-              return Deal.fromFirestore(doc);
-            } catch (e) {
-              _log('❌ Deal parse hatası (doc.id: ${doc.id}): $e');
-              return null;
-            }
-          })
+          .map((doc) => _safeParseDeal(doc))
           .where((deal) {
             if (deal == null) return false;
             if (deal.isTest == true) return false;
@@ -123,9 +134,7 @@ class DealService {
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
-          .map((doc) {
-            try { return Deal.fromFirestore(doc); } catch (e) { return null; }
-          })
+          .map((doc) => _safeParseDeal(doc))
           .where((deal) => deal != null && deal.isTest != true)
           .cast<Deal>()
           .toList();
@@ -144,9 +153,7 @@ class DealService {
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
-          .map((doc) {
-            try { return Deal.fromFirestore(doc); } catch (e) { return null; }
-          })
+          .map((doc) => _safeParseDeal(doc))
           .where((deal) => deal != null && deal.isApproved != true && deal.isTest != true)
           .cast<Deal>()
           .toList();
@@ -164,9 +171,7 @@ class DealService {
       final now = DateTime.now();
       final cutoffTime = now.subtract(const Duration(hours: 48));
       final deals = snapshot.docs
-          .map((doc) {
-            try { return Deal.fromFirestore(doc); } catch (e) { return null; }
-          })
+          .map((doc) => _safeParseDeal(doc))
           .where((deal) => deal != null && deal.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime) && deal.isTest != true)
           .cast<Deal>()
           .toList();
@@ -183,8 +188,9 @@ class DealService {
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
-          .map((doc) => Deal.fromFirestore(doc))
-          .where((deal) => deal.isTest != true)
+          .map((doc) => _safeParseDeal(doc))
+          .where((deal) => deal != null && deal.isTest != true)
+          .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return deals;
@@ -802,9 +808,7 @@ class DealService {
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
-          .map((doc) {
-            try { return Deal.fromFirestore(doc); } catch (e) { return null; }
-          })
+          .map((doc) => _safeParseDeal(doc))
           .where((deal) => deal != null)
           .cast<Deal>()
           .toList();

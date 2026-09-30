@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
+import '../services/system_log_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -289,6 +290,15 @@ class AppUser {
       _log('Stack trace: $stackTrace');
       _log('Document ID: ${doc.id}');
       _log('Document data: ${doc.data()}');
+
+      SystemLogService.instance.logError(
+        category: 'data_parsing',
+        errorType: 'AppUserDeserializationException',
+        message: 'Kullanıcı dokümanı parse edilemedi (${doc.id}): $e',
+        stack: stackTrace,
+        severity: SystemErrorSeverity.error,
+        metadata: {'docId': doc.id},
+      );
       
       // Hata durumunda minimum bilgilerle kullanıcı oluştur
       final data = doc.data();

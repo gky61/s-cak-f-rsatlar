@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -45,10 +46,18 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     {'id': 'spor_outdoor', 'name': 'Spor & Outdoor', 'icon': Icons.fitness_center_rounded},
   ];
 
+  StreamSubscription<dynamic>? _authSub;
+
   @override
   void initState() {
     super.initState();
     _loadFollowStatus();
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        _loadFollowStatus();
+        setState(() {});
+      }
+    });
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
@@ -58,6 +67,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -116,11 +126,14 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
   Future<void> _toggleFollow() async {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null) {
-      showGuestLoginBottomSheet(
+      final loggedIn = await showGuestLoginBottomSheet(
         context,
         title: 'Botkolik\'i Takip Et',
         message: 'Botkolik\'in yakaladığı indirimlerden anında haberdar olmak için Giriş Yap! 🚀',
       );
+      if (loggedIn == true && mounted) {
+        _toggleFollow();
+      }
       return;
     }
 
@@ -621,7 +634,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
                 // ─── AKSİYON ÇUBUĞU (Takip Et + Zil + Mesaj) ───
                 StreamBuilder<bool>(
                   stream: _firestoreService.botkolikChatEnabledStream(),
-                  builder: (context, snapshot) {
+                  builder: (_, snapshot) {
                     final isChatEnabled = snapshot.data ?? true;
 
                     return Row(
@@ -731,15 +744,28 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                onTap: () {
+                                onTap: () async {
                                   HapticFeedback.lightImpact();
                                   final currentUser = _authService.currentUser;
                                   if (currentUser == null) {
-                                    showGuestLoginBottomSheet(
+                                    final loggedIn = await showGuestLoginBottomSheet(
                                       context,
                                       title: 'Giriş Yapın',
                                       message: 'Botkolik ile mesajlaşmak, öneri veya geri bildirim göndermek için lütfen giriş yapın.',
                                     );
+                                    if (!mounted) return;
+                                    if (loggedIn == true) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const MessageScreen(
+                                            otherUserId: 'botkolik',
+                                            otherUserName: 'Botkolik',
+                                            otherUserImageUrl: 'assets/botkolik.webp',
+                                          ),
+                                        ),
+                                      );
+                                    }
                                     return;
                                   }
                                   Navigator.push(

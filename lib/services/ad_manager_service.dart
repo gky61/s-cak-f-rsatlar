@@ -5,6 +5,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../firebase_options.dart';
 import 'analytics_service.dart';
 import 'coupon_credit_service.dart';
+import 'system_log_service.dart';
 
 void _log(String message) {
   if (kDebugMode) {
@@ -109,6 +110,24 @@ class AdManagerService extends ChangeNotifier {
   void recordAdFailure(String adUnitId, LoadAdError error) {
     _lastFailedTime[adUnitId] = DateTime.now();
     _log('❌ Reklam yüklenemedi: $adUnitId | Kod: ${error.code} | Mesaj: ${error.message}');
+
+    // Kod 3 (ERROR_CODE_NO_FILL) doluluk oranına bağlı beklenen durumdur (gürültü önlenir).
+    // Ancak Kod 0 (INTERNAL_ERROR) veya Kod 1 (INVALID_REQUEST / Yanlış AdUnitId) kritik konfigürasyon hatalarıdır!
+    if (error.code != 3) {
+      SystemLogService.instance.logError(
+        category: 'admob',
+        subCategory: 'ad_load_failure',
+        errorType: 'AdMobLoadError_${error.code}',
+        message: 'AdUnit: $adUnitId | Kod: ${error.code} | Mesaj: ${error.message}',
+        severity: SystemErrorSeverity.error,
+        metadata: {
+          'adUnitId': adUnitId,
+          'errorCode': error.code,
+          'errorMessage': error.message,
+          'errorDomain': error.domain,
+        },
+      );
+    }
   }
 
   /// Başarılı reklam isteğinde soğuma kaydını sıfırlar

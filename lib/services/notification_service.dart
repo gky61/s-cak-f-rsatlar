@@ -12,6 +12,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_preferences.dart';
 import 'analytics_service.dart';
+import 'auth_service.dart';
+import 'system_log_service.dart';
 
 import '../main.dart'; // navigatorKey için
 import '../screens/deal_detail_screen.dart';
@@ -82,6 +84,15 @@ class NotificationService {
   static bool _hasHandledColdStartNotification = false;
   static const MethodChannel _iosNotificationChannel = MethodChannel('com.sicakfirsatlar.app/notifications');
   static bool _isIosChannelSetup = false;
+
+  // Oturum içi mükerrer FCM token kaydı ve admin topic abonelik koruması
+  static String? _lastRegisteredDocId;
+  static String? _lastRegisteredToken;
+  static DateTime? _lastDeviceTokenRegisterTime;
+  static const Duration _deviceTokenRegisterCooldown = Duration(minutes: 30);
+
+  static bool _isAdminTopicSubscribedInSession = false;
+  static String? _lastSubscribedAdminUid;
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -361,6 +372,11 @@ class NotificationService {
           _log('⚠️ deleteToken hatası (devam ediliyor): $e');
         }
       }
+      _lastRegisteredDocId = null;
+      _lastRegisteredToken = null;
+      _lastDeviceTokenRegisterTime = null;
+      _isAdminTopicSubscribedInSession = false;
+      _lastSubscribedAdminUid = null;
     } catch (e) {
       _log('⚠️ Error clearing device token: $e');
     }
@@ -573,6 +589,16 @@ class NotificationService {
       if (token != null && resolvedUserId != null) {
         final deviceId = await _getOrCreateDeviceId();
         final deviceIdDoc = '${resolvedUserId}_$deviceId';
+
+        // Oturum içi ve süre tabanlı mükerrer kayıt kontrolü (Firestore yazma ve sorgu tasarrufu)
+        if (!forceRefresh &&
+            _lastRegisteredDocId == deviceIdDoc &&
+            _lastRegisteredToken == token &&
+            _lastDeviceTokenRegisterTime != null &&
+            DateTime.now().difference(_lastDeviceTokenRegisterTime!) < _deviceTokenRegisterCooldown) {
+          _log('ℹ️ Cihaz token\'ı güncel, mükerrer Firestore kaydı atlandı: $deviceIdDoc');
+          return;
+        }
         
         final permissionStatus = await checkSystemPermissionStatus();
         final platform = kIsWeb ? 'web' : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
@@ -610,6 +636,10 @@ class NotificationService {
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
         
+        _lastRegisteredDocId = deviceIdDoc;
+        _lastRegisteredToken = token;
+        _lastDeviceTokenRegisterTime = DateTime.now();
+
         _log('✅ User device / FCM Token registered in userDevices: $deviceIdDoc');
         
         // Tekil token refresh dinleyicisi
@@ -664,17 +694,21 @@ class NotificationService {
 
   /// Uygulama ön plana geldiğinde veya manuel çağrıldığında: kullanıcı admin ise
   /// admin_deals topic'ine abone ol. Böylece abonelik kaybı veya gecikme durumunda düzelir.
-  Future<void> ensureAdminTopicSubscriptionIfAdmin() async {
+  Future<void> ensureAdminTopicSubscriptionIfAdmin({bool force = false}) async {
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) return;
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists) return;
-      final data = userDoc.data();
-      final adminValue = data?['isAdmin'] ?? data?['isadmin'];
-      final isAdmin = adminValue == true || adminValue == 'true' || adminValue == 1;
+
+      // Oturum içi mükerrer FCM topic aboneliği kontrolü
+      if (!force && _isAdminTopicSubscribedInSession && _lastSubscribedAdminUid == userId) {
+        return;
+      }
+
+      final isAdmin = await AuthService().isAdmin();
       if (isAdmin) {
         await subscribeToAdminTopic();
+        _isAdminTopicSubscribedInSession = true;
+        _lastSubscribedAdminUid = userId;
       }
     } catch (e) {
       _log('❌ ensureAdminTopicSubscriptionIfAdmin: $e');
@@ -684,6 +718,8 @@ class NotificationService {
   // Admin bildirimlerinden çık (normal kullanıcılar için)
   Future<void> unsubscribeFromAdminTopic() async {
     try {
+      _isAdminTopicSubscribedInSession = false;
+      _lastSubscribedAdminUid = null;
       await _messaging.unsubscribeFromTopic('admin_deals');
       _log('🚫 Admin bildirimlerinden (admin_deals) çıkıldı');
     } catch (e) {
@@ -811,10 +847,17 @@ class NotificationService {
         }
       }
     }, onError: (err) {
-      if (err.toString().contains('permission-denied')) {
+      final isPerm = err.toString().contains('permission-denied');
+      if (isPerm && FirebaseAuth.instance.currentUser == null) {
         _log('ℹ️ Ön plan mesaj listener çıkış sırasında kapandı (beklenen)');
       } else {
         _log('⚠️ Ön plan mesaj listener hatası: $err');
+        SystemLogService.instance.logError(
+          category: 'stream_listener',
+          errorType: 'ForegroundMessageListenerException',
+          message: err.toString(),
+          severity: SystemErrorSeverity.error,
+        );
       }
     });
   }
@@ -1104,10 +1147,17 @@ class NotificationService {
         }
       },
       onError: (error) {
-        if (error.toString().contains('permission-denied')) {
+        final isPerm = error.toString().contains('permission-denied');
+        if (isPerm && FirebaseAuth.instance.currentUser == null) {
           _log('ℹ️ Yorum cevabı bildirim listener çıkış sırasında kapandı (beklenen)');
         } else {
           _log('❌ Yorum cevabı bildirim listener hatası: $error');
+          SystemLogService.instance.logError(
+            category: 'stream_listener',
+            errorType: 'CommentReplyListenerException',
+            message: error.toString(),
+            severity: SystemErrorSeverity.error,
+          );
         }
       },
     );

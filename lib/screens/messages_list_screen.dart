@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -26,7 +27,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
 
-  late final Stream<List<Message>> _messagesStream;
+  Stream<List<Message>> _messagesStream = const Stream.empty();
+  StreamSubscription? _authSub;
   String _searchQuery = '';
   final Set<String> _mutedUserIds = {};
 
@@ -40,17 +42,22 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
       _loadMutedUsers();
     } else {
       _messagesStream = const Stream.empty();
-      // Misafir kullanıcı için bir sonraki frame'de login bottom sheet aç
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          showGuestLoginBottomSheet(
-            context,
-            title: 'Mesajlar',
-            message: 'Kullanıcılarla iletişime geçmek ve özel fırsat detaylarını konuşmak için Google ile Giriş Yap! 🚀',
-          );
-        }
-      });
     }
+
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (!mounted) return;
+      if (user != null) {
+        setState(() {
+          _messagesStream = _firestoreService.getUserMessagesStream(user.uid);
+        });
+        _loadMutedUsers();
+      } else {
+        setState(() {
+          _messagesStream = const Stream.empty();
+          _mutedUserIds.clear();
+        });
+      }
+    });
   }
 
   Future<void> _loadMutedUsers() async {
@@ -69,6 +76,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -119,12 +127,21 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    showGuestLoginBottomSheet(
+                  onPressed: () async {
+                    final loggedIn = await showGuestLoginBottomSheet(
                       context,
                       title: 'Mesajlar',
                       message: 'Kullanıcılarla iletişime geçmek ve özel fırsat detaylarını konuşmak için Google ile Giriş Yap! 🚀',
                     );
+                    if (loggedIn == true && mounted) {
+                      final uid = _authService.currentUser?.uid;
+                      if (uid != null) {
+                        setState(() {
+                          _messagesStream = _firestoreService.getUserMessagesStream(uid);
+                        });
+                        _loadMutedUsers();
+                      }
+                    }
                   },
                   icon: const Icon(Icons.login_rounded, size: 18),
                   label: const Text('Giriş Yap / Kaydol', style: TextStyle(fontWeight: FontWeight.w700)),

@@ -46,7 +46,7 @@ class SystemLogService {
   // Saatlik hata bütçesi kontrolü
   DateTime _currentHourWindow = DateTime.now();
   int _hourlyLogCount = 0;
-  static const int _maxLogsPerHour = 5;
+  int get _maxLogsPerHour => isProductionFlavor ? 10 : 50;
 
   /// Merkezi Hata Kaydı (Arka planda asenkron çalışır, uygulamayı asla bloklamaz veya çökertmez)
   Future<void> logError({

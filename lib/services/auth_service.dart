@@ -11,6 +11,7 @@ import 'app_badge_service.dart';
 import 'analytics_service.dart';
 import '../models/user.dart' as app_user;
 import '../firebase_options.dart';
+import 'system_log_service.dart';
 
 /// Production-ready log fonksiyonu
 void _log(String message) {
@@ -32,6 +33,19 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   GoogleSignIn? _googleSignIn;
+
+  // In-memory admin cache (Firestore okuma maliyetlerini ve latency'yi minimize eder)
+  static bool? _cachedIsAdmin;
+  static String? _cachedAdminUid;
+  static DateTime? _lastAdminCheck;
+  static const Duration _adminCacheTTL = Duration(minutes: 5);
+
+  /// Admin önbelleğini sıfırla (Çıkışta veya rol güncellendiğinde çağrılır)
+  static void clearAdminCache() {
+    _cachedIsAdmin = null;
+    _cachedAdminUid = null;
+    _lastAdminCheck = null;
+  }
   
   // Lazy initialization - sadece gerektiğinde oluştur
   GoogleSignIn get _googleSignInInstance {
@@ -696,6 +710,7 @@ class AuthService {
         _log('Analytics clear user: $e');
       }
 
+      clearAdminCache();
       _log('✅ Çıkış başarılı');
     } catch (e) {
       _log('Sign-Out hatası: $e');
@@ -714,17 +729,37 @@ class AuthService {
         return app_user.AppUser.fromFirestore(doc);
       }
       return null;
-    } catch (e) {
+    } catch (e, stack) {
       _log('Kullanıcı bilgisi getirme hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'auth',
+        errorType: 'GetUserDataException',
+        message: 'Kullanıcı bilgisi alınamadı ($uid): $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+        metadata: {'targetUid': uid},
+      );
       return null;
     }
   }
 
-  // Admin kontrolü
-  Future<bool> isAdmin() async {
+  // Admin kontrolü (In-Memory TTL önbellekli)
+  Future<bool> isAdmin({bool forceRefresh = false}) async {
     try {
       final user = currentUser;
-      if (user == null) return false;
+      if (user == null) {
+        clearAdminCache();
+        return false;
+      }
+
+      // TTL ve bellek önbelleği kontrolü (Firestore maliyeti ve latency optimizasyonu)
+      if (!forceRefresh &&
+          _cachedAdminUid == user.uid &&
+          _cachedIsAdmin != null &&
+          _lastAdminCheck != null &&
+          DateTime.now().difference(_lastAdminCheck!) < _adminCacheTTL) {
+        return _cachedIsAdmin!;
+      }
       
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
@@ -734,14 +769,29 @@ class AuthService {
         final adminValue = data?['isAdmin'] ?? data?['isadmin'];
         final isAdmin = adminValue == true || adminValue == 'true' || adminValue == 1;
         
-        _log('👮 Admin kontrolü: isAdmin=$isAdmin (isAdmin: ${data?['isAdmin']}, isadmin: ${data?['isadmin']})');
+        _cachedIsAdmin = isAdmin;
+        _cachedAdminUid = user.uid;
+        _lastAdminCheck = DateTime.now();
+
+        _log('👮 Admin kontrolü (Firestore güncellendi): isAdmin=$isAdmin');
         
         return isAdmin;
       }
+
+      _cachedIsAdmin = false;
+      _cachedAdminUid = user.uid;
+      _lastAdminCheck = DateTime.now();
       return false;
-    } catch (e) {
+    } catch (e, stack) {
       _log('Admin kontrolü hatası: $e');
-      return false;
+      SystemLogService.instance.logError(
+        category: 'auth',
+        errorType: 'AdminCheckException',
+        message: 'Admin yetki kontrolü başarısız: $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+      );
+      return _cachedIsAdmin ?? false;
     }
   }
 

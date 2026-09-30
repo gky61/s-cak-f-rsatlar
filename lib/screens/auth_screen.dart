@@ -89,9 +89,13 @@ class _AuthScreenState extends State<AuthScreen> {
         _showSuccess('Hoş geldiniz, ${user.username}!');
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop(true);
+          } else {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
+          }
         }
       }
       // user == null ise kullanıcı iptal etti, hata gösterme
@@ -187,9 +191,13 @@ class _AuthScreenState extends State<AuthScreen> {
         _showSuccess('Hoş geldiniz, ${user.username}!');
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop(true);
+          } else {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
+          }
         }
       }
     } on AuthException catch (e) {
@@ -383,7 +391,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                         ),
-                        Text(
+                        const Text(
                           ' / ',
                           style: TextStyle(color: Colors.grey),
                         ),

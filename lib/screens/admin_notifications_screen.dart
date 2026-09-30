@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../services/app_badge_service.dart';
 import '../widgets/skeletons/notification_list_skeleton.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'deal_detail_screen.dart';
 import 'message_screen.dart';
 import 'kuponlar_page.dart';
@@ -34,12 +36,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   late String _selectedTab; // 'all', 'admin', 'replies'
   bool _hasAutoOpened = false;
   final Set<String> _locallyDismissedIds = {};
+  StreamSubscription<dynamic>? _authSub;
 
   @override
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab ?? 'all';
     AppBadgeService.instance.syncBadgeWithFirestore();
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   String _formatDateTime(DateTime dt) {
@@ -629,14 +643,64 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     if (currentUserId == null) {
+      final textMain = isDark ? Colors.white : AppTheme.textPrimary;
+      final textSub = isDark ? Colors.grey[400] : AppTheme.textSecondary;
       return Scaffold(
-        backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text('Bildirimler'),
+          title: const Text('Bildirimler', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19)),
           backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+          foregroundColor: textMain,
           elevation: 0,
         ),
-        body: const Center(child: Text('Bildirimleri görmek için giriş yapmalısınız')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.notifications_none_rounded, size: 54, color: primaryColor),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Bildirimler İçin Giriş Yapın',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textMain),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Fırsat bildirimlerinizi, yorum yanıtlarını ve yönetici mesajlarını takip etmek için lütfen giriş yapın.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13.5, color: textSub, height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    showGuestLoginBottomSheet(
+                      context,
+                      title: 'Bildirimler İçin Giriş Yap! 🔔',
+                      message: 'Kişiselleştirilmiş fırsat bildirimlerinizi görmek ve yönetmek için hemen giriş yapın.',
+                      primaryButtonText: '🚀 Google ile Giriş Yap',
+                    );
+                  },
+                  icon: const Icon(Icons.login_rounded, size: 18),
+                  label: const Text('Giriş Yap', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

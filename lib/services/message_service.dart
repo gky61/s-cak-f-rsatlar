@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:sicak_firsatlar/utils/asset_path_migration.dart';
 import '../models/message.dart';
 import '../models/admin_to_user_message.dart';
+import 'system_log_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -105,8 +107,16 @@ class MessageService {
 
       final docRef = await _firestore.collection('messages').add(message.toFirestore());
       return docRef.id;
-    } catch (e) {
+    } catch (e, stack) {
       _log('Mesaj gönderme hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'message',
+        errorType: 'SendMessageException',
+        message: 'Mesaj gönderilemedi: $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+        metadata: {'senderId': senderId, 'receiverId': receiverId},
+      );
       return null;
     }
   }
@@ -156,9 +166,17 @@ class MessageService {
             emit();
           },
           onError: (error) {
-            if (!error.toString().contains('permission-denied')) {
-              _log('⚠️ sentConversationStream error: $error');
+            final isPerm = error.toString().contains('permission-denied');
+            if (isPerm && FirebaseAuth.instance.currentUser == null) {
+              return; // Oturum kapalıyken beklenen kapanış
             }
+            _log('⚠️ sentConversationStream error: $error');
+            SystemLogService.instance.logError(
+              category: 'stream_listener',
+              errorType: 'SentConversationStreamException',
+              message: error.toString(),
+              severity: SystemErrorSeverity.error,
+            );
           },
         );
 
@@ -174,9 +192,17 @@ class MessageService {
             emit();
           },
           onError: (error) {
-            if (!error.toString().contains('permission-denied')) {
-              _log('⚠️ receivedConversationStream error: $error');
+            final isPerm = error.toString().contains('permission-denied');
+            if (isPerm && FirebaseAuth.instance.currentUser == null) {
+              return; // Oturum kapalıyken beklenen kapanış
             }
+            _log('⚠️ receivedConversationStream error: $error');
+            SystemLogService.instance.logError(
+              category: 'stream_listener',
+              errorType: 'ReceivedConversationStreamException',
+              message: error.toString(),
+              severity: SystemErrorSeverity.error,
+            );
           },
         );
       },

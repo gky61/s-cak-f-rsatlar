@@ -8,6 +8,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, FlutterError, defaultTargetPlatform;
 import 'dart:async';
+import 'dart:ui';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/analytics_service.dart';
@@ -207,6 +209,23 @@ void main() async {
       if (details.stack != null) print('Stack: ${details.stack}');
     }
     FlutterError.presentError(details);
+
+    // Layout/RenderFlex taşmaları uygulamayı çökertmez (Crashlytics'te fatal: false olarak izlenir)
+    // Ancak kesinlikle çözülmesi gereken UI hatalarıdır; Web Admin panelinde ve Firestore'da görünmesi için 'error' olarak kaydedilir
+    final isOverflow = details.exceptionAsString().contains('overflowed by');
+    if (isOverflow) {
+      FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
+      SystemLogService.instance.logError(
+        category: 'mobile',
+        subCategory: 'ui_layout',
+        errorType: 'RenderFlexOverflow',
+        message: details.exceptionAsString(),
+        stack: details.stack,
+        severity: SystemErrorSeverity.error,
+      );
+      return;
+    }
+
     FirebaseCrashlytics.instance.recordFlutterFatalError(details);
     SystemLogService.instance.logError(
       category: 'app_crash',
@@ -215,6 +234,77 @@ void main() async {
       stack: details.stack,
       severity: SystemErrorSeverity.fatal,
     );
+  };
+
+  // Widget çizim (build) hatalarında gri ekran yerine kullanıcı dostu kurtarma ve hata telemetrisi
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    SystemLogService.instance.logError(
+      category: 'mobile',
+      subCategory: 'ui_widget',
+      errorType: 'WidgetBuildError',
+      message: details.exceptionAsString(),
+      stack: details.stack,
+      severity: SystemErrorSeverity.error,
+    );
+
+    return Material(
+      type: MaterialType.transparency,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded, color: Colors.orange.shade700, size: 32),
+              const SizedBox(height: 6),
+              const Text(
+                'Bu alan yüklenirken bir sorun oluştu.',
+                style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+
+  // Modern Flutter 3+ Asenkron / Root Isolate / Platform Channel Hata Yakalayıcısı
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (kDebugMode) {
+      print('PlatformDispatcher unhandled error: $error');
+      print('Stack: $stack');
+    }
+
+    final isPermissionDenied = error.toString().contains('permission-denied');
+    if (isPermissionDenied) {
+      // Yalnızca kullanıcı oturumu kapalıyken veya çıkış esnasında beklenen durumdur
+      if (FirebaseAuth.instance.currentUser == null) {
+        if (kDebugMode) {
+          print('ℹ️ PlatformDispatcher: Çıkış esnasında yetkisiz dinleyici kapanışı (yoksayıldı)');
+        }
+        return true;
+      }
+      // Giriş yapmış kullanıcıda permission-denied gerçek bir güvenlik kuralı / yetki hatasıdır!
+      SystemLogService.instance.logError(
+        category: 'security',
+        errorType: 'FirestorePermissionDenied',
+        message: error.toString(),
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+      );
+      return true;
+    }
+
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    SystemLogService.instance.logError(
+      category: 'app_crash',
+      errorType: 'PlatformDispatcherUnhandledError',
+      message: error.toString(),
+      stack: stack,
+      severity: SystemErrorSeverity.fatal,
+    );
+    return true;
   };
 
   try {
@@ -232,11 +322,24 @@ void main() async {
   runApp(const MyApp());
 
   }, (error, stack) {
-    // Çıkış sırasında oluşan permission-denied hataları beklenen durumlardır
-    if (error.toString().contains('permission-denied')) {
-      if (kDebugMode) {
-        print('ℹ️ ZonedGuarded: Çıkış sırasında beklenen permission-denied hatası (yoksayıldı)');
+    // Güvenlik & Yetki Hata Ayrımı:
+    final isPermissionDenied = error.toString().contains('permission-denied');
+    if (isPermissionDenied) {
+      // Yalnızca kullanıcı oturumu kapalıyken veya çıkış esnasında beklenen bir durumdur
+      if (FirebaseAuth.instance.currentUser == null) {
+        if (kDebugMode) {
+          print('ℹ️ ZonedGuarded: Çıkış sırasında beklenen permission-denied hatası (yoksayıldı)');
+        }
+        return;
       }
+      // Giriş yapmış kullanıcıda permission-denied gerçek bir kural/yetki hatasıdır; görünür kıl!
+      SystemLogService.instance.logError(
+        category: 'security',
+        errorType: 'FirestorePermissionDenied',
+        message: error.toString(),
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+      );
       return;
     }
     if (kDebugMode) {
@@ -629,13 +732,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _log('✅ Kullanıcı engeli kaldırıldı (real-time): $userId');
         }
       }, onError: (error) {
-        if (error.toString().contains('permission-denied')) {
+        final isPerm = error.toString().contains('permission-denied');
+        if (isPerm && FirebaseAuth.instance.currentUser == null) {
           _log('ℹ️ Blocked user listener çıkış sırasında kapandı (beklenen)');
           return; // Çıkış sırasındaki beklenen hata, yeniden başlatma
         }
         _log('❌ Blocked user listener hatası: $error');
+        SystemLogService.instance.logError(
+          category: 'stream_listener',
+          errorType: 'MainBlockedUserListenerException',
+          message: error.toString(),
+          severity: SystemErrorSeverity.error,
+        );
         // Gerçek hata durumunda listener'ı yeniden başlatmayı dene
-        Future.delayed(const Duration(seconds: 2), () {
+        Future.delayed(const Duration(seconds: 5), () {
           if (mounted && _lastUserId == userId) {
             _log('🔄 Listener hatası sonrası yeniden başlatılıyor...');
             _startBlockedUserListener(userId);

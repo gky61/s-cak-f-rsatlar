@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:async';
 import '../models/deal.dart';
@@ -10,6 +11,7 @@ import 'deal_service.dart';
 import 'user_service.dart';
 import 'message_service.dart';
 import 'comment_service.dart';
+import 'system_log_service.dart';
 
 export 'deal_service.dart' show DealSubmitResult;
 
@@ -24,6 +26,24 @@ class FirestoreService {
   
   // Public getter
   FirebaseFirestore get firestore => FirebaseFirestore.instance;
+
+  /// Bozuk veya eksik Firestore verisi içeren dokümanları loglar ve güvenli şekilde null döndürür
+  Deal? _safeParseDeal(DocumentSnapshot doc) {
+    try {
+      return Deal.fromFirestore(doc);
+    } catch (e, stack) {
+      _log('❌ Deal parse hatası (doc.id: ${doc.id}): $e');
+      SystemLogService.instance.logError(
+        category: 'data_parsing',
+        errorType: 'DealDeserializationException',
+        message: 'Fırsat dokümanı parse edilemedi (${doc.id}): $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+        metadata: {'docId': doc.id},
+      );
+      return null;
+    }
+  }
 
   // Raporlar koleksiyonu
   CollectionReference get reportsCollection => firestore.collection('reports');
@@ -215,13 +235,7 @@ class FirestoreService {
       final cutoffTime = now.subtract(const Duration(hours: 48)); // Tüm menülerle tutarlı
       
       final deals = snapshot.docs
-          .map((doc) {
-            try {
-              return Deal.fromFirestore(doc);
-            } catch (e) {
-              return null;
-            }
-          })
+          .map((doc) => _safeParseDeal(doc))
           .where((deal) =>
               deal != null &&
               deal.isTest != true &&
@@ -310,13 +324,7 @@ class FirestoreService {
           final cutoffTime = now.subtract(const Duration(hours: 48)); // Anasayfa ile tutarlı
           
           return snapshot.docs
-              .map((doc) {
-                try {
-                  return Deal.fromFirestore(doc);
-                } catch (e) {
-                  return null;
-                }
-              })
+              .map((doc) => _safeParseDeal(doc))
               .where((deal) =>
                   deal != null &&
                   deal.isTest != true &&
@@ -417,13 +425,7 @@ class FirestoreService {
           .snapshots()
           .map((snapshot) {
             final deals = snapshot.docs
-                .map((doc) {
-                  try {
-                    return Deal.fromFirestore(doc);
-                  } catch (_) {
-                    return null;
-                  }
-                })
+                .map((doc) => _safeParseDeal(doc))
                 .where((deal) => deal != null && deal.isTest != true)
                 .cast<Deal>()
                 .toList();
@@ -458,13 +460,7 @@ class FirestoreService {
               .snapshots()
               .listen((snapshot) {
                 final list = snapshot.docs
-                    .map((d) {
-                      try {
-                        return Deal.fromFirestore(d);
-                      } catch (_) {
-                        return null;
-                      }
-                    })
+                    .map((d) => _safeParseDeal(d))
                     .where((d) => d != null && d.isTest != true)
                     .cast<Deal>()
                     .toList();
@@ -587,9 +583,17 @@ class FirestoreService {
             emit();
           },
           onError: (error) {
-            if (!error.toString().contains('permission-denied')) {
-              _log('⚠️ senderStream error: $error');
+            final isPerm = error.toString().contains('permission-denied');
+            if (isPerm && FirebaseAuth.instance.currentUser == null) {
+              return; // Oturum kapalıyken beklenen kapanış
             }
+            _log('⚠️ senderStream error: $error');
+            SystemLogService.instance.logError(
+              category: 'stream_listener',
+              errorType: 'SenderStreamException',
+              message: error.toString(),
+              severity: SystemErrorSeverity.error,
+            );
           },
         );
 
@@ -605,9 +609,17 @@ class FirestoreService {
             emit();
           },
           onError: (error) {
-            if (!error.toString().contains('permission-denied')) {
-              _log('⚠️ receiverStream error: $error');
+            final isPerm = error.toString().contains('permission-denied');
+            if (isPerm && FirebaseAuth.instance.currentUser == null) {
+              return; // Oturum kapalıyken beklenen kapanış
             }
+            _log('⚠️ receiverStream error: $error');
+            SystemLogService.instance.logError(
+              category: 'stream_listener',
+              errorType: 'ReceiverStreamException',
+              message: error.toString(),
+              severity: SystemErrorSeverity.error,
+            );
           },
         );
 
@@ -623,9 +635,17 @@ class FirestoreService {
             emit();
           },
           onError: (error) {
-            if (!error.toString().contains('permission-denied')) {
-              _log('⚠️ adminStream error: $error');
+            final isPerm = error.toString().contains('permission-denied');
+            if (isPerm && FirebaseAuth.instance.currentUser == null) {
+              return; // Oturum kapalıyken beklenen kapanış
             }
+            _log('⚠️ adminStream error: $error');
+            SystemLogService.instance.logError(
+              category: 'stream_listener',
+              errorType: 'AdminStreamException',
+              message: error.toString(),
+              severity: SystemErrorSeverity.error,
+            );
           },
         );
       },

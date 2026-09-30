@@ -64,6 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _unreadAdminMessageCount = 0;
   bool _isFollowing = false;
   bool _isFollowNotificationEnabled = false;
+  StreamSubscription? _authSub;
   StreamSubscription? _messageCountSubscription;
   StreamSubscription? _adminMessageCountSubscription;
   StreamSubscription? _userDataSubscription;
@@ -92,6 +93,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       _loadFollowStatus();
     }
+
+    _setupAuthListener();
+  }
+
+  void _setupAuthListener() {
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (!mounted) return;
+      _checkIfOwnProfile();
+      _checkAdminStatus();
+      _loadUserData();
+
+      final dealsUserId = widget.userId ?? user?.uid;
+      if (dealsUserId != null) {
+        _userDealsStream = _firestoreService.getUserDealsStream(
+          dealsUserId,
+          limit: 5,
+          onlyApproved: !_isOwnProfile,
+        );
+      } else {
+        _userDealsStream = null;
+      }
+
+      if (_isOwnProfile) {
+        if (user != null) {
+          _loadUnreadMessageCount();
+          _loadUnreadAdminMessageCount();
+        } else {
+          _user = null;
+          _unreadMessageCount = 0;
+          _unreadAdminMessageCount = 0;
+          _messageCountSubscription?.cancel();
+          _adminMessageCountSubscription?.cancel();
+          _userDataSubscription?.cancel();
+        }
+      } else {
+        _loadFollowStatus();
+      }
+
+      setState(() {});
+    });
   }
 
   void _onThemeChanged() {
@@ -102,6 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _messageCountSubscription?.cancel();
     _adminMessageCountSubscription?.cancel();

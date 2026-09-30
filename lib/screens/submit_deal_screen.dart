@@ -167,6 +167,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   bool _isUserDealBanned = false;
   Timer? _urlDebounceTimer;
   Timer? _textDebounceTimer;
+  StreamSubscription<dynamic>? _authSub;
   bool _isCategoryLockedByScraper = false;
   double? _scrapedRatingValue;
   int? _scrapedRatingCount;
@@ -199,6 +200,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _autoFetchProductData(widget.initialUrl!);
       });
     }
+
+    _authSub = _authService.authStateChanges.listen((user) {
+      if (mounted) {
+        _checkDealSharingStatus();
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _checkDealSharingStatus() async {
@@ -880,6 +888,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _urlDebounceTimer?.cancel();
     _textDebounceTimer?.cancel();
     _titleController.removeListener(_onTextChanged);

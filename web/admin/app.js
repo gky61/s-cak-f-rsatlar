@@ -12121,6 +12121,8 @@ function renderSystemLogs() {
             contextTag = `<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 uppercase">${e.metadata.store}</span>`;
         } else if (e.subCategory) {
             contextTag = `<span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">${e.subCategory}</span>`;
+        } else if (e.category && e.category !== 'mobile') {
+            contextTag = `<span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 font-mono">${escapeHtml(e.category)}</span>`;
         }
 
         const logUserId = e.userId || e.metadata?.userId || e.metadata?.uid || null;
@@ -12197,6 +12199,14 @@ function getCategoryDisplayName(cat) {
         case 'functions': return 'Cloud Functions';
         case 'admin':
         case 'web': return 'Web Admin';
+        case 'data_parsing': return 'Veri Ayrıştırma (Data Parsing)';
+        case 'security': return 'Güvenlik & Yetki (Security)';
+        case 'admob': return 'AdMob Monetizasyon';
+        case 'comments': return 'Yorum Servisi';
+        case 'messages': return 'Mesajlaşma Servisi';
+        case 'deals': return 'Fırsat Servisi';
+        case 'widget_build': return 'Arayüz Çizimi (UI)';
+        case 'app_badge': return 'Rozet Servisi (Badge)';
         default: return cat || 'Sistem';
     }
 }

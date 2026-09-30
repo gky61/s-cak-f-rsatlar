@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -7,7 +8,7 @@ import '../models/notification_preferences.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
-import 'auth_screen.dart';
+import '../widgets/guest_login_bottom_sheet.dart';
 import 'notification_settings_screen.dart';
 
 void _log(String message) {
@@ -27,6 +28,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   final Map<String, bool> _categoryStates = {};
   final Map<String, Set<String>> _subCategoryStates = {};
   NotificationPreferences? _notificationPreferences;
+  StreamSubscription<User?>? _authSub;
   bool _isLoading = true;
   bool _isProcessingBulk = false;
 
@@ -41,6 +43,17 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   void initState() {
     super.initState();
     _loadPreferences();
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (mounted) {
+        _loadPreferences();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   void _showCustomSnackBar({
@@ -82,61 +95,16 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     );
   }
 
-  void _showGuestLoginPrompt() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.lock_person_rounded, color: AppTheme.primary, size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Giriş Yapmalısınız',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-              ),
-            ),
-          ],
-        ),
-        content: const Text(
-          'Kategori tercihlerinizi kaydetmek ve seçtiğiniz kategorilerde anlık bildirim alabilmek için lütfen hesabınıza giriş yapın.',
-          style: TextStyle(fontSize: 13.5, height: 1.45),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Daha Sonra'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-              );
-            },
-            icon: const Icon(Icons.login_rounded, size: 18),
-            label: const Text('Giriş Yap'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ],
-      ),
+  Future<void> _showGuestLoginPrompt() async {
+    final loggedIn = await showGuestLoginBottomSheet(
+      context,
+      title: 'Kategori Tercihleri',
+      message: 'Kategori tercihlerinizi kaydetmek ve seçtiğiniz kategorilerde anlık bildirim alabilmek için lütfen giriş yapın.',
+      primaryButtonText: '🚀 Google ile Giriş Yap',
     );
+    if (loggedIn == true && mounted) {
+      _loadPreferences();
+    }
   }
 
   Future<void> _loadPreferences() async {
