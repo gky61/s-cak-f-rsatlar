@@ -14849,8 +14849,19 @@ window.removeTelegramChannel = async function(channelInput) {
 window.triggerCleanVmFromBotView = async function() {
     if (!confirm('Canlı bot bellek optimizasyonu ve V8 Garbage Collector başlatmak istediğinize emin misiniz? (Bağlantı kesilmez)')) return;
 
-    const btn = document.getElementById('botDetailCleanVmBtn');
-    if (btn) btn.disabled = true;
+    const btnTop = document.getElementById('botDetailCleanVmBtn');
+    const btnCard = document.getElementById('botDetailV8GcBtn');
+
+    if (btnTop) {
+        btnTop.disabled = true;
+        btnTop.dataset.originalHtml = btnTop.innerHTML;
+        btnTop.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Temizleniyor...</span>`;
+    }
+    if (btnCard) {
+        btnCard.disabled = true;
+        btnCard.dataset.originalHtml = btnCard.innerHTML;
+        btnCard.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>V8 GC Yürütülüyor...</span>`;
+    }
 
     try {
         await db.collection('settings').doc('telegramBot').set({
@@ -14865,7 +14876,16 @@ window.triggerCleanVmFromBotView = async function() {
             showError('Optimizasyon başlatılamadı: ' + e.message);
         }
     } finally {
-        setTimeout(() => { if (btn) btn.disabled = false; }, 3000);
+        setTimeout(() => {
+            if (btnTop) {
+                btnTop.disabled = false;
+                if (btnTop.dataset.originalHtml) btnTop.innerHTML = btnTop.dataset.originalHtml;
+            }
+            if (btnCard) {
+                btnCard.disabled = false;
+                if (btnCard.dataset.originalHtml) btnCard.innerHTML = btnCard.dataset.originalHtml;
+            }
+        }, 3000);
     }
 };
 

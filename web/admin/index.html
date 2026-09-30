@@ -3324,10 +3324,13 @@
                             <!-- Right: Performance & Clean VM Status Card -->
                             <div class="bg-white dark:bg-surface-dark p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-4">
                                 <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-                                    <h4 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                        <span class="material-symbols-outlined text-amber-500 text-[20px]">cleaning_services</span>
-                                        <span>Sunucu Performans & Bellek Raporu</span>
-                                    </h4>
+                                    <div class="flex flex-col">
+                                        <h4 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                            <span class="material-symbols-outlined text-amber-500 text-[20px]">cleaning_services</span>
+                                            <span>Sunucu Performans & Bellek Raporu</span>
+                                        </h4>
+                                        <span class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">🌙 Host VM Derin Bakımı: Her Gece 04:00 TSİ Otomatik</span>
+                                    </div>
                                     <span id="botCleanStatusBadge" class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
                                         Tamamlandı
                                     </span>
@@ -3350,7 +3353,7 @@
                                         <span id="botCleanFreedHeap" class="font-mono font-bold text-emerald-600 dark:text-emerald-400">-</span>
                                     </div>
                                 </div>
-                                <button onclick="window.triggerCleanVmFromBotView && window.triggerCleanVmFromBotView()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm shadow-amber-500/20 cursor-pointer">
+                                <button id="botDetailV8GcBtn" onclick="window.triggerCleanVmFromBotView && window.triggerCleanVmFromBotView()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm shadow-amber-500/20 cursor-pointer">
                                     <span class="material-symbols-outlined text-[18px]">restart_alt</span>
                                     <span>V8 Garbage Collector & Önbellek Sıfırla</span>
                                 </button>
