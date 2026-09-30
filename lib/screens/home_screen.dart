@@ -40,6 +40,7 @@ import '../utils/asset_path_migration.dart';
 import '../utils/badge_helper.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/deal_restriction_bottom_sheet.dart';
+import '../widgets/app_snack_bar.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
 
@@ -386,14 +387,10 @@ class _HomeScreenState extends State<HomeScreen> {
         (notifications) {
           if (mounted) {
             final unreadCount = notifications.where((n) => n['read'] != true).length;
-            setState(() {
-              _unreadNotificationCount = unreadCount;
-            });
-            final totalBadge = _unreadNotificationCount + _unreadMessageCount + _unreadAdminMessageCount;
-            if (totalBadge <= 0) {
-              AppBadgeService.instance.clearBadge();
-            } else {
-              AppBadgeService.instance.setBadge(totalBadge);
+            if (_unreadNotificationCount != unreadCount) {
+              setState(() {
+                _unreadNotificationCount = unreadCount;
+              });
             }
           }
         },
@@ -425,29 +422,12 @@ class _HomeScreenState extends State<HomeScreen> {
         await _authService.signOut();
         
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                key: UniqueKey(),
-                children: const [
-                  Icon(Icons.block, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.red[600],
-              behavior: SnackBarBehavior.floating,
-              margin: const EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              duration: const Duration(seconds: 5),
-            ),
+          AppSnackBar.show(
+            context: context,
+            message: 'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
+            icon: Icons.block_rounded,
+            backgroundColor: const Color(0xFFDC2626),
+            duration: const Duration(seconds: 5),
           );
         }
       } else {
@@ -489,29 +469,12 @@ class _HomeScreenState extends State<HomeScreen> {
             _log('✅ HomeScreen: Oturum kapatıldı');
             
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    key: UniqueKey(),
-                    children: const [
-                      Icon(Icons.block, color: Colors.white),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: Colors.red[600],
-                  behavior: SnackBarBehavior.floating,
-                  margin: const EdgeInsets.all(16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  duration: const Duration(seconds: 5),
-                ),
+              AppSnackBar.show(
+                context: context,
+                message: 'Hesabınız engellenmiştir. Lütfen destek ekibi ile iletişime geçin.',
+                icon: Icons.block_rounded,
+                backgroundColor: const Color(0xFFDC2626),
+                duration: const Duration(seconds: 5),
               );
             }
           } catch (e) {
@@ -666,14 +629,11 @@ class _HomeScreenState extends State<HomeScreen> {
             _followedKeywords.remove(normalized);
             _isAddingKeywordFromSearch = false;
           });
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('🗑️ "$trimmed" kelime takibinden çıkarıldı'),
-              backgroundColor: const Color(0xFF334155),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+          AppSnackBar.show(
+            context: context,
+            message: '"$trimmed" kelime takibinden çıkarıldı',
+            icon: Icons.delete_outline_rounded,
+            backgroundColor: const Color(0xFF334155),
           );
         }
       } else {
@@ -684,23 +644,20 @@ class _HomeScreenState extends State<HomeScreen> {
             _followedKeywords.add(normalized);
             _isAddingKeywordFromSearch = false;
           });
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('🔔 "$trimmed" takibe eklendi! Fırsat geldiğinde bildirim alacaksınız.'),
-              backgroundColor: const Color(0xFF16A34A),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              action: SnackBarAction(
-                label: 'Yönet',
-                textColor: Colors.white,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
-                  ).then((_) => _loadFollowedKeywords());
-                },
-              ),
+          AppSnackBar.show(
+            context: context,
+            message: '"$trimmed" takibe eklendi! Fırsat geldiğinde bildirim alacaksınız.',
+            icon: Icons.notifications_active_rounded,
+            backgroundColor: const Color(0xFF16A34A),
+            action: SnackBarAction(
+              label: 'Yönet',
+              textColor: Colors.white,
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
+                ).then((_) => _loadFollowedKeywords());
+              },
             ),
           );
         }
@@ -709,11 +666,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _log('Kelime takibi toggle hatası: $e');
       if (mounted) {
         setState(() => _isAddingKeywordFromSearch = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kelime takibi güncellenirken bir hata oluştu'),
-            backgroundColor: Colors.red,
-          ),
+        AppSnackBar.show(
+          context: context,
+          message: 'Kelime takibi güncellenirken bir hata oluştu',
+          icon: Icons.error_outline_rounded,
+          backgroundColor: const Color(0xFFDC2626),
         );
       }
     }
@@ -728,25 +685,21 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (mounted) {
         setState(() => _isGeneralNotificationsEnabled = newValue);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              newValue ? 'Tüm bildirimler açıldı' : 'Tüm bildirimler kapatıldı',
-            ),
-            duration: const Duration(seconds: 1),
-          ),
+        AppSnackBar.show(
+          context: context,
+          message: newValue ? 'Tüm bildirimler açıldı' : 'Tüm bildirimler kapatıldı',
+          icon: newValue ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+          backgroundColor: newValue ? const Color(0xFF16A34A) : const Color(0xFF334155),
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Bildirim ayarı güncellenirken bir sorun oluştu.'),
-            backgroundColor: Colors.red[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-          ),
+        AppSnackBar.show(
+          context: context,
+          message: 'Bildirim ayarı güncellenirken bir sorun oluştu.',
+          icon: Icons.error_outline_rounded,
+          backgroundColor: const Color(0xFFDC2626),
         );
       }
     }
@@ -762,27 +715,22 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       await _loadFollowedCategories();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _followedCategories.contains(categoryId)
-                  ? 'Bildirim açıldı'
-                  : 'Bildirim kapatıldı',
-            ),
-            duration: const Duration(seconds: 1),
-          ),
+        final isSubscribed = _followedCategories.contains(categoryId);
+        AppSnackBar.show(
+          context: context,
+          message: isSubscribed ? 'Kategori bildirimi açıldı' : 'Kategori bildirimi kapatıldı',
+          icon: isSubscribed ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+          backgroundColor: isSubscribed ? const Color(0xFF16A34A) : const Color(0xFF334155),
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Kategori bildirimi güncellenirken bir sorun oluştu.'),
-            backgroundColor: Colors.red[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-          ),
+        AppSnackBar.show(
+          context: context,
+          message: 'Kategori bildirimi güncellenirken bir sorun oluştu.',
+          icon: Icons.error_outline_rounded,
+          backgroundColor: const Color(0xFFDC2626),
         );
       }
     }
@@ -798,27 +746,22 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       await _loadFollowedCategories();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _followedSubCategories.contains(subCategoryKey)
-                  ? 'Bildirim açıldı'
-                  : 'Bildirim kapatıldı',
-            ),
-            duration: const Duration(seconds: 1),
-          ),
+        final isSubscribed = _followedSubCategories.contains(subCategoryKey);
+        AppSnackBar.show(
+          context: context,
+          message: isSubscribed ? 'Alt kategori bildirimi açıldı' : 'Alt kategori bildirimi kapatıldı',
+          icon: isSubscribed ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+          backgroundColor: isSubscribed ? const Color(0xFF16A34A) : const Color(0xFF334155),
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Alt kategori bildirimi güncellenirken bir sorun oluştu.'),
-            backgroundColor: Colors.red[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-          ),
+        AppSnackBar.show(
+          context: context,
+          message: 'Alt kategori bildirimi güncellenirken bir sorun oluştu.',
+          icon: Icons.error_outline_rounded,
+          backgroundColor: const Color(0xFFDC2626),
         );
       }
     }
@@ -860,11 +803,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkAdminStatus() async {
+    final user = _authService.currentUser;
+    if (user == null) {
+      if (mounted && _isAdmin) {
+        setState(() => _isAdmin = false);
+      }
+      return;
+    }
+
     try {
-      _log('🔍 Admin durumu kontrol ediliyor...');
       final isAdmin = await _authService.isAdmin();
-      _log('👮 Admin durumu: $isAdmin');
-      if (mounted) {
+      if (mounted && _isAdmin != isAdmin) {
         setState(() {
           _isAdmin = isAdmin;
           _log('✅ _isAdmin state güncellendi: $_isAdmin');

@@ -357,10 +357,10 @@ class NotificationService {
       final deviceId = await _getOrCreateDeviceId();
       if (userId != null) {
         final docRef = _firestore.collection('userDevices').doc('${userId}_$deviceId');
-        await docRef.update({
+        await docRef.set({
           'active': false,
           'updatedAt': FieldValue.serverTimestamp(),
-        }).catchError((_) {});
+        }, SetOptions(merge: true));
         _log('✅ Device token marked inactive on logout');
       }
       _tokenRefreshSub?.cancel();
@@ -541,7 +541,7 @@ class NotificationService {
   }
 
   // --- FCM Token Kaydetme (Otomatik İyileştirme & Taze Token Garantisi) ---
-  Future<void> saveFCMToken({String? userId, bool forceRefresh = false}) async {
+  Future<void> saveFCMToken({String? userId, bool forceRefresh = false, int retryCount = 0}) async {
     // Eşzamanlı (paralel) birden fazla kaydetme çağrısını tek bir Future altında birleştir (Single-Flight Pattern)
     if (_inFlightTokenSave != null) {
       _log('⏳ saveFCMToken zaten işlemde, mevcut işlem bekleniyor...');
@@ -596,6 +596,13 @@ class NotificationService {
       }
 
       final resolvedUserId = userId ?? _auth.currentUser?.uid;
+
+      if (token == null && resolvedUserId != null && retryCount < 2) {
+        _log('⏳ FCM token henüz alınamadı (GMS bağlanıyor), 3 sn sonra tekrar denenecek... (${retryCount + 1}/2)');
+        Future.delayed(const Duration(seconds: 3), () {
+          saveFCMToken(userId: resolvedUserId, forceRefresh: forceRefresh, retryCount: retryCount + 1);
+        });
+      }
       
       if (token != null && resolvedUserId != null) {
         final deviceId = await _getOrCreateDeviceId();
@@ -749,7 +756,44 @@ class NotificationService {
   void _stopCommentReplyListener() {
     _commentReplyListener?.cancel();
     _commentReplyListener = null;
+    _handledCommentNotificationIds.clear();
     _log('🛑 Yorum cevabı bildirim listener\'ı durduruldu');
+  }
+
+  // Yorum bildirimleri mükerrer önleme önbelleği (Firestore vs FCM çift bildirim engelleme)
+  static final Set<String> _handledCommentNotificationIds = <String>{};
+
+  static void _addHandledCommentNotificationId(String id) {
+    if (id.isEmpty) return;
+    if (_handledCommentNotificationIds.length > 200) {
+      _handledCommentNotificationIds.remove(_handledCommentNotificationIds.first);
+    }
+    _handledCommentNotificationIds.add(id);
+  }
+
+  // FCM broadcast deduplication (EventChannel çift tetikleme ve ağ tekrarları koruması)
+  static final Map<String, int> _recentlyProcessedFcmMessages = <String, int>{};
+
+  static bool _isDuplicateFcmMessage(RemoteMessage message) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _recentlyProcessedFcmMessages.removeWhere((_, timestamp) => (now - timestamp) > 30000);
+
+    final fcmId = message.messageId;
+    final data = message.data;
+    final customKey = (fcmId != null && fcmId.isNotEmpty)
+        ? fcmId
+        : '${data['notificationId'] ?? ''}_${data['dealId'] ?? ''}_${data['commentId'] ?? ''}_${data['messageId'] ?? ''}_${data['type'] ?? ''}_${message.sentTime?.millisecondsSinceEpoch ?? ''}';
+
+    if (customKey.replaceAll('_', '').isEmpty) {
+      return false;
+    }
+
+    if (_recentlyProcessedFcmMessages.containsKey(customKey)) {
+      return true;
+    }
+
+    _recentlyProcessedFcmMessages[customKey] = now;
+    return false;
   }
 
   // Gerçek zamanlı ön plan mesaj dinleyicisi (FCM ve APNs gecikmelerinden bağımsız 0ms in-app afiş garantisi)
@@ -1083,7 +1127,7 @@ class NotificationService {
   }
 
   // Yorum cevabı bildirimlerini dinle (Firestore üzerinden)
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _commentReplyListener;
+  static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _commentReplyListener;
   
   void _setupCommentReplyListener() {
     final userId = _auth.currentUser?.uid;
@@ -1135,6 +1179,24 @@ class NotificationService {
               final notifTitle = isRootComment
                   ? '$replyUserName fırsatınıza yorum yaptı'
                   : '$replyUserName yorumunuza cevap verdi';
+
+              // 1. Kendi ekranı spam koruması (Kullanıcı zaten ilgili fırsatın detayındaysa bastır)
+              if (activeDealId != null && activeDealId!.isNotEmpty && dealId.isNotEmpty && activeDealId == dealId) {
+                _log('🛡️ Kullanıcı zaten bu fırsatın detay sayfasında ($dealId), Firestore yorum bildirimi bastırıldı.');
+                continue;
+              }
+
+              // 2. Mükerrer / Çift bildirim kontrolü (FCM vs Firestore Deduplication)
+              final notifDedupKey = '${doc.id}_${dealId}_$commentId';
+              if (_handledCommentNotificationIds.contains(notifDedupKey) ||
+                  (commentId.isNotEmpty && _handledCommentNotificationIds.contains(commentId)) ||
+                  (doc.id.isNotEmpty && _handledCommentNotificationIds.contains(doc.id))) {
+                _log('ℹ️ Yorum bildirimi zaten gösterildi (Firestore listener atlanıyor): $notifDedupKey');
+                continue;
+              }
+              _addHandledCommentNotificationId(notifDedupKey);
+              if (commentId.isNotEmpty) _addHandledCommentNotificationId(commentId);
+              if (doc.id.isNotEmpty) _addHandledCommentNotificationId(doc.id);
               
               _log('📨 Yorum bildirimi işleniyor: type=$notifType, dealId=$dealId, commentId=$commentId, user=$replyUserName');
               
@@ -1205,6 +1267,7 @@ class NotificationService {
       channelShowBadge: true,
       enableLights: true,
       color: const Color(0xFF2196F3),
+      ledColor: const Color(0xFF2196F3),
       ledOnMs: 1000,
       ledOffMs: 500,
     );
@@ -2002,6 +2065,12 @@ class NotificationService {
 
     // Uygulama ön planda iken gelen bildirimler (PROD-READY Evrensel In-App Banner & Kendi Ekranı Bastırma)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      // 0. MÜKERRER MESAJ KORUMASI (Duplicate FCM Delivery & Multiple Listener Protection)
+      if (_isDuplicateFcmMessage(message)) {
+        _log('🛡️ Mükerrer FCM bildirimi tespit edildi ve engellendi (messageId: ${message.messageId})');
+        return;
+      }
+
       _log('📬 Yeni bildirim (ön plan): ${message.notification?.title}');
       _log('📬 Bildirim verisi: ${message.data}');
 
@@ -2163,6 +2232,21 @@ class NotificationService {
       String badge = 'Bildirim';
       Color color = const Color(0xFFFF5722);
       IconData icon = Icons.notifications_active_rounded;
+
+      if (type == 'comment_reply' || type == 'comment') {
+        final commentId = clean(message.data['commentId'] ?? message.data['comment_id']);
+        final notifId = clean(message.data['notificationId'] ?? message.data['notification_id']);
+        final compositeKey = '${notifId}_${dealId}_$commentId';
+        if ((compositeKey.isNotEmpty && _handledCommentNotificationIds.contains(compositeKey)) ||
+            (commentId.isNotEmpty && _handledCommentNotificationIds.contains(commentId)) ||
+            (notifId.isNotEmpty && _handledCommentNotificationIds.contains(notifId))) {
+          _log('ℹ️ Yorum bildirimi zaten Firestore üzerinden gösterildi (onMessage atlanıyor): $commentId');
+          return;
+        }
+        if (compositeKey.isNotEmpty) _addHandledCommentNotificationId(compositeKey);
+        if (commentId.isNotEmpty) _addHandledCommentNotificationId(commentId);
+        if (notifId.isNotEmpty) _addHandledCommentNotificationId(notifId);
+      }
 
       if (type == 'comment_reply') {
         badge = 'Yorum Cevabı';

@@ -536,19 +536,33 @@ class LinkPreviewService {
   }
 
 
+  static final Map<String, String> _redirectCache = {};
+  static const int _maxRedirectCacheSize = 100;
+
   // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir
   // Herhangi bir URL'nin yönlendirmelerini (redirects) takip ederek nihai adresi bulur
   Future<String> resolveUrlRedirects(String url) async {
+    final cleanInput = url.trim();
+    if (cleanInput.isEmpty) return url;
+    if (_redirectCache.containsKey(cleanInput)) {
+      _log('⚡ [LinkPreview] Yönlendirme önbellekten getirildi (0 ms): ${_redirectCache[cleanInput]}');
+      return _redirectCache[cleanInput]!;
+    }
+
     try {
-      var currentUrl = extractAdjustFallback(url);
+      var currentUrl = extractAdjustFallback(cleanInput);
       if (currentUrl.toLowerCase().contains('sl.n11.com/n/') || currentUrl.toLowerCase().contains('n11.com/n/')) {
         currentUrl = await resolveN11ShortLink(currentUrl);
       }
       if (currentUrl.toLowerCase().contains('paylaskazan.teknosa.com') || currentUrl.toLowerCase().contains('rdr.btrck.com')) {
         currentUrl = await resolveTeknosaPaylasKazan(currentUrl);
       }
-      if (currentUrl != url) {
+      if (currentUrl != cleanInput) {
         _log('🎯 Adjust yönlendirmesi hemen çözüldü: $currentUrl');
+        if (_redirectCache.length >= _maxRedirectCacheSize) {
+          _redirectCache.remove(_redirectCache.keys.first);
+        }
+        _redirectCache[cleanInput] = currentUrl;
         return currentUrl;
       }
       _log('🔗 Yönlendirmeler çözülüyor: $currentUrl');
@@ -590,6 +604,10 @@ class LinkPreviewService {
       client.close();
       currentUrl = extractAdjustFallback(currentUrl);
       _log('✅ Yönlendirme zinciri çözüldü. Nihai URL: $currentUrl');
+      if (_redirectCache.length >= _maxRedirectCacheSize) {
+        _redirectCache.remove(_redirectCache.keys.first);
+      }
+      _redirectCache[cleanInput] = currentUrl;
       return currentUrl;
     } catch (e) {
       _log('⚠️ Yönlendirme çözme hatası: $e, orijinal URL kullanılıyor');

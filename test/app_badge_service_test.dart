@@ -72,6 +72,9 @@ void main() {
 
     test('setBadge with negative number defaults to 0 and clears badge', () async {
       final service = AppBadgeService.instance;
+      await service.setBadge(3);
+      badgeChannelCalls.clear();
+
       await service.setBadge(-3);
 
       expect(service.currentBadgeCount, equals(0));

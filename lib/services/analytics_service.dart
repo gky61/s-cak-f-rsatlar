@@ -34,6 +34,9 @@ class AnalyticsService {
     },
   );
 
+  String? _lastScreenName;
+  String? _lastScreenClass;
+
   /// Manuel Ekran Görüntüleme Kaydı (Screen View)
   /// BottomNavigationBar veya IndexedStack gibi navigator observer'ın yakalayamadığı
   /// sekme değişimlerini GA4 ve Crashlytics'e kesin olarak iletir.
@@ -41,14 +44,21 @@ class AnalyticsService {
     required String screenName,
     String? screenClass,
   }) async {
+    final effectiveClass = screenClass ?? screenName;
+    if (_lastScreenName == screenName && _lastScreenClass == effectiveClass) {
+      return;
+    }
+    _lastScreenName = screenName;
+    _lastScreenClass = effectiveClass;
+
     try {
       await _analytics.logScreenView(
         screenName: screenName,
-        screenClass: screenClass ?? screenName,
+        screenClass: effectiveClass,
       );
-      _recordBreadcrumb('screen_view', {'screen': screenName, 'class': screenClass ?? screenName});
+      _recordBreadcrumb('screen_view', {'screen': screenName, 'class': effectiveClass});
       if (kDebugMode) {
-        print('📱 [Analytics] ScreenView: $screenName (${screenClass ?? screenName})');
+        print('📱 [Analytics] ScreenView: $screenName ($effectiveClass)');
       }
     } catch (e) {
       if (kDebugMode) {

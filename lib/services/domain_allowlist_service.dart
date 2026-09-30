@@ -11,6 +11,51 @@ enum UrlValidationResult {
   notProductUrl,
 }
 
+class _ParsedAllowlistData {
+  final Map<String, List<String>> stores;
+  final Set<String> domains;
+  final Map<String, List<String>> rawRules;
+
+  const _ParsedAllowlistData({
+    required this.stores,
+    required this.domains,
+    required this.rawRules,
+  });
+}
+
+_ParsedAllowlistData _parseAllowlistJson(String jsonStr) {
+  final Map<String, dynamic> data = json.decode(jsonStr) as Map<String, dynamic>;
+  final Map<String, List<String>> parsedStores = {};
+  final Set<String> parsedDomains = {};
+  final Map<String, List<String>> parsedRawRules = {};
+
+  if (data.containsKey('stores') && data['stores'] is Map) {
+    final Map<String, dynamic> storesJson = data['stores'] as Map<String, dynamic>;
+    storesJson.forEach((key, value) {
+      if (value is List) {
+        final domainList = value.map((e) => e.toString().toLowerCase()).toList();
+        parsedStores[key] = domainList;
+        parsedDomains.addAll(domainList);
+      }
+    });
+  }
+
+  if (data.containsKey('product_path_rules') && data['product_path_rules'] is Map) {
+    final Map<String, dynamic> rulesJson = data['product_path_rules'] as Map<String, dynamic>;
+    rulesJson.forEach((storeKey, patterns) {
+      if (patterns is List) {
+        parsedRawRules[storeKey] = patterns.map((p) => p.toString()).toList();
+      }
+    });
+  }
+
+  return _ParsedAllowlistData(
+    stores: parsedStores,
+    domains: parsedDomains,
+    rawRules: parsedRawRules,
+  );
+}
+
 class DomainAllowlistService {
   /// Fallback (yedek) 20 mağaza tanımı
   static const Map<String, List<String>> _fallbackStores = {
@@ -44,10 +89,11 @@ class DomainAllowlistService {
       .map((d) => d.toLowerCase())
       .toSet();
 
+  static Future<void>? _initFuture;
   static Map<String, List<String>>? _dynamicStores;
   static Set<String>? _dynamicAllowedDomains;
-  static Map<String, List<RegExp>>? _productPathRules;
-  static bool _isInitializing = false;
+  static Map<String, List<String>>? _rawProductPathRules;
+  static final Map<String, List<RegExp>> _compiledProductPathRules = {};
 
   /// Aktif kullanılan mağazalar haritası
   static Map<String, List<String>> get stores => _dynamicStores ?? _fallbackStores;
@@ -55,65 +101,50 @@ class DomainAllowlistService {
   /// Aktif kullanılan izin verilen domain'ler kümesi
   static Set<String> get allowedDomains => _dynamicAllowedDomains ?? _fallbackAllowedDomains;
 
-  /// JSON dosyasından dinamik allowlist yükleme
-  static Future<void> initialize() async {
-    if (_dynamicStores != null || _isInitializing) return;
-    _isInitializing = true;
+  /// JSON dosyasından dinamik allowlist yükleme (Arka plan isolate + memoized paylaşımlı Future)
+  static Future<void> initialize() {
+    if (_dynamicStores != null) return Future.value();
+    if (_initFuture != null) return _initFuture!;
 
-    final candidatePaths = [
+    _initFuture = _doInitialize().then((_) {
+      // Başarıyla tamamlandı
+    }).catchError((e) {
+      _initFuture = null; // Hata durumunda yeniden denemeye izin ver
+      if (kDebugMode) {
+        print('⚠️ DomainAllowlistService initialize hatası: $e');
+      }
+    });
+
+    return _initFuture!;
+  }
+
+  static Future<void> _doInitialize() async {
+    const candidatePaths = [
       'assets/data/domain_allowlist_extended.json',
     ];
 
     for (final path in candidatePaths) {
       try {
         final jsonStr = await rootBundle.loadString(path);
-        final Map<String, dynamic> data = json.decode(jsonStr);
-        if (data.containsKey('stores') && data['stores'] is Map) {
-          final Map<String, dynamic> storesJson = data['stores'];
-          final Map<String, List<String>> parsedStores = {};
-          final Set<String> parsedDomains = {};
+        final parsedData = await compute(_parseAllowlistJson, jsonStr);
 
-          storesJson.forEach((key, value) {
-            if (value is List) {
-              final domainList = value.map((e) => e.toString().toLowerCase()).toList();
-              parsedStores[key] = domainList;
-              parsedDomains.addAll(domainList);
-            }
-          });
+        if (parsedData.stores.isNotEmpty) {
+          _dynamicStores = parsedData.stores;
+          _dynamicAllowedDomains = parsedData.domains;
+          _rawProductPathRules = parsedData.rawRules;
+          _compiledProductPathRules.clear();
 
-          if (parsedStores.isNotEmpty) {
-            _dynamicStores = parsedStores;
-            _dynamicAllowedDomains = parsedDomains;
-
-            // product_path_rules alanını da yükle
-            if (data.containsKey('product_path_rules') && data['product_path_rules'] is Map) {
-              final Map<String, dynamic> rulesJson = data['product_path_rules'];
-              final Map<String, List<RegExp>> parsedRules = {};
-              rulesJson.forEach((storeKey, patterns) {
-                if (patterns is List) {
-                  parsedRules[storeKey] = patterns
-                      .map((p) => RegExp(p.toString(), caseSensitive: false))
-                      .toList();
-                }
-              });
-              _productPathRules = parsedRules;
-              if (kDebugMode) {
-                print('✅ Product Path Rules yüklendi: ${parsedRules.length} mağaza kuralı');
-              }
-            }
-
-            if (kDebugMode) {
-              print('✅ DomainAllowlistService dinamik olarak yüklendi ($path): ${parsedStores.length} mağaza, ${parsedDomains.length} domain');
-            }
-            break;
+          if (kDebugMode) {
+            print('✅ DomainAllowlistService dinamik olarak yüklendi ($path): '
+                '${parsedData.stores.length} mağaza, ${parsedData.domains.length} domain, '
+                '${parsedData.rawRules.length} kural (arka plan isolate)');
           }
+          break;
         }
       } catch (e) {
         // Test ortamında Flutter binding yoksa veya dosya yoksa sessizce sıradakine geç
       }
     }
-
-    _isInitializing = false;
   }
 
   /// Bilinen kısa link veya yönlendirme domainleri listesi
@@ -143,7 +174,7 @@ class DomainAllowlistService {
   static bool isDomainAllowed(String urlStr) {
     if (urlStr.trim().isEmpty) return false;
 
-    if (_dynamicStores == null && !_isInitializing) {
+    if (_dynamicStores == null && _initFuture == null) {
       unawaited(initialize());
     }
 
@@ -255,7 +286,7 @@ class DomainAllowlistService {
   static bool isProductUrl(String urlStr) {
     if (urlStr.trim().isEmpty) return false;
 
-    if (_dynamicStores == null && !_isInitializing) {
+    if (_dynamicStores == null && _initFuture == null) {
       unawaited(initialize());
     }
 
@@ -273,18 +304,27 @@ class DomainAllowlistService {
       }
 
       // product_path_rules yüklenmemişse → BYPASS
-      if (_productPathRules == null) {
+      if (_rawProductPathRules == null) {
         return true;
       }
 
-      final rules = _productPathRules![storeKey];
-
-      // Kural tanımlı değilse → BYPASS (tanımlanmamış mağaza, filtre yok)
+      // İlgili mağaza için regex'leri sadece talep edildiğinde (lazy) derle ve önbelleğe al
+      List<RegExp>? rules = _compiledProductPathRules[storeKey];
       if (rules == null) {
-        return true;
+        final rawPatterns = _rawProductPathRules![storeKey];
+        if (rawPatterns == null) {
+          return true; // Kural tanımlanmamış mağaza → bypass
+        }
+        if (rawPatterns.isEmpty) {
+          _compiledProductPathRules[storeKey] = const [];
+          return true; // Bilinçli olarak boş bırakılmış → bypass
+        }
+        rules = rawPatterns
+            .map((p) => RegExp(p, caseSensitive: false))
+            .toList(growable: false);
+        _compiledProductPathRules[storeKey] = rules;
       }
 
-      // Kural boş diziyse → BYPASS (bilinçli olarak filtresiz bırakılmış)
       if (rules.isEmpty) {
         return true;
       }

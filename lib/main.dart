@@ -29,6 +29,7 @@ import 'services/system_log_service.dart';
 import 'services/ad_manager_service.dart';
 import 'services/coupon_credit_service.dart';
 import 'services/share_intent_service.dart';
+import 'services/domain_allowlist_service.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void _log(String message) {
@@ -37,6 +38,9 @@ void _log(String message) {
 
 // Global navigator key for navigation from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Global scaffold messenger key for showing safe snackbars across transitions
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 // Background message handler - uygulama arka planda veya kapalıyken FCM burada çalışır (arka planda)
 // Uygulama tamamen kapalıyken bu handler ÇALIŞMAZ; o durumda sistem notification payload ile bildirimi gösterir
@@ -369,11 +373,12 @@ void _initializeBackgroundServices() {
   AffiliateService.initSettingsListener();
 
   // App Check Aktivasyonu (arka planda - Play Integrity ağ gecikmesini açılış ekranından soyutlar)
+  final bool useProductionAppCheck = isProductionFlavor && !kDebugMode;
   FirebaseAppCheck.instance.activate(
-    androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-    appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+    androidProvider: useProductionAppCheck ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+    appleProvider: useProductionAppCheck ? AppleProvider.appAttestWithDeviceCheckFallback : AppleProvider.debug,
   ).then((_) {
-    _log('🛡️ Firebase App Check başarıyla başlatıldı');
+    _log('🛡️ Firebase App Check başarıyla başlatıldı (mode: ${useProductionAppCheck ? "PROD/PlayIntegrity+AppAttest" : "DEV/Debug"})');
   }).catchError((e) {
     _log('⚠️ Firebase App Check başlatma hatası: $e');
   });
@@ -407,6 +412,11 @@ void _initializeBackgroundServices() {
   // Connectivity service'i başlat
   ConnectivityService().initialize().catchError((e) {
     _log('⚠️ ConnectivityService başlatma hatası: $e');
+  });
+
+  // Domain allowlist servisini arka planda önyükle (SubmitDeal / Fırsat Paylaş ekranında jank/donmayı %100 önler)
+  DomainAllowlistService.initialize().catchError((e) {
+    _log('⚠️ DomainAllowlistService önyükleme hatası: $e');
   });
 
   // Kanalları ve bildirim dinleyicilerini arka planda önyükle
@@ -531,6 +541,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         darkTheme: darkTheme,
         themeMode: _themeService.themeMode,
         navigatorKey: navigatorKey,
+        scaffoldMessengerKey: rootScaffoldMessengerKey,
         navigatorObservers: [
           AnalyticsService.instance.observer,
         ],
@@ -792,6 +803,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
+  void _onUserChanged(String currentUserId) {
+    if (_lastUserId != currentUserId) {
+      if (_lastUserId != null) {
+        _notificationService.clearAllSubscriptions();
+        _blockedUserListener?.cancel();
+        _blockedUserListener = null;
+        AppBadgeService.instance.stopRealtimeBadgeSync();
+        AppBadgeService.instance.clearBadge();
+      }
+      _lastUserId = currentUserId;
+      AnalyticsService.instance.setUser(currentUserId);
+      // Önce engelleme kontrolü yap
+      _checkAndHandleBlockedUser(currentUserId).then((isBlocked) {
+        // Engellenmemişse bildirim servisini başlat
+        if (!isBlocked && mounted && _lastUserId == currentUserId) {
+          _initializeNotificationService(currentUserId);
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
@@ -802,18 +834,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           // Stream henüz hazır değilse, mevcut kullanıcıyı kontrol et
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
-            // Kullanıcı zaten giriş yapmış
-            if (_lastUserId != currentUser.uid) {
-              _lastUserId = currentUser.uid;
-              AnalyticsService.instance.setUser(currentUser.uid);
-              // Önce engelleme kontrolü yap
-              _checkAndHandleBlockedUser(currentUser.uid).then((isBlocked) {
-                // Engellenmemişse bildirim servisini başlat
-                if (!isBlocked && mounted && _lastUserId == currentUser.uid) {
-                  _initializeNotificationService(currentUser.uid);
-                }
-              });
-            }
+            _onUserChanged(currentUser.uid);
             return const HomeScreen();
           }
           // Kullanıcı henüz tespit edilmediyse de doğrudan HomeScreen gösterilir (loading noktası ve flicker engellenir)
@@ -826,17 +847,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           // Hata olsa bile mevcut kullanıcıyı kontrol et
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
-            if (_lastUserId != currentUser.uid) {
-              _lastUserId = currentUser.uid;
-              AnalyticsService.instance.setUser(currentUser.uid);
-              // Önce engelleme kontrolü yap
-              _checkAndHandleBlockedUser(currentUser.uid).then((isBlocked) {
-                // Engellenmemişse bildirim servisini başlat
-                if (!isBlocked && mounted && _lastUserId == currentUser.uid) {
-                  _initializeNotificationService(currentUser.uid);
-                }
-              });
-            }
+            _onUserChanged(currentUser.uid);
             return const HomeScreen();
           }
           return const AuthScreen();
@@ -845,18 +856,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // Kullanıcı giriş yapmış
         if (snapshot.hasData && snapshot.data != null) {
           final currentUserId = snapshot.data!.uid;
-          // Kullanıcı değiştiyse _lastUserId'yi güncelle ve bildirim servisini başlat
-          if (_lastUserId != currentUserId) {
-            _lastUserId = currentUserId;
-            AnalyticsService.instance.setUser(currentUserId);
-            // Önce engelleme kontrolü yap
-            _checkAndHandleBlockedUser(currentUserId).then((isBlocked) {
-              // Engellenmemişse bildirim servisini başlat
-              if (!isBlocked && mounted && _lastUserId == currentUserId) {
-                _initializeNotificationService(currentUserId);
-              }
-            });
-          }
+          _onUserChanged(currentUserId);
           _log('User logged in: ${snapshot.data!.email}');
           // Herkes normal ekrana gider, yönetici paneline geçiş butonu HomeScreen'de olacak
           return const HomeScreen();
@@ -865,18 +865,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // Stream null döndüyse, mevcut kullanıcıyı tekrar kontrol et
         final currentUser = _authService.currentUser;
         if (currentUser != null) {
-          // Kullanıcı varsa ama stream henüz güncellenmemiş
-          if (_lastUserId != currentUser.uid) {
-            _lastUserId = currentUser.uid;
-            AnalyticsService.instance.setUser(currentUser.uid);
-            // Önce engelleme kontrolü yap
-            _checkAndHandleBlockedUser(currentUser.uid).then((isBlocked) {
-              // Engellenmemişse bildirim servisini başlat
-              if (!isBlocked && mounted && _lastUserId == currentUser.uid) {
-                _initializeNotificationService(currentUser.uid);
-              }
-            });
-          }
+          _onUserChanged(currentUser.uid);
           return const HomeScreen();
         }
         

@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'notification_settings_screen.dart';
+import '../widgets/app_snack_bar.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -64,35 +65,12 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          key: UniqueKey(),
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: backgroundColor,
-        duration: duration,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        elevation: 6,
-      ),
+    AppSnackBar.show(
+      context: context,
+      message: message,
+      icon: icon,
+      backgroundColor: backgroundColor,
+      duration: duration,
     );
   }
 

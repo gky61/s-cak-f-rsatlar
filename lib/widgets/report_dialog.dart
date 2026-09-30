@@ -3,6 +3,7 @@ import '../services/report_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'guest_login_bottom_sheet.dart';
+import 'app_snack_bar.dart';
 
 class ReportDialog extends StatefulWidget {
   final String reportedId;
@@ -155,19 +156,10 @@ class _ReportDialogState extends State<ReportDialog> {
       setState(() => _isLoading = false);
       if (success) {
         Navigator.pop(context); // Dialog'u kapat
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              key: UniqueKey(),
-              children: const [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Expanded(child: Text('Bildiriminiz incelenmek üzere alındı. Teşekkür ederiz.')),
-              ],
-            ),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppSnackBar.showPostPop(
+          message: 'Bildiriminiz incelenmek üzere alındı. Teşekkür ederiz.',
+          icon: Icons.check_circle_rounded,
+          backgroundColor: const Color(0xFF10B981),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

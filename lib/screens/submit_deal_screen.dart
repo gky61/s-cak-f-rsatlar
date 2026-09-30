@@ -22,6 +22,7 @@ import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/store_price_badge.dart';
 import 'deal_detail_screen.dart';
 import '../widgets/deal_restriction_bottom_sheet.dart';
+import '../widgets/app_snack_bar.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -248,36 +249,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          key: UniqueKey(),
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: backgroundColor,
-        duration: duration,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        elevation: 6,
-        action: action,
-      ),
+    AppSnackBar.show(
+      context: context,
+      message: message,
+      icon: icon,
+      backgroundColor: backgroundColor,
+      duration: duration,
+      action: action,
     );
   }
 
@@ -1054,7 +1032,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         if (mounted) {
           Navigator.pop(context);
           final isDirectlyApproved = submitResult?.isApproved == true;
-          _showCustomSnackBar(
+          AppSnackBar.showPostPop(
             message: isDirectlyApproved
                 ? '🎉 Fırsatınız paylaşıldı ve anında yayına alındı!'
                 : '🎉 Fırsatınız paylaşıldı ve incelemeye alındı! Onaylandıktan sonra yayına girecektir. Durumunu profilinizden takip edebilirsiniz.',
@@ -1258,7 +1236,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       return _buildGuestLoginView(isDark);
     }
 
-    return Scaffold(
+    return ScaffoldMessenger(
+      child: Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
@@ -1363,94 +1342,97 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           },
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // --- GUEST LOGIN PROMPT ---
   Widget _buildGuestLoginView(bool isDark) {
-    return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(
-          'Fırsat Paylaş',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+    return ScaffoldMessenger(
+      child: Scaffold(
+        backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: Text(
+            'Fırsat Paylaş',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+            ),
           ),
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.transparent,
         ),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.local_fire_department_rounded,
-                  size: 40,
-                  color: AppTheme.primary,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Fırsat Paylaşmak İçin Giriş Yap',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                  letterSpacing: -0.4,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Yakaladığınız indirimleri FırsatKolik topluluğuyla paylaşarak sıcak fırsatları herkese duyurun.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.45,
-                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    showGuestLoginBottomSheet(
-                      context,
-                      title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
-                      message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
-                      primaryButtonText: '🚀 Google ile Giriş Yap',
-                      onLoginSuccess: () => setState(() {}),
-                    );
-                  },
-                  icon: const Icon(Icons.login_rounded, size: 18),
-                  label: const Text(
-                    'Giriş Yap ve Paylaş',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 3,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  child: const Icon(
+                    Icons.local_fire_department_rounded,
+                    size: 40,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Fırsat Paylaşmak İçin Giriş Yap',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Yakaladığınız indirimleri FırsatKolik topluluğuyla paylaşarak sıcak fırsatları herkese duyurun.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      showGuestLoginBottomSheet(
+                        context,
+                        title: 'Fırsat Paylaşmak İçin Giriş Yap! 🚀',
+                        message: 'Yakaladığın harika fırsatı tüm toplulukla paylaşmak için hızlıca giriş yap.',
+                        primaryButtonText: '🚀 Google ile Giriş Yap',
+                        onLoginSuccess: () => setState(() {}),
+                      );
+                    },
+                    icon: const Icon(Icons.login_rounded, size: 18),
+                    label: const Text(
+                      'Giriş Yap ve Paylaş',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -27,6 +27,7 @@ import '../widgets/admin_reports_list.dart';
 import '../widgets/admin_expired_deals_view.dart';
 import 'notification_debug_screen.dart';
 import '../services/affiliate/affiliate_service.dart';
+import '../widgets/app_snack_bar.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -153,21 +154,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     if (!isAdmin) {
       _log('🚫 AdminScreen: Yetkisiz erişim teşebbüsü engellendi.');
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            key: UniqueKey(),
-            children: const [
-              Icon(Icons.security, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text('Bu sayfaya erişim yetkiniz bulunmamaktadır.'),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.red[700],
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppSnackBar.showPostPop(
+        message: 'Bu sayfaya erişim yetkiniz bulunmamaktadır.',
+        icon: Icons.security,
+        backgroundColor: Colors.red[700] ?? Colors.red,
       );
       return;
     }

@@ -5,6 +5,7 @@ import '../models/kupon.dart';
 import '../services/kupon_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
+import '../widgets/app_snack_bar.dart';
 
 class KuponFormPage extends StatefulWidget {
   final String userId;
@@ -85,35 +86,12 @@ class _KuponFormPageState extends State<KuponFormPage> {
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          key: UniqueKey(),
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: backgroundColor,
-        duration: duration,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        elevation: 6,
-      ),
+    AppSnackBar.show(
+      context: context,
+      message: message,
+      icon: icon,
+      backgroundColor: backgroundColor,
+      duration: duration,
     );
   }
 
@@ -168,7 +146,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
 
       if (mounted) {
         Navigator.pop(context);
-        _showCustomSnackBar(
+        AppSnackBar.showPostPop(
           message: widget.kupon != null
               ? '🎉 Kupon başarıyla güncellendi!'
               : '🎉 Kupon başarıyla paylaşıldı!',
@@ -200,7 +178,8 @@ class _KuponFormPageState extends State<KuponFormPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
 
-    return Scaffold(
+    return ScaffoldMessenger(
+      child: Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
@@ -522,8 +501,9 @@ class _KuponFormPageState extends State<KuponFormPage> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // Helper Notched Card Container (Fieldset Style)
   Widget _buildNotchedCardContainer({
