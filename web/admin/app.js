@@ -14847,7 +14847,7 @@ window.removeTelegramChannel = async function(channelInput) {
 // ---------- Clean VM Trigger from Bot View ----------
 
 window.triggerCleanVmFromBotView = async function() {
-    if (!confirm('Sunucu bellek ve performans temizliğini başlatmak istediğinize emin misiniz?')) return;
+    if (!confirm('Canlı bot bellek optimizasyonu ve V8 Garbage Collector başlatmak istediğinize emin misiniz? (Bağlantı kesilmez)')) return;
 
     const btn = document.getElementById('botDetailCleanVmBtn');
     if (btn) btn.disabled = true;
@@ -14858,13 +14858,14 @@ window.triggerCleanVmFromBotView = async function() {
         }, { merge: true });
 
         if (typeof showSuccess === 'function') {
-            showSuccess('Sunucu temizlik komutu gönderildi. Sonuçlar terminal konsolunda görünecek.');
+            showSuccess('Bot bellek optimizasyon komutu iletildi. Canlı V8 telemetrisi terminal konsolunda görüntüleniyor.');
         }
     } catch (e) {
-        if (btn) btn.disabled = false;
         if (typeof showError === 'function') {
-            showError('Temizlik başlatılamadı: ' + e.message);
+            showError('Optimizasyon başlatılamadı: ' + e.message);
         }
+    } finally {
+        setTimeout(() => { if (btn) btn.disabled = false; }, 3000);
     }
 };
 

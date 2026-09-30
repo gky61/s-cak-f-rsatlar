@@ -1,15 +1,12 @@
-#!/usr/bin/env python3
-"""
-FırsatKolik GCP VM (telegram-bot-server) Manuel Temizlik Scripti
-Kullanım: python cloud-run-bot/clean_vm.py
-"""
-
+import os
 import subprocess
 import sys
 import io
 
 # Force UTF-8 stdout encoding for Windows compatibility
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# Ensure gcloud uses current Python interpreter on Windows
+os.environ["CLOUDSDK_PYTHON"] = sys.executable
 
 VM_NAME = "telegram-bot-server"
 ZONE = "us-central1-a"

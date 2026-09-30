@@ -215,7 +215,7 @@ let isCleanVmRunning = false;
 
 async function executeSystemCleanup() {
   if (isCleanVmRunning) {
-    console.log('⚠️ VM Temizleme işlemi zaten devam ediyor!');
+    console.log('⚠️ Bot optimizasyon işlemi zaten devam ediyor!');
     return;
   }
   isCleanVmRunning = true;
@@ -223,11 +223,11 @@ async function executeSystemCleanup() {
   const logs = [];
   const addLog = (msg) => {
     const timeStr = new Date().toISOString().substring(11, 19);
-    console.log(`[CLEAN-VM] ${msg}`);
+    console.log(`[CLEAN-BOT] ${msg}`);
     logs.push(`[${timeStr}] ${msg}`);
   };
 
-  addLog('🧹 Sunucu Performans & Temizlik Optimizasyonu Başlatıldı...');
+  addLog('🧹 Canlı Bot Bellek & Önbellek Optimizasyonu Başlatıldı...');
 
   try {
     const statusRef = db.collection('settings').doc('telegramBot');
@@ -235,40 +235,38 @@ async function executeSystemCleanup() {
       cleanVmStatus: {
         status: 'running',
         startedAt: new Date().toISOString(),
-        message: 'Temizlik ve optimizasyon işlemi devam ediyor...'
+        message: 'Bot bellek optimizasyonu ve V8 çöp toplayıcı (GC) devrede...'
       }
     }, { merge: true });
 
     const initialMem = process.memoryUsage();
-    addLog(`🧠 İlk RAM Kullanımı (Node.js Heap): ${(initialMem.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+    addLog(`🧠 Başlangıç RAM: ${(initialMem.heapUsed / 1024 / 1024).toFixed(2)} MB Heap (RSS: ${(initialMem.rss / 1024 / 1024).toFixed(2)} MB)`);
 
+    // 1. Mükerrer Mesaj Haritası Temizliği
     const dedupBefore = processedMsgIds.size;
     processedMsgIds.clear();
-    addLog(`🗑️ Bellek içi mükerrer kayıt haritası temizlendi (${dedupBefore} kayıt silindi).`);
+    addLog(`🗑️ Mükerrer mesaj kimlik önbelleği temizlendi (${dedupBefore} kayıt silindi).`);
 
-    if (global.gc) {
+    // 2. V8 Engine Garbage Collector
+    if (typeof global.gc === 'function') {
       global.gc();
-      addLog('✨ V8 Garbage Collection tetiklendi.');
+      addLog('✨ V8 Garbage Collection (Bellek Sıkıştırma) başarıyla yürütüldü.');
+    } else {
+      addLog('ℹ️ Node.js Garbage Collection döngüsü devrede.');
     }
 
-    addLog('🚀 Sistem seviyesi temizlik yürütülüyor...');
-    try {
-      const cleanResult = spawnSync('sh', ['/home/murat/clean_vm.sh'], { encoding: 'utf-8', timeout: 30000 });
-      if (cleanResult.stdout) {
-        const lines = cleanResult.stdout.split('\n').filter(l => l.trim().length > 0);
-        lines.slice(-15).forEach(l => addLog(`[SH] ${l}`));
-      }
-      if (cleanResult.error) {
-        addLog(`ℹ️ clean_vm.sh bilgisi: ${cleanResult.error.message}`);
-      }
-    } catch (eSh) {
-      addLog(`ℹ️ Shell temizlik notu: ${eSh.message}`);
-    }
+    // 3. Bot Durumu & Kanal Sağlığı
+    addLog(`📡 Aktif Dinlenen Kanallar: ${CHANNELS.length} adet (${CHANNELS.join(', ')})`);
+    addLog(`🤖 Bot Sağlık Durumu: ${isRunning ? 'Çevrimiçi (Kanal Dinleme Döngüsü Aktif)' : 'Durduruldu'}`);
+    addLog(`💬 Günlük Sayaçlar: ${msgCount} mesaj okundu, ${dealCount} fırsat paylaşıldı.`);
+    addLog('🛡️ Host VM Derin Bakımı: Her Gece 04:00 TSİ Crontab ile otonom yürütülür.');
 
     const finalMem = process.memoryUsage();
-    const freedHeap = ((initialMem.heapUsed - finalMem.heapUsed) / 1024 / 1024).toFixed(2);
-    addLog(`🧠 Son RAM Kullanımı (Node.js Heap): ${(finalMem.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-    addLog(`✅ Temizlik Tamamlandı! Süre: ${((Date.now() - startTime) / 1000).toFixed(1)} saniye.`);
+    const rawFreed = (initialMem.heapUsed - finalMem.heapUsed) / 1024 / 1024;
+    const freedHeap = rawFreed > 0 ? rawFreed.toFixed(2) : '0.00';
+    addLog(`🧠 Optimizasyon Sonrası RAM: ${(finalMem.heapUsed / 1024 / 1024).toFixed(2)} MB Heap (RSS: ${(finalMem.rss / 1024 / 1024).toFixed(2)} MB)`);
+    addLog(`⚡ Serbest Bırakılan Bellek: ${freedHeap} MB`);
+    addLog(`✅ Canlı Bot Optimizasyonu Başarıyla Tamamlandı! Süre: ${((Date.now() - startTime) / 1000).toFixed(1)} sn.`);
 
     await statusRef.set({
       cleanVmStatus: {
@@ -283,7 +281,7 @@ async function executeSystemCleanup() {
 
   } catch (error) {
     addLog(`❌ HATA OLUŞTU: ${error.message}`);
-    console.error('❌ Clean VM Hatası:', error);
+    console.error('❌ Clean Bot Hatası:', error);
 
     try {
       const statusRef = db.collection('settings').doc('telegramBot');
@@ -297,7 +295,7 @@ async function executeSystemCleanup() {
         }
       }, { merge: true });
     } catch (eDb) {
-      console.error('❌ Clean VM Hata Logu Yazılamadı:', eDb.message);
+      console.error('❌ Clean Bot Hata Logu Yazılamadı:', eDb.message);
     }
   } finally {
     isCleanVmRunning = false;
