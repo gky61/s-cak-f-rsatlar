@@ -298,28 +298,18 @@ class HepsiburadaScraper extends BaseProductScraper {
   _isIgnoredHbTag(tag) {
     if (!tag) return false;
     const lower = tag.toLowerCase().trim();
-    return lower.includes('premium-a-gec') ||
-           lower.includes('premiuma-gec') ||
-           lower.includes('premium-gec') ||
-           lower.includes('premiuma-gecis') ||
-           lower.includes('ilk-siparis') ||
+    // Yalnızca kişiye özel yeni üye / ilk sipariş kuponlarını hariç tutar,
+    // Hepsiburada'nın tüm Premium ve sepete özel kampanya etiketlerini kabul eder.
+    return lower.includes('ilk-siparis') ||
            lower.includes('yeni-uye');
   }
 
   _isValidPremiumCampaignResult(premiumResult) {
     if (!premiumResult) return false;
-    const campaigns = premiumResult['campaigns'];
-    if (Array.isArray(campaigns) && campaigns.length > 0) {
-      for (const camp of campaigns) {
-        if (camp && typeof camp === 'object') {
-          const name = (camp['name'] || '').toString().toLowerCase();
-          if (name.includes("premium'a geç") ||
-              name.includes("premiuma geç") ||
-              name.includes("premium'a katıl") ||
-              name.includes("premiuma katıl")) {
-            return false;
-          }
-        }
+    if (typeof premiumResult === 'object') {
+      const p = parseFloat(premiumResult['discountedPrice']?.toString() || '');
+      if (!isNaN(p) && p > 0) {
+        return true;
       }
     }
     return true;

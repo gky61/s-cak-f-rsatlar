@@ -58,13 +58,41 @@ abstract class BaseProductScraper {
         
     if (cleaned.isEmpty) return null;
     
-    if (cleaned.contains('.') && cleaned.contains(',')) {
-      cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+    final hasDot = cleaned.contains('.');
+    final hasComma = cleaned.contains(',');
+
+    if (hasDot && hasComma) {
+      final lastDotIndex = cleaned.lastIndexOf('.');
+      final lastCommaIndex = cleaned.lastIndexOf(',');
+      if (lastCommaIndex > lastDotIndex) {
+        // Türkçe format: 1.234,56 veya 1.234.567,89 -> noktalar binlik, virgül ondalık
+        cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
+      } else {
+        // Uluslararası/ABD formatı: 1,234.56 veya 1,234,567.89 -> virgüller binlik, nokta ondalık
+        cleaned = cleaned.replaceAll(',', '');
+      }
     } else if (cleaned.contains(',')) {
-      cleaned = cleaned.replaceAll(',', '.');
+      final parts = cleaned.split(',');
+      if (parts.length == 2) {
+        // Örn: 6,447 (binlik basamağı) -> 6447, ama 6,44 veya 6,4 veya 423,99 -> 423.99
+        if (parts[1].length == 3 && parts[0].isNotEmpty && parts[0].length <= 3) {
+          cleaned = cleaned.replaceAll(',', '');
+        } else {
+          cleaned = cleaned.replaceAll(',', '.');
+        }
+      } else {
+        // Çoklu virgül örn: 1,234,567
+        cleaned = cleaned.replaceAll(',', '');
+      }
     } else if (cleaned.contains('.')) {
       final parts = cleaned.split('.');
-      if (parts.length == 2 && parts[1].length == 3) {
+      if (parts.length == 2) {
+        // Örn: 1.798 (binlik basamağı) -> 1798, ama 263.84 veya 12.5 -> ondalık (263.84)
+        if (parts[1].length == 3 && parts[0].isNotEmpty && parts[0].length <= 3) {
+          cleaned = cleaned.replaceAll('.', '');
+        }
+      } else {
+        // Çoklu nokta örn: 1.234.567
         cleaned = cleaned.replaceAll('.', '');
       }
     }

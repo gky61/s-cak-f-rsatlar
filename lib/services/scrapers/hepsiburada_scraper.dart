@@ -329,28 +329,18 @@ class HepsiburadaScraper extends BaseProductScraper {
 
   bool _isIgnoredHbTag(String tag) {
     final lower = tag.toLowerCase().trim();
-    return lower.contains('premium-a-gec') ||
-           lower.contains('premiuma-gec') ||
-           lower.contains('premium-gec') ||
-           lower.contains('premiuma-gecis') ||
-           lower.contains('ilk-siparis') ||
+    // Yalnızca kişiye özel yeni üye / ilk sipariş kuponlarını hariç tutar,
+    // Hepsiburada'nın tüm Premium ve sepete özel kampanya etiketlerini kabul eder.
+    return lower.contains('ilk-siparis') ||
            lower.contains('yeni-uye');
   }
 
   bool _isValidPremiumCampaignResult(dynamic premiumResult) {
     if (premiumResult == null) return false;
-    final campaigns = premiumResult['campaigns'] as List?;
-    if (campaigns != null && campaigns.isNotEmpty) {
-      for (final camp in campaigns) {
-        if (camp is Map) {
-          final name = (camp['name'] ?? '').toString().toLowerCase();
-          if (name.contains("premium'a geç") ||
-              name.contains("premiuma geç") ||
-              name.contains("premium'a katıl") ||
-              name.contains("premiuma katıl")) {
-            return false;
-          }
-        }
+    if (premiumResult is Map) {
+      final p = double.tryParse(premiumResult['discountedPrice']?.toString() ?? '');
+      if (p != null && p > 0) {
+        return true;
       }
     }
     return true;

@@ -44,9 +44,8 @@ class BaseProductScraper {
   /** Fiyat metnini temizleyip float değere dönüştürür */
   parsePriceText(priceText) {
     if (!priceText) return null;
-    // Dart birebir eşdeğeri: replaceAll case-sensitive, tüm virgüller global replace
     let cleaned = priceText
-      .replace(/TL/g, '')     // Dart: replaceAll('TL', '') — case-sensitive
+      .replace(/TL/g, '')
       .replace(/₺/g, '')
       .replace(/\$/g, '')
       .replace(/€/g, '')
@@ -55,15 +54,40 @@ class BaseProductScraper {
 
     if (!cleaned) return null;
 
-    if (cleaned.includes('.') && cleaned.includes(',')) {
-      // Dart: replaceAll('.','').replaceAll(',','.') — tüm nokta ve virgüller
-      cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
-    } else if (cleaned.includes(',')) {
-      // Dart: replaceAll(',','.') — tüm virgüller
-      cleaned = cleaned.replace(/,/g, '.');
-    } else if (cleaned.includes('.')) {
+    const hasDot = cleaned.includes('.');
+    const hasComma = cleaned.includes(',');
+
+    if (hasDot && hasComma) {
+      const lastDotIndex = cleaned.lastIndexOf('.');
+      const lastCommaIndex = cleaned.lastIndexOf(',');
+      if (lastCommaIndex > lastDotIndex) {
+        // TR Format: 1.234,56 veya 1.234.567,89 -> noktalar binlik, virgül ondalık
+        cleaned = cleaned.replace(/\./g, '').replace(/,/g, '.');
+      } else {
+        // US Format: 1,234.56 veya 1,234,567.89 -> virgüller binlik, nokta ondalık
+        cleaned = cleaned.replace(/,/g, '');
+      }
+    } else if (hasComma) {
+      const parts = cleaned.split(',');
+      if (parts.length === 2) {
+        if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3) {
+          // Binlik ayırıcı (örn. 6,447 -> 6447)
+          cleaned = cleaned.replace(/,/g, '');
+        } else {
+          // Ondalık ayırıcı (örn. 423,99 -> 423.99)
+          cleaned = cleaned.replace(/,/g, '.');
+        }
+      } else {
+        cleaned = cleaned.replace(/,/g, '');
+      }
+    } else if (hasDot) {
       const parts = cleaned.split('.');
-      if (parts.length === 2 && parts[1].length === 3) {
+      if (parts.length === 2) {
+        if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3) {
+          // Binlik ayırıcı (örn. 1.798 -> 1798)
+          cleaned = cleaned.replace(/\./g, '');
+        }
+      } else {
         cleaned = cleaned.replace(/\./g, '');
       }
     }
