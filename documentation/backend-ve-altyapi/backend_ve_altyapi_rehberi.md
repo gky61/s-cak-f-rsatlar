@@ -1,7 +1,8 @@
 # ⚡ FırsatKolik — Backend ve Bulut Altyapısı Master Mimari Rehberi
 
 > [!IMPORTANT]
-> **Base Doküman & Altyapı Kontratı:** Bu doküman, FırsatKolik platformunun backend, bulut fonksiyonları, veritabanı kuralları, ortam yönetimi ve sunucu altyapısını yöneten **ana orkestratör (Base Contract)** dokümandır. Her bir alt mimarinin ayrıntılı teknik referansları ilgili bölümlerde doğrudan bağlantılanmıştır.
+> **Base Doküman & Altyapı Kontratı:** Bu doküman, FırsatKolik platformunun backend, bulut fonksiyonları, veritabanı kuralları, ortam yönetimi ve sunucu altyapısını yöneten **ana orkestratör (Base Contract)** dokümandır.
+> Sistemin tüm katmanlarındaki kritik risk ve felaket senaryoları analizi için lütfen **[Felaket Senaryoları ve Sistem Güvenlik Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/felaket_senaryolari_ve_sistem_guvenlik_rehberi.md)** dokümanını inceleyiniz.
 
 Bu doküman; **FırsatKolik** platformunun sunucu (Firebase Cloud Functions v1/v2), veritabanı (Cloud Firestore), dosya depolama (Firebase Storage), kimlik doğrulama (Firebase Auth), anlık bildirim (FCM v1), güvenlik katmanı (Firestore & Storage Security Rules, App Check), ortam yönetimi (DEV vs PROD Flavors), Compute Engine VM bot sunucusu ve sıfır maliyet mimarisini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
 
@@ -74,32 +75,32 @@ Tüm backend fonksiyonları [functions/index.js](file:///d:/firsatkolik/function
 | # | Fonksiyon Adı | Tetikleyici Türü | Çağrıldığı / Tetiklendiği Yer | Sorumluluk ve Çalışma Mantığı |
 |---|---|---|---|---|
 | 1 | **`onDealCreated`** | Firestore `deals/{dealId}` (onCreate) | Mobil Paylaşım, Bot, Web Admin | Küfür/profanity moderasyonu yapar. Fırsat onaysız ise `admin_deals` FCM konusuna admin bildirimi gönderir. Onaylıysa bildirimleri üretir (`matchAndCreateDealNotifications`). |
-| 2 | **`onDealUpdated`** | Firestore `deals/{dealId}` (onUpdate) | Admin Onay/Düzenleme, Oylama | `isApproved: false ➔ true` olduğunda herkese bildirim üretir. Kullanıcı paylaşımı onaylandığında/reddedildiğinde `submission_status` bildirimi yazar. |
+| 2 | **`onDealUpdated`** | Firestore `deals/{dealId}` (onUpdate) | Admin Onay/Düzenleme, Oylama | `!wasApproved && isNowApproved` geçişinde herkese bildirim üretir. Kullanıcı paylaşımı onaylandığında/reddedildiğinde `submission_status` yazar. Bot fırsatı oylarında gereksiz kullanıcı profili yazmasını engelleyerek kota korur. |
 | 3 | **`onCommentCreated`** | Firestore `deals/{id}/comments/{id}` (onCreate) | Detay Ekranı Yorum Alanı | Yorum moderasyonu yapar. İlanın `commentCount` sayacını atomik artırır. Yanıt ise alıcıya `comment_reply` bildirimi oluşturur. |
-| 4 | **`onAdminMessageCreated`** | Firestore `adminMessages/{id}` (onCreate) | Web Admin Paneli Duyuruları | Admin panelinden kullanıcıya mesaj atıldığında `users/{uid}/notifications/admin_msg_{id}` dokümanı yazar. |
+| 4 | **`onAdminMessageCreated`** | Firestore `adminToUserMessages/{id}` (onCreate) | Web Admin Paneli Duyuruları | Admin panelinden kullanıcıya bireysel mesaj atıldığında `users/{uid}/notifications` dokümanı yazar (Çift kalkan deduplication ve içerik fallback korumalı). |
 | 5 | **`onUserMessageCreated`** | Firestore `messages/{id}` (onCreate) | Birebir Sohbet Ekranı | Birebir sohbette yeni mesaj geldiğinde alıcının cihazlarına **Data-Only Payload** iletir (Aktif sohbette bildirimi bastırır). |
 | 6 | **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | Merkezi Push Motoru | Sistem şalteri, sessiz saatler, kategori limitleri, kullanıcı tercihleri ve cihaz token kontrollerini yaparak FCM push gönderir. |
-| 7 | **`onUserUpdated`** | Firestore `users/{userId}` (onUpdate) | Profil Düzenleme | Kullanıcı profil resmi veya kullanıcı adı değiştiğinde yorumlar ve mesajlardaki denormalize verileri senkronize eder. |
-| 8 | **`onUserDeleted`** | Auth `user().onDelete` | Kullanıcı Hesabı Silme | Kullanıcı silindiğinde `userDevices`, `notificationSubscriptions`, `notifications` ve `notificationPreferences` verilerini kalıcı temizler. |
-| 9 | **`resolveShortLink`** | HTTPS Request (`onRequest`) | Flutter App & Web Admin | Kısa linkleri ve yönlendirmeleri (redirect) takip ederek gerçek son URL'yi çözer. |
-| 10 | **`onCouponCreated`** | Firestore `coupons/{couponId}` (onCreate) | Kupon Paylaşımı & Bot | Yeni indirim kuponu oluşturulduğunda doğrular ve ilgili kullanıcılara kupon bildirimi tetikler. |
-| 11 | **`sendManualNotification`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Admin panelinden tüm kullanıcılara, belirli bir kullanıcıya veya cihaza anlık push gönderir; log ve istatistik üretir. |
-| 12 | **`cleanupInvalidTokens`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | `userDevices` içerisindeki aktif FCM token'ları `dryRun: true` ile test ederek geçersiz olanları `active: false` yapar. |
-| 13 | **`cleanupExpiredDeals`** | Scheduled Cron (`0 3 * * *` - Gece 03:00) | GCP Cloud Scheduler | 48 saati dolduran fırsatları bulur; dokümanı **SİLMEZ**, sadece `isExpired: true` olarak işaretler (Soft-Expire). |
-| 14 | **`cleanupExpiredDealsManual`** | HTTPS Request (`onRequest`) | Manuel HTTP Endpoint | 48 saatlik soft-expire işlemini cron saatini beklemeden manuel test etmek için kullanılır. |
-| 15 | **`purgeOldDeals`** | Scheduled Cron (`0 4 * * 0` - Pazar 04:00) | GCP Cloud Scheduler | **30 Günlük Derin Temizlik:** 30 günden eski fırsatları, yorumları, favorileri ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) 30 günü geçmiş bildirimleri** 400'lük batch parçalarıyla kalıcı siler. |
-| 16 | **`purgeOldDealsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli & Scriptler | 30 günlük derin temizliği (fırsatlar + eski bildirimler) admin yetkisiyle manuel tetikler. |
-| 17 | **`purgeOldNotificationsManual`** | HTTPS Callable (`onCall`) | Web Admin & Scriptler | Fırsatlara dokunmadan, yalnızca `collectionGroup('notifications')` koleksiyonundaki 30+ günlük bildirim dokümanlarını toplu siler. |
-| 18 | **`cleanupOldImages`** | Scheduled Cron (`0 0 * * *` - Gece 00:00) | GCP Cloud Scheduler | Firebase Storage `deals/` dizinindeki 30 günden eski sahipsiz/çöp görselleri temizler. |
-| 19 | **`cleanupOldImagesManual`** | HTTPS Request (`onRequest`) | Manuel HTTP Endpoint | Storage görsel temizliğini anlık olarak test etmek için kullanılır. |
-| 20 | **`adminDeleteUser`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Admin panelinden seçilen kullanıcının hem Firebase Auth hesabını hem de Firestore profilini kalıcı siler. |
-| 21 | **`generateTestData`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Geliştirme ortamı için `isTest: true` bayraklı sahte fırsatlar ve kategoriler üretir. |
-| 22 | **`cleanupTestData`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | `isTest: true` bayraklı sahte verileri tek işlemle temizler. |
-| 23 | **`scrapeCouponsScheduled`** | Scheduled Cron (Her 6 saatte bir) | GCP Cloud Scheduler | Kupon kaynaklarını otonom tarayarak güncel indirim kodlarını veritabanına ekler. |
-| 24 | **`scrapeCouponsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Kupon kazıma botunu admin panelinden manuel tetikler. |
-| 25 | **`scrapeCatalogsScheduled`** | Scheduled Cron (Her 12 saatte bir) | GCP Cloud Scheduler | Market aktüel afiş ve kataloglarını otonom tarar. |
-| 26 | **`scrapeCatalogsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Broşür kazıma botunu admin panelinden manuel tetikler. |
-| 27 | **`getObservabilityMetrics`** | HTTPS Callable (`onCall`) | Web Admin (`observability_manager.js`) | Web Admin Modül 11 için GA4 Data API ve telemetri verilerini güvenle çeker. |
+| 7 | **`onUserUpdated`** | Firestore `users/{userId}` (onUpdate) | Profil Düzenleme | Profil resmi veya kullanıcı adı değiştiğinde yorumlar, mesajlar ve fırsatlardaki denormalize verileri senkronize eder (Limit 300, no-op eleme ve izole batching korumalı). |
+| 8 | **`onUserDeleted`** | Auth `user().onDelete` | Kullanıcı Hesabı Silme | KVKK/GDPR tam uyumlu: Kullanıcı silindiğinde cihazlar, abonelikler, fırsatlar (alt yorumlar ve Storage görselleri dahil), yorumlar, mesajlar, raporlar ve profil alt koleksiyonlarını 400'lük döngüsel batch'lerle kalıcı temizler (500 batch limit korumalı). |
+| 9 | **`resolveShortLink`** | HTTPS Request (`onRequest`) | Flutter App & Web Admin | Kısa linkleri ve yönlendirmeleri (redirect) takip ederek gerçek son URL'yi çözer (Kurumsal düzey SSRF engelleme, döngüsel redirect tespiti, RFC 3986 göreli URL ve HEAD->GET otomatik fallback korumalı). |
+| 10 | **`onCouponCreated`** | Firestore `kuponlar/{kuponId}` (onCreate) | Kupon Paylaşımı & Bot | Yeni indirim kuponu oluşturulduğunda küfür/argo moderasyonu yapar, mağaza/yazar aboneliği ve 300 aktif kullanıcı tavanıyla (120s timeout / 512MB RAM) kaskat çökme ve zaman aşımını önler. |
+| 11 | **`sendManualNotification`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Admin panelinden tüm kullanıcılara Topic yayını (`sicak_firsatlar_general_v2`) ile anlık teslimat sağlar, bildirim kutusu yazımını 500 aktif kullanıcı ile sınırlar (300s timeout / 512MB RAM, APNs alert ve header tam uyumlu). |
+| 12 | **`cleanupInvalidTokens`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | `userDevices` içerisindeki aktif FCM token'ları `dryRun: true` ile test ederek geçersiz olanları pasife alır (20'li eşzamanlılık havuzlama, FCM hata kodları ve 400'lük atomik batch güncelleme korumalı). |
+| 13 | **`cleanupExpiredDeals`** | Scheduled Cron (`0 3 * * *` - Gece 03:00) | GCP Cloud Scheduler | 48 saati dolduran fırsatları bulur; dokümanı **SİLMEZ**, sadece `isExpired: true` olarak işaretler (Bileşik indeksli ve 7 günlük bounded fallback korumalı). |
+| 14 | **`cleanupExpiredDealsManual`** | HTTPS Request (`onRequest`) | Manuel HTTP Endpoint | 48 saatlik soft-expire işlemini manuel test eder; yönetici kimlik doğrulaması (`_verifyAdminOrInternalSecret`) ve 60 saniyelik debounce DoS kalkanı içerir. |
+| 15 | **`purgeOldDeals`** | Scheduled Cron (`0 4 * * 0` - Pazar 04:00) | GCP Cloud Scheduler | **30 Günlük Derin Temizlik:** 30 günden eski fırsatları, yorumları, oyları, Storage görsellerini ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) bildirimleri** 400'lük batch parçalarıyla kalıcı siler (Kullanıcı favorileri lazy self-healing olarak temizlenir). |
+| 16 | **`purgeOldDealsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli & Scriptler | 30 günlük derin temizliği (fırsatlar + eski bildirimler) admin yetkisiyle manuel tetikler (Opsiyonel `days` parametresi). |
+| 17 | **`purgeOldNotificationsManual`** | HTTPS Callable (`onCall`) | Web Admin & Scriptler | Fırsatlara dokunmadan, yalnızca `collectionGroup('notifications')` koleksiyonundaki 30+ günlük bildirim dokümanlarını 10.000 tavanlı devre kesici ile toplu siler. |
+| 18 | **`cleanupOldImages`** | Scheduled Cron (`0 0 * * *` - Gece 00:00) | GCP Cloud Scheduler | Firebase Storage `deals/` dizinindeki 40 günden eski sahipsiz/çöp görselleri 10'arlı paralel chunk'lar halinde temizler (Kırık görsel koruması). |
+| 19 | **`cleanupOldImagesManual`** | HTTPS Request (`onRequest`) | Manuel HTTP Endpoint | Storage görsel temizliğini manuel test eder; yönetici kimlik doğrulaması, 35 gün katı alt sınır güvenlik mandalı (`Math.max(35, days)`) ile canlı görsel koruması ve 1000 dosya tavanı sunar. |
+| 20 | **`adminDeleteUser`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Admin yetkisiyle kullanıcı siler; kendi hesabını ve diğer yöneticileri silme koruması, Auth desenkronizasyonunda sahipsiz Firestore verilerini 400'lük batch'lerle kaskat temizleme güvencesi sunar. |
+| 21 | **`generateTestData`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Test ortamı için sahte veri üretir; sıkı `dealsCount: [1, 10]` kotası, `@test.firsatkolik.com` e-posta zorunluluğu ve `isTest: true` izolasyonu barındırır. |
+| 22 | **`cleanupTestData`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Sahte test kullanıcılarını ve fırsatlarını temizler; indeksli kullanıcı sorgusu, döngüsel sahipsiz test fırsatları temizliği (%100 yok etme) ve 5'li eşzamanlılık havuzu içerir. |
+| 23 | **`scrapeCouponsScheduled`** | Scheduled Cron (`0 4 * * *` - Gece 04:00) | GCP Cloud Scheduler | Kupon kaynaklarını (DH, Kuponla, Kuponburada) otonom tarar; dağıtık mutex kilidi, yaz-sonra-sil güvencesi ve 400'lük batch parçalarıyla kaydeder. |
+| 24 | **`scrapeCouponsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Kupon kazıma botunu admin yetkisiyle anlık tetikler (Dağıtık mutex kilidi ile gece cron'u çakışması ve 429 WAF engeli önlenir). |
+| 25 | **`scrapeCatalogsScheduled`** | Scheduled Cron (`0 3 * * *` - Gece 03:00) | GCP Cloud Scheduler | 36 market afişini otonom tarar; atomic merge upsert ile sıfır kesinti sunar, yalnızca yayından kalkan eskimiş broşürleri 400 batch parçalarıyla temizler. |
+| 26 | **`scrapeCatalogsManual`** | HTTPS Callable (`onCall`) | Web Admin Paneli (`app.js`) | Broşür kazıma botunu admin yetkisiyle anlık tetikler (Dağıtık kilit korumalı ve 400 batch uyumlu). |
+| 27 | **`getObservabilityMetrics`** | HTTPS Callable (`onCall`) | Web Admin (`observability_manager.js`) | Web Admin Modül 11 için GA4 Data API ve telemetri verilerini güvenle çeker; çoklu admin alan doğrulaması, `.select()` hafif fırsat projeksiyonu ve GA4 graceful degradation içerir. |
 
 ---
 
@@ -217,9 +218,9 @@ Projenin başlangıcında Cloud Run üzerinde çalışan botların 7/24 açık k
 
 Veritabanı şişmesini ve maliyet artışını engellemek amacıyla 3 aşamalı yaşam döngüsü politikası uygulanır:
 
-1. **48 Saatlik Soft-Expire (`cleanupExpiredDeals`):** Her gece 03:00'da çalışır; 48 saatlik fırsatları `isExpired: true` yapar (doküman silinmez).
-2. **30 Günlük Hard-Purge (`purgeOldDeals`):** Her Pazar 04:00'da çalışır; 30 günden eski fırsatları, yorumları, favorileri ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) 30+ günlük bildirimleri** 400'lük batch parçalarıyla kalıcı siler.
-3. **Storage Çöp Toplayıcı (`cleanupOldImages`):** Her gece 00:00'da Firebase Storage `deals/` dizinindeki 30+ günlük eski resimleri siler.
+1. **48 Saatlik Soft-Expire (`cleanupExpiredDeals`):** Her gece 03:00'da çalışır; 48 saatlik fırsatları `isExpired: true` yapar (doküman silinmez). Firestore bileşik indeksi (`isExpired == false` ve `createdAt < 48h`) ve 7 günlük bounded fallback korumasıyla kotayı %99 korur.
+2. **30 Günlük Hard-Purge (`purgeOldDeals`):** Her Pazar 04:00'da çalışır; 30 günden eski fırsatları, yorumları, oyları, Storage görsellerini ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) 30+ günlük bildirimleri** 400'lük batch parçalarıyla kalıcı siler. $O(\text{Deals} \times \text{Users})$ favori tarama döngüsü kaldırılmıştır; favoriler mobil istemcide lazy self-healing olarak temizlenir.
+3. **Storage Çöp & Yetim Dosya Toplayıcı (`cleanupOldImages`):** Her gece 00:00'da Firebase Storage `deals/` dizinindeki 40 günden eski sahipsiz dosyaları 10'arlı eşzamanlı chunk'lar ile temizler (Haftalık fırsat silme periyoduyla senkron, 40 günlük güvenlik payı ile kırık görsel/404 hatasını önler).
 
 ---
 
@@ -247,6 +248,9 @@ Backend sisteminin ve Cloud Functions fonksiyonlarının doğruluğu bağımsız
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
+| **`functions/tests/test_core_event_pipeline_contracts.js`** | Çekirdek Olay & Bildirim Pipeline Sözleşmeleri (ReDoS, APNs, Güvenli commentCount, Banlı kullanıcı engeli, ISO-8601) | `node functions/tests/test_core_event_pipeline_contracts.js` |
+| **`functions/tests/test_production_batch2_contracts.js`** | SSRF, RFC 3986 Redirect, Concurrency Pool, 400 Batch & No-Op Eleme Sözleşmeleri | `node functions/tests/test_production_batch2_contracts.js` |
+| **`functions/tests/test_lifecycle_cleanup_contracts.js`** | Yaşam döngüsü, temizlik cronları, 40 gün Storage GC ve bileşik indeks sözleşmeleri | `node functions/tests/test_lifecycle_cleanup_contracts.js` |
 | **`functions/tests/test_all_notification_scenarios.js`** | 10 senaryoluk uçtan uca push ve Cloud Functions dağıtım testi | `node functions/tests/test_all_notification_scenarios.js` |
 | **`functions/tests/test_notification_settings.js`** | Bildirim tercihleri, hız limitleri ve sessiz saatler entegrasyonu | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim merkezi onay/red ve deduplication testleri | `node functions/tests/test_notifications_menu.js` |

@@ -492,13 +492,34 @@ async function scrapeAndSaveCoupons() {
 
   const db = admin.firestore();
   
-  functions.logger.info('🧹 Deleting existing web-scraped coupons from Firestore...');
-  const querySnapshot = await db.collection('kuponlar').where('kaynakTipi', '==', 'web').get();
-  const deleteDocs = querySnapshot.docs;
-  const deleteChunks = [];
+  // 1. ADIM: Önce yeni taranan kuponları Firestore'a yaz (Downtime ve veri kaybı riskini sıfırlar)
+  functions.logger.info('📝 Writing newly scraped coupons to Firestore...');
+  const writeChunks = [];
+  for (let i = 0; i < allScrapedCoupons.length; i += 400) {
+    writeChunks.push(allScrapedCoupons.slice(i, i + 400));
+  }
+
+  const newDocRefs = [];
+  for (const chunk of writeChunks) {
+    const batch = db.batch();
+    chunk.forEach((couponData) => {
+      const docRef = db.collection('kuponlar').doc();
+      newDocRefs.push(docRef.id);
+      batch.set(docRef, couponData);
+    });
+    await batch.commit();
+  }
+  const newDocIdSet = new Set(newDocRefs);
+  functions.logger.info(`Successfully saved ${allScrapedCoupons.length} coupons.`);
+
+  // 2. ADIM: Başarılı yazımın ardından, bu çalışmadan önceki eski web kuponlarını güvenle temizle
+  functions.logger.info('🧹 Cleaning up old web-scraped coupons from Firestore...');
+  const querySnapshot = await db.collection('kuponlar').where('kaynakTipi', '==', 'web').limit(500).get();
+  const deleteDocs = querySnapshot.docs.filter(doc => !newDocIdSet.has(doc.id));
   
-  for (let i = 0; i < deleteDocs.length; i += 500) {
-    deleteChunks.push(deleteDocs.slice(i, i + 500));
+  const deleteChunks = [];
+  for (let i = 0; i < deleteDocs.length; i += 400) {
+    deleteChunks.push(deleteDocs.slice(i, i + 400));
   }
 
   for (const chunk of deleteChunks) {
@@ -508,24 +529,7 @@ async function scrapeAndSaveCoupons() {
     });
     await batch.commit();
   }
-  functions.logger.info(`Deleted ${deleteDocs.length} old web-scraped coupons.`);
-
-  functions.logger.info('📝 Writing newly scraped coupons to Firestore...');
-  const writeChunks = [];
-  
-  for (let i = 0; i < allScrapedCoupons.length; i += 500) {
-    writeChunks.push(allScrapedCoupons.slice(i, i + 500));
-  }
-
-  for (const chunk of writeChunks) {
-    const batch = db.batch();
-    chunk.forEach((couponData) => {
-      const docRef = db.collection('kuponlar').doc();
-      batch.set(docRef, couponData);
-    });
-    await batch.commit();
-  }
-  functions.logger.info(`Successfully saved ${allScrapedCoupons.length} coupons.`);
+  functions.logger.info(`Cleaned up ${deleteDocs.length} stale web-scraped coupons.`);
 
   const bySource = {};
   for (const c of allScrapedCoupons) {

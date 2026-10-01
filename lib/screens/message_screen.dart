@@ -252,6 +252,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       _messagesStream = FirebaseFirestore.instance
           .collection('adminToUserMessages')
           .where('userId', isEqualTo: currentUserId)
+          .limit(100)
           .snapshots()
           .map((snap) {
         final list = snap.docs.map((d) => Message.fromAdminFirestore(d)).toList();
@@ -391,16 +392,15 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     if (currentUserId == null) return;
 
     if (!widget.isAdminMessage && widget.otherUserId.isNotEmpty) {
-      _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
-    }
-
-    for (final message in messages) {
-      if (!message.isRead && !_markedAsRead.contains(message.id)) {
+      await _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
+      for (final message in messages) {
         _markedAsRead.add(message.id);
-        if (message.isAdminMessage) {
+      }
+    } else if (widget.isAdminMessage) {
+      for (final message in messages) {
+        if (!message.isRead && !_markedAsRead.contains(message.id)) {
+          _markedAsRead.add(message.id);
           await _firestoreService.markAdminToUserMessageAsRead(message.id);
-        } else if (message.receiverId == currentUserId) {
-          await _firestoreService.markMessageAsRead(message.id);
         }
       }
     }

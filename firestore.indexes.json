@@ -51,6 +51,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "isExpired",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "isApproved",
           "order": "ASCENDING"
         },

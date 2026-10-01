@@ -155,44 +155,37 @@ class FirestoreService {
       );
   
   Future<void> deleteOldDeals() async {
-    try {
-      final now = DateTime.now();
-      final cutoff = now.subtract(const Duration(days: 180));
-      final snapshot = await firestore.collection('deals')
-          .where('isApproved', isEqualTo: true)
-          .get();
-      
-      final batch = firestore.batch();
-      for (var doc in snapshot.docs) {
-        final created = (doc.data()['createdAt'] as Timestamp?)?.toDate();
-        if (created != null && created.isBefore(cutoff)) {
-          batch.delete(doc.reference);
-        }
-      }
-      await batch.commit();
-    } catch (e) {
-      if (kDebugMode) print('Temizlik hatası: $e');
-    }
+    // NOT: Eski fırsatların temizliği (purgeOldDeals) Cloud Functions cron job tarafından
+    // sunucu tarafında güvenli ve yetkili biçimde yürütülür.
+    return;
   }
 
   Future<void> deleteUnapprovedDealsAfter24Hours() async {
-    // Benzer mantık...
+    // NOT: Onaysız eski fırsat temizliği sunucu tarafında yürütülür.
+    return;
   }
 
   Future<void> cleanupExpiredDeals() async {
-    // DealService tarafında implemente edilebilir veya burada kalabilir.
+    // NOT: Süresi dolan fırsat temizliği (cleanupExpiredDeals) sunucu tarafında yürütülür.
+    return;
   }
 
   Stream<List<Deal>> getUserDealsStream(String userId, {int? limit, bool onlyApproved = false}) {
+    // Güvenlik Tavanı (Maks 100): Firestore seviyesinde doğrudan limit uygulanır.
+    // postedBy + createdAt bileşik indeksi üzerinden en taze fırsatlar tavanla çekilir.
+    // Bellek tükenmesi ve on binlerce fırsatın gereksiz yere indirilmesi engellenir.
+    final effectiveLimit = limit != null ? (onlyApproved ? (limit * 2).clamp(10, 100) : limit) : 100;
+
     return firestore.collection('deals')
         .where('postedBy', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(effectiveLimit)
         .snapshots()
         .map((s) {
           var list = s.docs.map((d) => Deal.fromFirestore(d)).toList();
           if (onlyApproved) {
             list = list.where((d) => d.isApproved == true && d.isTest != true).toList();
           }
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           if (limit != null) {
             return list.take(limit).toList();
           }
@@ -210,15 +203,14 @@ class FirestoreService {
       query = query.where('category', isEqualTo: categoryId);
     }
 
+    query = query.limit(limit ?? 50);
+
     return query.snapshots().map((s) {
       final list = s.docs
           .map((d) => Deal.fromFirestore(d))
           .where((deal) => deal.isTest != true)
           .toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      if (limit != null) {
-        return list.take(limit).toList();
-      }
       return list;
     });
   }
@@ -295,6 +287,7 @@ class FirestoreService {
             .where('uid', isEqualTo: userId)
             .where('type', isEqualTo: 'category')
             .where('enabled', isEqualTo: true)
+            .limit(100)
             .snapshots()
             .listen((snapshot) {
           followedCategoryKeys.clear();
@@ -389,6 +382,7 @@ class FirestoreService {
         .collection('notificationSubscriptions')
         .where('uid', isEqualTo: currentUserId)
         .where('type', isEqualTo: 'author')
+        .limit(100)
         .snapshots()
         .map((snapshot) {
           final set = <String>{};
@@ -409,6 +403,7 @@ class FirestoreService {
       return Stream.value([]);
     }
 
+    final effectiveLimit = limit.clamp(10, 100);
     final chunks = <List<String>>[];
     for (var i = 0; i < followedUserIds.length; i += 30) {
       chunks.add(followedUserIds.sublist(
@@ -422,6 +417,7 @@ class FirestoreService {
           .collection('deals')
           .where('isApproved', isEqualTo: true)
           .where('postedBy', whereIn: chunks.first)
+          .limit(effectiveLimit)
           .snapshots()
           .map((snapshot) {
             final deals = snapshot.docs
@@ -430,7 +426,7 @@ class FirestoreService {
                 .cast<Deal>()
                 .toList();
             deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-            return deals.take(limit).toList();
+            return deals.take(effectiveLimit).toList();
           });
     }
 
@@ -445,7 +441,7 @@ class FirestoreService {
       }
       allDeals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (!controller.isClosed) {
-        controller.add(allDeals.take(limit).toList());
+        controller.add(allDeals.take(effectiveLimit).toList());
       }
     }
 
@@ -457,6 +453,7 @@ class FirestoreService {
               .collection('deals')
               .where('isApproved', isEqualTo: true)
               .where('postedBy', whereIn: chunks[index])
+              .limit(effectiveLimit)
               .snapshots()
               .listen((snapshot) {
                 final list = snapshot.docs
@@ -695,7 +692,7 @@ class FirestoreService {
   Future<void> deleteAdminToUserMessage(String id) => _messageService.deleteAdminToUserMessage(id);
   Future<int> deleteAllAdminToUserMessages(String userId) async {
     final batch = firestore.batch();
-    final snap = await firestore.collection('adminToUserMessages').where('userId', isEqualTo: userId).get();
+    final snap = await firestore.collection('adminToUserMessages').where('userId', isEqualTo: userId).limit(100).get();
     for (var doc in snap.docs) {
       batch.delete(doc.reference);
     }
@@ -763,6 +760,7 @@ class FirestoreService {
         .doc(userId)
         .collection('notifications')
         .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -824,15 +822,20 @@ class FirestoreService {
         .doc(userId)
         .collection('notifications')
         .where('read', isEqualTo: false)
+        .limit(400)
         .get();
 
     if (snapshot.docs.isEmpty) return;
 
-    final batch = firestore.batch();
-    for (final doc in snapshot.docs) {
-      batch.update(doc.reference, {'read': true});
+    for (var i = 0; i < snapshot.docs.length; i += 400) {
+      final end = (i + 400 > snapshot.docs.length) ? snapshot.docs.length : i + 400;
+      final chunk = snapshot.docs.sublist(i, end);
+      final batch = firestore.batch();
+      for (final doc in chunk) {
+        batch.update(doc.reference, {'read': true});
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
   Future<void> deleteNotification(String userId, String notificationId) async {
@@ -849,12 +852,19 @@ class FirestoreService {
         .collection('users')
         .doc(userId)
         .collection('notifications')
+        .limit(400)
         .get();
-    final batch = firestore.batch();
-    for (final doc in snapshot.docs) {
-      batch.delete(doc.reference);
+    if (snapshot.docs.isEmpty) return;
+
+    for (var i = 0; i < snapshot.docs.length; i += 400) {
+      final end = (i + 400 > snapshot.docs.length) ? snapshot.docs.length : i + 400;
+      final chunk = snapshot.docs.sublist(i, end);
+      final batch = firestore.batch();
+      for (final doc in chunk) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
   // ===========================================================================

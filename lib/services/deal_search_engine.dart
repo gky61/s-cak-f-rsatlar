@@ -44,10 +44,13 @@ class DealSearchEngine {
 
   /// Verilen fırsat listesi üzerinde arama yapar ve sonuçları Alaka Düzeyine göre sıralar.
   static List<Deal> searchDeals(List<Deal> deals, String query) {
-    if (query.trim().isEmpty) return deals;
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return deals;
 
-    final normalizedQuery = normalizeText(query);
-    final queryTokens = tokenize(query);
+    // CPU ve Regex DoS koruması: Arama sorgusu en fazla 200 karakter olabilir
+    final safeQuery = cleanQuery.length > 200 ? cleanQuery.substring(0, 200) : cleanQuery;
+    final normalizedQuery = normalizeText(safeQuery);
+    final queryTokens = tokenize(safeQuery);
 
     if (queryTokens.isEmpty && normalizedQuery.isEmpty) return deals;
 

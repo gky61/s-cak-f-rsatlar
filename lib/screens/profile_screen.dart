@@ -212,6 +212,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _unreadMessageCount = unreadCount;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ [ProfileScreen] Kullanıcı mesaj sayısı akış hatası: $e');
     });
   }
 
@@ -234,6 +236,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _unreadAdminMessageCount = unreadCount;
       });
+    }, onError: (e) {
+      _log('⚠️ [ProfileScreen] Admin mesaj sayısı akış hatası: $e');
     });
   }
 

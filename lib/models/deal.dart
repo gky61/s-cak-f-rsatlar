@@ -295,12 +295,12 @@ class Deal {
               if (parts.length == 2) {
                 final mainPart = parts[0];
                 final microPart = parts[1].split(' ')[0];
-                createdAt = DateTime.parse('${mainPart}.${microPart}Z');
+                createdAt = DateTime.parse('$mainPart.${microPart}Z');
               } else {
-                createdAt = DateTime.parse(cleaned + 'Z');
+                createdAt = DateTime.parse('${cleaned}Z');
               }
             } else {
-              createdAt = DateTime.parse(cleaned + 'Z');
+              createdAt = DateTime.parse('${cleaned}Z');
             }
           } catch (e2) {
             _log('⚠️ createdAt string parse hatası: $e2, değer: $createdAtValue');
@@ -396,15 +396,27 @@ class Deal {
           : null,
       createdAt: createdAt,
       isEditorPick: data['isEditorPick'] == true,
-      isApproved: data.containsKey('isApproved') ? data['isApproved'] as bool? : null, // Alan yoksa null, varsa değerini al
+      isApproved: data.containsKey('isApproved')
+          ? (data['isApproved'] is bool
+              ? (data['isApproved'] as bool)
+              : (data['isApproved']?.toString() == 'true'))
+          : null, // Alan yoksa null, varsa değerini tür güvenli al
       isRejected: data['isRejected'] == true || data['status'] == 'rejected',
       isExpired: data['isExpired'] == true || data['status'] == 'expired',
       isUserSubmitted: data['isUserSubmitted'] == true,
       isTest: data['isTest'] == true,
       cleanUrl: data['cleanUrl'] ?? cleanProductUrl(data['link'] ?? data['url'] ?? ''),
       priceLabel: data['priceLabel'],
-      ratingValue: data['ratingValue'] != null ? (data['ratingValue'] as num).toDouble() : null,
-      ratingCount: data['ratingCount'] != null ? (data['ratingCount'] as num).toInt() : null,
+      ratingValue: data['ratingValue'] != null
+          ? (data['ratingValue'] is num
+              ? (data['ratingValue'] as num).toDouble()
+              : double.tryParse(data['ratingValue'].toString().replaceAll(',', '.')))
+          : null,
+      ratingCount: data['ratingCount'] != null
+          ? (data['ratingCount'] is num
+              ? (data['ratingCount'] as num).toInt()
+              : int.tryParse(data['ratingCount'].toString().replaceAll(RegExp(r'[^0-9]'), '')))
+          : null,
       brand: data['brand']?.toString(),
       isAmazonWarehouse: data['isAmazonWarehouse'] == true ||
           data['isAmazonDepo'] == true ||

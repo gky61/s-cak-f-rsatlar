@@ -1890,6 +1890,9 @@ server.listen(PORT, () => {
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
 });
 
+const _botDedupCache = new Map();
+const BOT_DEDUP_TTL_MS = 120000;
+
 async function logErrorToFirestore(service, errorType, message, stack, severity = 'error', options = {}) {
   try {
     const environment = (process.env.NODE_ENV === 'production' || (process.env.PROJECT_ID && process.env.PROJECT_ID.includes('prod'))) ? 'prod' : 'dev';
@@ -1897,11 +1900,26 @@ async function logErrorToFirestore(service, errorType, message, stack, severity 
     const shortMsg = (message || '').substring(0, 80);
     const fingerprint = `${service}_${category}_${errorType}_${shortMsg}`;
 
+    // 2 dakikalık in-memory tekilleştirme
+    const now = Date.now();
+    if (_botDedupCache.size > 100) {
+      for (const [fp, ts] of _botDedupCache.entries()) {
+        if (now - ts > BOT_DEDUP_TTL_MS) _botDedupCache.delete(fp);
+      }
+    }
+    const lastLogged = _botDedupCache.get(fingerprint);
+    if (lastLogged && (now - lastLogged) < BOT_DEDUP_TTL_MS) {
+      console.log(`ℹ️ Bot mükerrer hata logu tekilleştirildi (Atlandı): ${fingerprint}`);
+      return;
+    }
+    _botDedupCache.set(fingerprint, now);
+
     await db.collection('systemErrors').add({
       environment,
       service,
       category,
-      errorType: String(errorType || 'BotError'),
+      platform: 'bot',
+      errorType: String(errorType || 'BotError').substring(0, 100),
       message: String(message || '').substring(0, 500),
       stack: stack ? String(stack).substring(0, 2000) : null,
       status: 'unresolved',

@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _checkBlockedStatus();
     _notificationService.setupNotificationListeners();
     _notificationService.saveFCMToken(); // Otomatik FCM token doğrulama ve iyileştirme
-    _cleanupExpiredDeals();
+    // _cleanupExpiredDeals() kaldırıldı (Cloud Functions cron job ile yönetiliyor)
     _loadFollowedCategories();
     _loadFollowedKeywords();
     _loadUnreadMessageCounts();
@@ -789,17 +789,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return positions;
   }
 
-  // Expired deal'leri temizle (gün bittiğinde sil)
+  // Expired deal'leri temizleme işlemi Cloud Functions tarafından otonom yürütülmektedir.
   Future<void> _cleanupExpiredDeals() async {
-    try {
-      // Süresi dolan deal'ları temizle
-      await _firestoreService.cleanupExpiredDeals();
-      // 24 saatten eski deal'ları sil
-      await _firestoreService.deleteOldDeals();
-    } catch (e) {
-      // Sessizce hata yok say, kullanıcıyı rahatsız etme
-      _log('Temizleme hatası: $e');
-    }
+    // İstemci tarafı temizlik kaldırıldı (Sunucu CRON güvencesi)
   }
 
   Future<void> _checkAdminStatus() async {

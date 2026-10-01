@@ -304,7 +304,7 @@
 
                 // Eğer aktif açık hata varsa kesin sayısını al
                 try {
-                    const unresolvedSnap = await db.collection('systemErrors').where('status', '==', 'unresolved').get();
+                    const unresolvedSnap = await db.collection('systemErrors').where('status', '==', 'unresolved').limit(100).get();
                     unresolved = unresolvedSnap.size;
                 } catch (_) {}
 

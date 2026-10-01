@@ -168,6 +168,7 @@ class UserService {
         .collection('users')
         .doc(userId)
         .collection('favorites')
+        .limit(100)
         .snapshots()
         .asyncMap((snapshot) async {
       final now = DateTime.now();

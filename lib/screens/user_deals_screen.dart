@@ -47,10 +47,14 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
     if (widget.isOwnProfile) {
       _settingsSub = _firestoreService.firestore.collection('settings').doc('app').snapshots().listen((snap) {
         if (snap.exists && snap.data() != null && mounted) {
+          final val = snap.data()!['dealApprovalRequired'];
+          final isRequired = val is bool ? val : (val?.toString().toLowerCase() != 'false');
           setState(() {
-            _dealApprovalRequired = snap.data()!['dealApprovalRequired'] ?? true;
+            _dealApprovalRequired = isRequired;
           });
         }
+      }, onError: (e) {
+        debugPrint('⚠️ [UserDealsScreen] settings/app dinleme hatası: $e');
       });
     }
   }

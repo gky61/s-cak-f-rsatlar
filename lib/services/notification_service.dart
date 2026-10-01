@@ -95,9 +95,10 @@ class NotificationService {
   static bool _isAdminTopicSubscribedInSession = false;
   static String? _lastSubscribedAdminUid;
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Lazy getters: Firebase.initializeApp() öncesinde çağrıldığında [core/no-app] çökmesini engeller
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _keywordListener;
@@ -1052,7 +1053,7 @@ class NotificationService {
         .collection('deals')
         .where('isApproved', isEqualTo: false)
         .where('isExpired', isEqualTo: false)
-        // .where('isUserSubmitted', isEqualTo: true) // KALDIRILDI: Bot fırsatları da gelsin diye
+        .limit(50)
         .snapshots()
         .listen((snapshot) {
       
@@ -1148,6 +1149,7 @@ class NotificationService {
         .collection('notifications')
         .where('type', whereIn: ['comment_reply', 'comment'])
         .where('read', isEqualTo: false)
+        .limit(50)
         .snapshots()
         .listen(
       (snapshot) async {
@@ -3043,7 +3045,7 @@ class NotificationService {
     return;
   }
 
-  // Yorum cevabı bildirimi gönder (Firestore üzerinden)
+  @Deprecated('Yorum yanıt bildirimleri artık Cloud Function (onCommentCreated) tarafından otomatik ve yetkili şekilde gönderiliyor')
   Future<void> sendCommentReplyNotification({
     required String recipientUserId,
     required String dealId,
@@ -3053,28 +3055,8 @@ class NotificationService {
     required String replyUserName,
     required String replyText,
   }) async {
-    try {
-      _log('📤 Yorum cevabı bildirimi gönderiliyor: recipientUserId=$recipientUserId, dealId=$dealId, commentId=$commentId');
-
-      await _firestore.collection('users').doc(recipientUserId).collection('notifications').doc('reply_${commentId}_$recipientUserId').set({
-        'type': 'comment_reply',
-        'title': '$replyUserName yorumunuza cevap verdi',
-        'body': replyText.length > 100 ? '${replyText.substring(0, 100)}...' : replyText,
-        'dealId': dealId,
-        'dealTitle': dealTitle,
-        'commentId': commentId,
-        'parentCommentId': parentCommentId,
-        'replyUserName': replyUserName,
-        'replyText': replyText.length > 100 ? '${replyText.substring(0, 100)}...' : replyText,
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
-      });
-
-      _log('✅ Yorum cevabı bildirimi Firestore\'a eklendi: $recipientUserId');
-    } catch (e) {
-      _log('❌ Yorum cevabı bildirimi gönderme hatası: $e');
-      rethrow;
-    }
+    _log('ℹ️ Yorum cevabı bildirimleri artık Cloud Function (onCommentCreated) tarafından otomatik gönderiliyor');
+    return;
   }
 
   // Debug için test bildirimi

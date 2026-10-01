@@ -154,11 +154,15 @@ class MessageService {
           }
         }
 
-        // Gönderilen mesajlar (userId1 -> userId2) - İndeks hatası vermeyen saf equality sorgusu
+        final effectiveLimit = limit.clamp(10, 100);
+
+        // Gönderilen mesajlar (userId1 -> userId2) - İndeks destekli ve limitli sorgu
         sentSub = _firestore
             .collection('messages')
             .where('senderId', isEqualTo: userId1)
             .where('receiverId', isEqualTo: userId2)
+            .orderBy('createdAt', descending: true)
+            .limit(effectiveLimit)
             .snapshots()
             .listen(
           (snap) {
@@ -180,11 +184,13 @@ class MessageService {
           },
         );
 
-        // Alınan mesajlar (userId2 -> userId1) - İndeks hatası vermeyen saf equality sorgusu
+        // Alınan mesajlar (userId2 -> userId1) - İndeks destekli ve limitli sorgu
         receivedSub = _firestore
             .collection('messages')
             .where('senderId', isEqualTo: userId2)
             .where('receiverId', isEqualTo: userId1)
+            .orderBy('createdAt', descending: true)
+            .limit(effectiveLimit)
             .snapshots()
             .listen(
           (snap) {
@@ -231,6 +237,7 @@ class MessageService {
           .where('senderId', isEqualTo: otherUserId)
           .where('receiverId', isEqualTo: currentUserId)
           .where('isRead', isEqualTo: false)
+          .limit(100)
           .get();
 
       if (snap.docs.isEmpty) return;
@@ -331,6 +338,7 @@ class MessageService {
           .collection('messages')
           .where('senderId', isEqualTo: currentUserId)
           .where('receiverId', isEqualTo: otherUserId)
+          .limit(250)
           .get();
 
       // 2. otherUserId -> currentUserId mesajları
@@ -338,14 +346,15 @@ class MessageService {
           .collection('messages')
           .where('senderId', isEqualTo: otherUserId)
           .where('receiverId', isEqualTo: currentUserId)
+          .limit(250)
           .get();
 
       final allDocs = [...sentSnap.docs, ...receivedSnap.docs];
 
       if (allDocs.isNotEmpty) {
-        for (var i = 0; i < allDocs.length; i += 500) {
+        for (var i = 0; i < allDocs.length; i += 400) {
           final batch = _firestore.batch();
-          final chunk = allDocs.sublist(i, (i + 500 > allDocs.length) ? allDocs.length : i + 500);
+          final chunk = allDocs.sublist(i, (i + 400 > allDocs.length) ? allDocs.length : i + 400);
           for (var doc in chunk) {
             batch.delete(doc.reference);
           }
@@ -484,11 +493,16 @@ class MessageService {
   }
 
   // Admin Bildirimleri (AdminToUserMessage)
-  Stream<List<AdminToUserMessage>> getAdminToUserMessagesStream(String userId, {int limit = 200}) {
-    return _firestore.collection('adminToUserMessages').where('userId', isEqualTo: userId).snapshots().map((s) {
+  Stream<List<AdminToUserMessage>> getAdminToUserMessagesStream(String userId, {int limit = 100}) {
+    final effectiveLimit = limit.clamp(10, 100);
+    return _firestore.collection('adminToUserMessages')
+        .where('userId', isEqualTo: userId)
+        .limit(effectiveLimit)
+        .snapshots()
+        .map((s) {
       final items = s.docs.map((d) => AdminToUserMessage.fromFirestore(d)).toList();
       items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return items.take(limit).toList();
+      return items.take(effectiveLimit).toList();
     });
   }
 
@@ -496,8 +510,10 @@ class MessageService {
     try {
       final s = await _firestore.collection('adminToUserMessages')
           .where('userId', isEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .limit(100)
           .get();
-      return s.docs.map((d) => AdminToUserMessage.fromFirestore(d)).where((m) => !m.isRead).length;
+      return s.docs.length;
     } catch (e) {
       return 0;
     }
@@ -537,9 +553,9 @@ class MessageService {
     }
   }
 
-  // Admin Paneli - Tüm Kullanıcı Mesajları
+  // Admin Paneli - Tüm Kullanıcı Mesajları (Maksimum 100 güncel mesaj ile sınırlandırılmış güvenli akış)
   Stream<List<Message>> getAllMessagesStream() {
-    return _firestore.collection('messages').orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+    return _firestore.collection('messages').orderBy('createdAt', descending: true).limit(100).snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => Message.fromFirestore(doc)).toList();
     });
   }
@@ -554,7 +570,8 @@ class MessageService {
 
   Future<int> deleteAllMessages() async {
     try {
-      final snapshot = await _firestore.collection('messages').get();
+      // Güvenlik tavanı: Tek seferde en fazla 100 mesaj silinebilir.
+      final snapshot = await _firestore.collection('messages').limit(100).get();
       final batch = _firestore.batch();
       for (var doc in snapshot.docs) {
         batch.delete(doc.reference);

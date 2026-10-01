@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../models/comment.dart';
 import 'auth_service.dart';
-import 'notification_service.dart';
 import 'content_moderation_service.dart';
 import 'message_service.dart';
 import '../utils/asset_path_migration.dart';
@@ -82,9 +81,8 @@ class CommentService {
 
       await batch.commit();
 
-      if (parentCommentId != null) {
-        _sendReplyNotification(dealId, parentCommentId, commentRef.id, userName, text);
-      }
+      // Not: Yorum yanıt bildirimleri Cloud Function (onCommentCreated) tarafından 
+      // Firestore ve FCM üzerinden sunucu tarafında otonom ve yetkili şekilde gönderilmektedir.
 
       return true;
     } catch (e, stack) {
@@ -108,51 +106,36 @@ class CommentService {
     }
   }
 
-  Future<void> _sendReplyNotification(String dealId, String parentCommentId, String replyId, String userName, String text) async {
-    try {
-      final parentDoc = await _firestore.collection('deals').doc(dealId).collection('comments').doc(parentCommentId).get();
-      if (!parentDoc.exists) return;
-      
-      final parentUserId = parentDoc.data()?['userId'];
-      final currentUserId = _authService.currentUser?.uid;
-      
-      if (parentUserId != null && parentUserId != currentUserId) {
-        final dealDoc = await _firestore.collection('deals').doc(dealId).get();
-        final dealTitle = dealDoc.data()?['title'] ?? 'Fırsat';
-        
-        final notificationService = NotificationService();
-        await notificationService.sendCommentReplyNotification(
-          recipientUserId: parentUserId,
-          dealId: dealId,
-          dealTitle: dealTitle,
-          commentId: replyId,
-          parentCommentId: parentCommentId,
-          replyUserName: userName,
-          replyText: text,
-        );
-      }
-    } catch (e) {
-      _log('Bildirim hatası: $e');
-    }
-  }
-
   Stream<List<Comment>> getCommentsStream(String dealId) {
     return _firestore
         .collection('deals')
         .doc(dealId)
         .collection('comments')
         .orderBy('createdAt', descending: false)
+        .limit(150)
         .snapshots()
         .map((s) => s.docs.map((d) => Comment.fromFirestore(d)).toList());
   }
 
   Future<bool> deleteComment(String commentId, String dealId) async {
     try {
-      final batch = _firestore.batch();
-      batch.delete(_firestore.collection('deals').doc(dealId).collection('comments').doc(commentId));
-      batch.update(_firestore.collection('deals').doc(dealId), {'commentCount': FieldValue.increment(-1)});
-      await batch.commit();
-      return true;
+      final dealRef = _firestore.collection('deals').doc(dealId);
+      final commentRef = dealRef.collection('comments').doc(commentId);
+
+      return await _firestore.runTransaction((transaction) async {
+        final dealDoc = await transaction.get(dealRef);
+        final currentCount = dealDoc.exists ? ((dealDoc.data()?['commentCount'] as num?)?.toInt() ?? 0) : 0;
+        final newCount = currentCount > 0 ? currentCount - 1 : 0;
+
+        transaction.delete(commentRef);
+        if (dealDoc.exists) {
+          transaction.update(dealRef, {
+            'commentCount': newCount,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        return true;
+      });
     } catch (e) {
       return false;
     }
@@ -165,6 +148,7 @@ class CommentService {
         .doc(userId)
         .collection('notifications')
         .where('type', isEqualTo: 'comment_reply')
+        .limit(50)
         .snapshots()
         .map((snapshot) {
       final notifications = snapshot.docs.map((doc) {
@@ -178,7 +162,7 @@ class CommentService {
           'replyUserName': data['replyUserName'] as String? ?? 'Birisi',
           'replyText': data['replyText'] as String? ?? '',
           'createdAt': (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          'read': data['read'] as bool? ?? false,
+          'read': data['read'] == true || data['read'] == 'true',
         };
       }).toList();
       
@@ -200,14 +184,24 @@ class CommentService {
   }
 
   Future<int> deleteAllCommentReplyNotifications(String userId) async {
-    final snapshot = await _firestore.collection('users').doc(userId).collection('notifications').where('type', isEqualTo: 'comment_reply').get();
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .where('type', isEqualTo: 'comment_reply')
+        .limit(400)
+        .get();
     if (snapshot.docs.isEmpty) return 0;
     
-    final batch = _firestore.batch();
-    for (var doc in snapshot.docs) {
-      batch.delete(doc.reference);
+    for (var i = 0; i < snapshot.docs.length; i += 400) {
+      final end = (i + 400 > snapshot.docs.length) ? snapshot.docs.length : i + 400;
+      final chunk = snapshot.docs.sublist(i, end);
+      final batch = _firestore.batch();
+      for (var doc in chunk) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
     }
-    await batch.commit();
     return snapshot.docs.length;
   }
 

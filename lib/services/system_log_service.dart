@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../firebase_options.dart';
 
@@ -37,8 +38,9 @@ class SystemLogService {
   static final SystemLogService instance = SystemLogService._internal();
   factory SystemLogService() => instance;
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Lazy getters: Firebase.initializeApp() öncesinde çağrıldığında [core/no-app] çökmesini engeller
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
 
   // Bellek içi tekilleştirme önbelleği: Fingerprint -> Son gönderim zamanı
   final Map<String, DateTime> _dedupCache = {};
@@ -47,6 +49,44 @@ class SystemLogService {
   DateTime _currentHourWindow = DateTime.now();
   int _hourlyLogCount = 0;
   int get _maxLogsPerHour => isProductionFlavor ? 10 : 50;
+
+  static final Set<String> _sensitiveKeys = {
+    'password', 'token', 'secret', 'authorization', 'cookie', 
+    'apikey', 'accesstoken', 'idtoken', 'refreshtoken',
+    'credential', 'bearer', 'privatekey', 'fcmtoken'
+  };
+
+  static Map<String, dynamic> _sanitizeMetadata(Map<String, dynamic>? meta) {
+    if (meta == null || meta.isEmpty) return {};
+    final clean = <String, dynamic>{};
+    for (final entry in meta.entries) {
+      final normKey = entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      var isSensitive = false;
+      for (final sKey in _sensitiveKeys) {
+        if (normKey.contains(sKey)) {
+          isSensitive = true;
+          break;
+        }
+      }
+      if (isSensitive) {
+        clean[entry.key] = '[REDACTED]';
+      } else if (entry.value is Map<String, dynamic>) {
+        clean[entry.key] = _sanitizeMetadata(entry.value as Map<String, dynamic>);
+      } else {
+        clean[entry.key] = entry.value;
+      }
+    }
+    return clean;
+  }
+
+  static String _normalizeMessageForFingerprint(String msg) {
+    if (msg.isEmpty) return '';
+    return msg
+        .replaceAll(RegExp(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'), '[UUID]')
+        .replaceAll(RegExp(r'\b[0-9a-zA-Z]{20}\b'), '[DOC_ID]')
+        .replaceAll(RegExp(r'\b\d{4,}\b'), '[NUM]')
+        .trim();
+  }
 
   /// Merkezi Hata Kaydı (Arka planda asenkron çalışır, uygulamayı asla bloklamaz veya çökertmez)
   Future<void> logError({
@@ -95,7 +135,8 @@ class SystemLogService {
     }
 
     // 5. Bellek içi 5 Dakikalık Tekilleştirme (De-duplication)
-    final shortMsg = message.length > 80 ? message.substring(0, 80) : message;
+    final normalizedMsg = _normalizeMessageForFingerprint(message);
+    final shortMsg = normalizedMsg.length > 80 ? normalizedMsg.substring(0, 80) : normalizedMsg;
     final fingerprint = '${category}_${errorType}_$shortMsg';
 
     if (_dedupCache.containsKey(fingerprint)) {
@@ -114,6 +155,12 @@ class SystemLogService {
 
     // 6. Firestore'a Güvenli ve Zenginleştirilmiş Kayıt
     try {
+      if (Firebase.apps.isEmpty) {
+        if (kDebugMode) {
+          print('⚠️ [SystemLog] Firebase henüz başlatılmadı. Firestore log yazması atlandı.');
+        }
+        return;
+      }
       final currentUser = _auth.currentUser;
       final currentUserId = currentUser?.uid;
       final currentUserEmail = currentUser?.email;
@@ -122,15 +169,16 @@ class SystemLogService {
       final platform = kIsWeb
           ? 'web'
           : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
+      final sanitizedCustomMeta = _sanitizeMetadata(metadata);
 
       final logData = {
         'environment': env,
         'service': 'mobile',
-        'category': category,
+        'category': category.length > 50 ? category.substring(0, 50) : category,
         if (subCategory != null) 'subCategory': subCategory,
         if (currentUserId != null) 'userId': currentUserId,
         if (currentUserEmail != null) 'userEmail': currentUserEmail,
-        'errorType': errorType,
+        'errorType': errorType.length > 100 ? errorType.substring(0, 100) : errorType,
         'message': message.length > 500 ? message.substring(0, 500) : message,
         'stack': stack != null ? (stack.toString().length > 2000 ? stack.toString().substring(0, 2000) : stack.toString()) : null,
         'severity': severity.value,
@@ -143,13 +191,13 @@ class SystemLogService {
           if (currentUserEmail != null) 'userEmail': currentUserEmail,
           if (currentUserDisplayName != null) 'userDisplayName': currentUserDisplayName,
           'platform': platform,
-          ...?metadata,
+          ...sanitizedCustomMeta,
         },
         'lastOccurredAt': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       };
 
-      await _firestore.collection('systemErrors').add(logData);
+      await _firestore.collection('systemErrors').add(logData).timeout(const Duration(seconds: 5));
       if (kDebugMode) {
         print('💾 [SystemLog] Hata başarıyla Firestore systemErrors koleksiyonuna kaydedildi.');
       }

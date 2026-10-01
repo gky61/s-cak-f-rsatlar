@@ -53,12 +53,13 @@ class DealService {
     }
   }
 
-  // Deals koleksiyonunu dinleme
+  // Deals koleksiyonunu dinleme (En son 100 onaylı fırsat ile sınırlandırılmış güvenli akış)
   Stream<DealsSnapshot> getDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: true)
         .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       final now = DateTime.now();
@@ -124,13 +125,14 @@ class DealService {
     }
   }
 
-  // Onay bekleyen deal'leri dinleme
+  // Onay bekleyen deal'leri dinleme (Maksimum 100 kayıt)
   Stream<List<Deal>> getPendingDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: false)
         .where('isUserSubmitted', isEqualTo: false)
         .where('isExpired', isEqualTo: false)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
@@ -143,13 +145,14 @@ class DealService {
     });
   }
 
-  // Kullanıcıların paylaştığı onay bekleyen deal'leri dinleme
+  // Kullanıcıların paylaştığı onay bekleyen deal'leri dinleme (Maksimum 100 kayıt)
   Stream<List<Deal>> getUserSubmittedPendingDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: false)
         .where('isExpired', isEqualTo: false)
         .where('isUserSubmitted', isEqualTo: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
@@ -162,10 +165,13 @@ class DealService {
     });
   }
 
-  // Yayınlanmış (onaylanmış) deal'leri dinleme
+  // Yayınlanmış (onaylanmış) deal'leri dinleme (Maksimum 100 güncel kayıt)
   Stream<List<Deal>> getApprovedDealsStream() {
     return _firestore
         .collection('deals')
+        .where('isApproved', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       final now = DateTime.now();
@@ -180,11 +186,13 @@ class DealService {
     });
   }
 
-  // Süresi bitmiş deal'leri getir
+  // Süresi bitmiş deal'leri getir (Maksimum 100 kayıt)
   Stream<List<Deal>> getExpiredDealsStream() {
     return _firestore
         .collection('deals')
         .where('isExpired', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
@@ -746,31 +754,35 @@ class DealService {
     return updateDeal(dealId, updates);
   }
 
-  // Toplu süresi bitenleri yayına alma (Batch Unexpire)
+  // Toplu süresi bitenleri yayına alma (Batch Unexpire - 400 dokümanlık parçalama korumalı)
   Future<bool> unexpireDealsBatch(
     List<String> dealIds, {
     bool refreshTimestamp = false,
   }) async {
     if (dealIds.isEmpty) return true;
     try {
-      final batch = _firestore.batch();
-      for (final id in dealIds) {
-        final Map<String, dynamic> updates = {
-          'isExpired': false,
-          'isApproved': true,
-          'isRejected': false,
-          'status': 'active',
-          'expiredVotes': 0,
-          'approvedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-        if (refreshTimestamp) {
-          updates['createdAt'] = FieldValue.serverTimestamp();
-          updates['timestamp'] = FieldValue.serverTimestamp();
+      for (var i = 0; i < dealIds.length; i += 400) {
+        final end = (i + 400 > dealIds.length) ? dealIds.length : i + 400;
+        final chunk = dealIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          final Map<String, dynamic> updates = {
+            'isExpired': false,
+            'isApproved': true,
+            'isRejected': false,
+            'status': 'active',
+            'expiredVotes': 0,
+            'approvedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          };
+          if (refreshTimestamp) {
+            updates['createdAt'] = FieldValue.serverTimestamp();
+            updates['timestamp'] = FieldValue.serverTimestamp();
+          }
+          batch.update(_firestore.collection('deals').doc(id), updates);
         }
-        batch.update(_firestore.collection('deals').doc(id), updates);
+        await batch.commit();
       }
-      await batch.commit();
       return true;
     } catch (e) {
       _log('Batch unexpire hatası: $e');
@@ -805,6 +817,7 @@ class DealService {
     return _firestore
         .collection('deals')
         .where('isTest', isEqualTo: true)
+        .limit(50)
         .snapshots()
         .map((snapshot) {
       final deals = snapshot.docs
@@ -817,14 +830,19 @@ class DealService {
     });
   }
 
-  // Toplu deal silme
+  // Toplu deal silme (Maks 400 dokümanlık parçalar ile batch commit taşma koruması)
   Future<bool> deleteDealsBatch(List<String> dealIds) async {
     try {
-      final batch = _firestore.batch();
-      for (final id in dealIds) {
-        batch.delete(_firestore.collection('deals').doc(id));
+      if (dealIds.isEmpty) return true;
+      for (var i = 0; i < dealIds.length; i += 400) {
+        final end = (i + 400 > dealIds.length) ? dealIds.length : i + 400;
+        final chunk = dealIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.delete(_firestore.collection('deals').doc(id));
+        }
+        await batch.commit();
       }
-      await batch.commit();
       return true;
     } catch (e) {
       _log('Batch silme hatası: $e');

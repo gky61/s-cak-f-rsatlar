@@ -4081,6 +4081,7 @@ function startLiveChatStream() {
 
     simChatUnsubscribe = db.collection('messages')
         .where('senderId', 'in', [simSender.id, simReceiver.id])
+        .limit(100)
         .onSnapshot((snapshot) => {
             const messagesList = [];
             snapshot.forEach(doc => {
@@ -4099,7 +4100,7 @@ function startLiveChatStream() {
             renderLiveChatMessages(messagesList);
         }, (err) => {
             console.warn('Chat stream query fallback triggered:', err);
-            db.collection('messages').get().then(snapshot => {
+            db.collection('messages').where('senderId', 'in', [simSender.id, simReceiver.id]).limit(100).get().then(snapshot => {
                 const messagesList = [];
                 snapshot.forEach(doc => {
                     const d = doc.data();
@@ -4114,6 +4115,8 @@ function startLiveChatStream() {
                 });
                 messagesList.sort((a, b) => a.createdAtDate - b.createdAtDate);
                 renderLiveChatMessages(messagesList);
+            }).catch(fallbackErr => {
+                console.error('Chat fallback also failed:', fallbackErr);
             });
         });
 }
@@ -4273,14 +4276,18 @@ window.loadBotkolikMessages = async function() {
     `;
 
     try {
-        // 1. Get messages where receiver is botkolik
+        // 1. Get messages where receiver is botkolik (Limit 200, en güncel)
         const snapReceived = await db.collection('messages')
             .where('receiverId', '==', 'botkolik')
+            .orderBy('createdAt', 'desc')
+            .limit(200)
             .get();
 
-        // 2. Get messages where sender is botkolik
+        // 2. Get messages where sender is botkolik (Limit 200, en güncel)
         const snapSent = await db.collection('messages')
             .where('senderId', '==', 'botkolik')
+            .orderBy('createdAt', 'desc')
+            .limit(200)
             .get();
 
         const convMap = new Map();
@@ -4559,8 +4566,10 @@ function startBotkolikChatStream(userId) {
         </div>
     `;
 
-    // Listen to messages in real time
+    // Listen to messages in real time (Sadece bu kullanıcı ve botkolik mesajları, limit 100)
     botkolikChatUnsubscribe = db.collection('messages')
+        .where('senderId', 'in', [userId, 'botkolik'])
+        .limit(100)
         .onSnapshot(async (snapshot) => {
             if (botkolikActiveUserId !== userId) return;
 
@@ -5150,7 +5159,7 @@ window.deleteAllAutoModAlarms = async function() {
     }
 
     try {
-        const snapshot = await db.collection('adminMessages').get();
+        const snapshot = await db.collection('adminMessages').limit(400).get();
 
         if (snapshot.empty) {
             showError('Silinecek alarm yok.');
@@ -5271,13 +5280,16 @@ async function loadUsers() {
         // Prefetch blocked users map
         let blockedSet = new Set();
         try {
-            const blockedSnap = await db.collection('blockedUsers').get();
+            const blockedSnap = await db.collection('blockedUsers').limit(500).get();
             blockedSet = new Set(blockedSnap.docs.map(d => d.id));
         } catch (e) {
             console.warn('⚠️ Could not prefetch blocked users:', e);
         }
 
-        usersUnsubscribe = db.collection('users').onSnapshot((snapshot) => {
+        usersUnsubscribe = db.collection('users')
+            .orderBy('points', 'desc')
+            .limit(150)
+            .onSnapshot((snapshot) => {
             users = [];
             let totalDeals = 0;
             let totalPoints = 0;
@@ -7358,14 +7370,14 @@ async function purgeOldDealsWeb() {
     const targetDocs = new Map();
 
     try {
-        const snap1 = await db.collection('deals').where('createdAt', '<', thirtyDaysAgoTimestamp).get();
+        const snap1 = await db.collection('deals').where('createdAt', '<', thirtyDaysAgoTimestamp).limit(100).get();
         snap1.forEach(doc => targetDocs.set(doc.id, doc));
     } catch (e) {
         console.warn('createdAt sorgusu uyarısı:', e);
     }
 
     try {
-        const snap2 = await db.collection('deals').where('timestamp', '<', thirtyDaysAgoTimestamp).get();
+        const snap2 = await db.collection('deals').where('timestamp', '<', thirtyDaysAgoTimestamp).limit(100).get();
         snap2.forEach(doc => targetDocs.set(doc.id, doc));
     } catch (e) {
         console.warn('timestamp sorgusu uyarısı:', e);
@@ -7380,7 +7392,7 @@ async function purgeOldDealsWeb() {
             const dealRef = db.collection('deals').doc(dealId);
 
             // A. votes subcollection
-            const votesSnap = await dealRef.collection('votes').get();
+            const votesSnap = await dealRef.collection('votes').limit(200).get();
             if (!votesSnap.empty) {
                 const batch = db.batch();
                 votesSnap.forEach(v => batch.delete(v.ref));
@@ -7388,26 +7400,14 @@ async function purgeOldDealsWeb() {
             }
 
             // B. comments subcollection
-            const commentsSnap = await dealRef.collection('comments').get();
+            const commentsSnap = await dealRef.collection('comments').limit(200).get();
             if (!commentsSnap.empty) {
                 const batch = db.batch();
                 commentsSnap.forEach(c => batch.delete(c.ref));
                 await batch.commit();
             }
 
-            // C. users favorites references
-            const usersSnap = await db.collection('users').get();
-            for (const userDoc of usersSnap.docs) {
-                try {
-                    const favRef = userDoc.ref.collection('favorites').doc(dealId);
-                    const favDoc = await favRef.get();
-                    if (favDoc.exists) {
-                        await favRef.delete();
-                    }
-                } catch (favErr) {}
-            }
-
-            // D. Main deal doc delete
+            // C. Main deal doc delete
             await dealRef.delete();
             deletedCount++;
             console.log(`🗑️ Kalıcı silindi: ${dealId}`);
@@ -7416,12 +7416,14 @@ async function purgeOldDealsWeb() {
         }
     }
 
-    // E. 30 Günü Geçmiş Tüm Bildirimleri Temizle (Notification Center / users/{uid}/notifications)
+    // D. 30 Günü Geçmiş Bildirimleri Temizle (Notification Center / users/{uid}/notifications) - Maks 5 tur (2000 doküman)
     let deletedNotificationsCount = 0;
     try {
         console.log('🧹 30 günden eski bildirimler taranıyor...');
         let hasMoreNotifs = true;
-        while (hasMoreNotifs) {
+        let iteration = 0;
+        while (hasMoreNotifs && iteration < 5) {
+            iteration++;
             const notifsSnap = await db.collectionGroup('notifications')
                 .where('createdAt', '<', thirtyDaysAgoTimestamp)
                 .limit(400)
@@ -9472,15 +9474,15 @@ async function loadDashboardData() {
             todayCommentsSnapResult
         ] = await Promise.allSettled([
             // 1. Coupons
-            db.collection('kuponlar').get(),
+            db.collection('kuponlar').limit(500).get(),
             // 2. Catalogs
-            db.collection('kataloglar').get(),
+            db.collection('kataloglar').limit(300).get(),
             // 3. Reports (pending)
-            db.collection('reports').where('status', '==', 'pending').get(),
+            db.collection('reports').where('status', '==', 'pending').limit(200).get(),
             // 4. System Errors (unresolved)
-            db.collection('systemErrors').where('status', '==', 'unresolved').get(),
+            db.collection('systemErrors').where('status', '==', 'unresolved').limit(200).get(),
             // 5. User Devices
-            db.collection('userDevices').get(),
+            db.collection('userDevices').limit(1000).get(),
             // 6. Notification Stats for today
             db.collection('notificationStats').doc(todayStr).get(),
             // 7. System notification config
@@ -9488,7 +9490,7 @@ async function loadDashboardData() {
             // 8. Top 10 Users for Leaderboard (filter system accounts)
             db.collection('users').orderBy('points', 'desc').limit(10).get(),
             // 9. Today's comments
-            db.collectionGroup('comments').where('createdAt', '>=', todayMidnight).get()
+            db.collectionGroup('comments').where('createdAt', '>=', todayMidnight).limit(500).get()
         ]);
 
         // --- PILLAR 1: FIRSATLAR (DEALS) ---
@@ -10582,7 +10584,7 @@ async function purgeOldNotificationsAction() {
 async function loadDeviceStats() {
     console.log('📱 Loading device stats...');
     try {
-        const totalSnap = await db.collection('userDevices').get();
+        const totalSnap = await db.collection('userDevices').limit(1000).get();
         
         const totalCount = totalSnap.size;
         let activeCount = 0;
@@ -12154,7 +12156,7 @@ function renderSystemLogs() {
                 </td>
                 <td class="px-5 py-3.5 whitespace-nowrap">
                     <div class="flex items-center gap-1.5">
-                        <span class="font-bold text-slate-900 dark:text-white truncate max-w-[170px]" title="${e.errorType}">${e.errorType}</span>
+                        <span class="font-bold text-slate-900 dark:text-white truncate max-w-[170px]" title="${escapeHtml(e.errorType)}">${escapeHtml(e.errorType)}</span>
                         ${occurrenceBadge}
                     </div>
                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -13023,6 +13025,7 @@ function loadCoupons() {
     try {
         couponsUnsubscribe = db.collection('kuponlar')
             .orderBy('olusturulmaTarihi', 'desc')
+            .limit(150)
             .onSnapshot((snapshot) => {
                 coupons = snapshot.docs.map(doc => {
                     const data = doc.data();
@@ -13484,39 +13487,35 @@ function deleteAllCoupons() {
         deleteBtn.disabled = true;
         deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Siliniyor...`;
 
-        db.collection('kuponlar').get()
-            .then(async (querySnapshot) => {
-                const docs = querySnapshot.docs;
-                if (docs.length === 0) {
-                    showSuccess("Silecek kupon bulunamadı.");
-                    deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = originalHtml;
-                    return;
-                }
+        (async () => {
+            try {
+                let totalDeleted = 0;
+                while (true) {
+                    const querySnapshot = await db.collection('kuponlar').limit(400).get();
+                    if (querySnapshot.empty) break;
 
-                const chunks = [];
-                for (let i = 0; i < docs.length; i += 500) {
-                    chunks.push(docs.slice(i, i + 500));
-                }
-
-                for (const chunk of chunks) {
                     const batch = db.batch();
-                    chunk.forEach((doc) => {
+                    querySnapshot.docs.forEach((doc) => {
                         batch.delete(doc.ref);
                     });
                     await batch.commit();
+                    totalDeleted += querySnapshot.size;
+                    if (querySnapshot.size < 400) break;
                 }
 
-                showSuccess("Tüm kuponlar başarıyla silindi!");
-                deleteBtn.disabled = false;
-                deleteBtn.innerHTML = originalHtml;
+                if (totalDeleted === 0) {
+                    showSuccess("Silecek kupon bulunamadı.");
+                } else {
+                    showSuccess(`Toplam ${totalDeleted} kupon başarıyla silindi!`);
+                }
                 loadCoupons();
-            })
-            .catch((error) => {
+            } catch (error) {
+                showError("Kuponlar silinirken hata oluştu: " + error.message);
+            } finally {
                 deleteBtn.disabled = false;
                 deleteBtn.innerHTML = originalHtml;
-                showError("Kuponlar silinirken hata oluştu: " + error.message);
-            });
+            }
+        })();
     }
 }
 
@@ -13726,6 +13725,7 @@ function loadCatalogs() {
     try {
         catalogsUnsubscribe = db.collection('kataloglar')
             .orderBy('baslangicTarihi', 'desc')
+            .limit(150)
             .onSnapshot((snapshot) => {
                 catalogs = snapshot.docs.map(doc => {
                     const data = doc.data();
@@ -14131,39 +14131,35 @@ function deleteAllCatalogs() {
         deleteBtn.disabled = true;
         deleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Siliniyor...`;
 
-        db.collection('kataloglar').get()
-            .then(async (querySnapshot) => {
-                const docs = querySnapshot.docs;
-                if (docs.length === 0) {
-                    showSuccess("Silecek katalog bulunamadı.");
-                    deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = originalHtml;
-                    return;
-                }
+        (async () => {
+            try {
+                let totalDeleted = 0;
+                while (true) {
+                    const querySnapshot = await db.collection('kataloglar').limit(400).get();
+                    if (querySnapshot.empty) break;
 
-                const chunks = [];
-                for (let i = 0; i < docs.length; i += 500) {
-                    chunks.push(docs.slice(i, i + 500));
-                }
-
-                for (const chunk of chunks) {
                     const batch = db.batch();
-                    chunk.forEach((doc) => {
+                    querySnapshot.docs.forEach((doc) => {
                         batch.delete(doc.ref);
                     });
                     await batch.commit();
+                    totalDeleted += querySnapshot.size;
+                    if (querySnapshot.size < 400) break;
                 }
 
-                showSuccess("Tüm kataloglar başarıyla silindi!");
-                deleteBtn.disabled = false;
-                deleteBtn.innerHTML = originalHtml;
+                if (totalDeleted === 0) {
+                    showSuccess("Silecek katalog bulunamadı.");
+                } else {
+                    showSuccess(`Toplam ${totalDeleted} katalog başarıyla silindi!`);
+                }
                 loadCatalogs();
-            })
-            .catch((error) => {
+            } catch (error) {
+                showError("Kataloglar silinirken hata oluştu: " + error.message);
+            } finally {
                 deleteBtn.disabled = false;
                 deleteBtn.innerHTML = originalHtml;
-                showError("Kataloglar silinirken hata oluştu: " + error.message);
-            });
+            }
+        })();
     }
 }
 

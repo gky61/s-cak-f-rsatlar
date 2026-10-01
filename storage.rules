@@ -1,12 +1,36 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /deals/{allPaths=**} {
-      // Görseller herkes tarafından okunabilir (uygulama anonim HTTP ile indiriyor)
-      allow read: if true;
-      // Kimliği doğrulanmış kullanıcılar (admin paneli dahil) görsel yükleyebilir
-      allow write: if request.auth != null;
+    
+    function isAuthenticated() {
+      return request.auth != null;
     }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isadmin == true ||
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == 'true'
+      );
+    }
+
+    function isValidImage() {
+      return request.resource != null &&
+             request.resource.contentType.matches('image/.*') &&
+             request.resource.size <= 5 * 1024 * 1024; // Azami 5MB görsel sınırı
+    }
+
+    match /deals/{allPaths=**} {
+      // Görseller herkes tarafından okunabilir (mobil istemci ve web)
+      allow read: if true;
+      
+      // Yalnızca doğrulanmış kullanıcılar geçerli görsel (image/* ve maks 5MB) yükleyebilir
+      allow create, update: if isAuthenticated() && isValidImage();
+      
+      // Silme işlemi yalnızca admin veya sunucu Admin SDK tarafından yapılabilir
+      allow delete: if isAdmin();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

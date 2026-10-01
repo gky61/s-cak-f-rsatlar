@@ -82,7 +82,7 @@ class ReportService {
       query = query.where('type', isEqualTo: type);
     }
     
-    return query.orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+    return query.orderBy('createdAt', descending: true).limit(100).snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => Report.fromFirestore(doc)).toList();
     });
   }
@@ -176,17 +176,21 @@ class ReportService {
     }
   }
 
-  /// Tüm moderasyon alarmlarını temizle
+  /// Tüm moderasyon alarmlarını temizle (Maks 400 doküman ve güvenli batch)
   Future<bool> deleteAllAutoModAlarms() async {
     try {
-      final snapshot = await _adminMessagesCollection.get();
+      final snapshot = await _adminMessagesCollection.limit(400).get();
       if (snapshot.docs.isEmpty) return true;
 
-      final batch = _firestore.batch();
-      for (final doc in snapshot.docs) {
-        batch.delete(doc.reference);
+      for (var i = 0; i < snapshot.docs.length; i += 400) {
+        final end = (i + 400 > snapshot.docs.length) ? snapshot.docs.length : i + 400;
+        final chunk = snapshot.docs.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final doc in chunk) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
       }
-      await batch.commit();
       return true;
     } catch (e) {
       if (kDebugMode) print('❌ Tüm alarmları silme hatası: $e');

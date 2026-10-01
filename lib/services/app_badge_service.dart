@@ -188,6 +188,7 @@ class AppBadgeService {
         .doc(userId)
         .collection('notifications')
         .where('read', isEqualTo: false)
+        .limit(100)
         .snapshots()
         .listen((snap) {
       _cachedUnreadNotifications = snap.docs.length;
@@ -199,6 +200,7 @@ class AppBadgeService {
         .collection('messages')
         .where('receiverId', isEqualTo: userId)
         .where('isRead', isEqualTo: false)
+        .limit(100)
         .snapshots()
         .listen((snap) {
       _cachedUnreadMessages = snap.docs.length;
@@ -210,6 +212,7 @@ class AppBadgeService {
         .collection('adminToUserMessages')
         .where('userId', isEqualTo: userId)
         .where('isRead', isEqualTo: false)
+        .limit(100)
         .snapshots()
         .listen((snap) {
       _cachedUnreadAdminMessages = snap.docs.length;

@@ -63,6 +63,11 @@ class _SwipeToDismissImageViewerState extends State<SwipeToDismissImageViewer>
   Offset _dragOffset = Offset.zero;
   bool _isDragging = false;
   bool _isZoomed = false;
+  int _pointerCount = 0;
+  bool _isInteractingWithViewer = false;
+
+  bool get _canSwipeDismiss =>
+      !_isZoomed && _pointerCount <= 1 && !_isInteractingWithViewer;
 
   @override
   void initState() {
@@ -111,6 +116,53 @@ class _SwipeToDismissImageViewerState extends State<SwipeToDismissImageViewer>
     });
   }
 
+  void _handlePointerDown(PointerDownEvent event) {
+    _pointerCount++;
+    // Ekrana 2. veya daha fazla parmak temas ettiği anda dikey kapatma sürüklemesini derhal iptal et
+    if (_pointerCount >= 2) {
+      _snapBackAnimController.stop();
+      _dismissAnimController.stop();
+      if (_isDragging || _dragOffset != Offset.zero) {
+        setState(() {
+          _isDragging = false;
+          _dragOffset = Offset.zero;
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 99);
+    if (_pointerCount < 2) {
+      final scale = _transformationController.value.getMaxScaleOnAxis();
+      final isZoomedNow = scale > 1.02;
+      if (isZoomedNow != _isZoomed) {
+        setState(() {
+          _isZoomed = isZoomedNow;
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 99);
+    if (_pointerCount < 2) {
+      final scale = _transformationController.value.getMaxScaleOnAxis();
+      final isZoomedNow = scale > 1.02;
+      if (isZoomedNow != _isZoomed) {
+        setState(() {
+          _isZoomed = isZoomedNow;
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
   void _handleZoomChange() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     final isZoomedNow = scale > 1.02;
@@ -152,13 +204,13 @@ class _SwipeToDismissImageViewerState extends State<SwipeToDismissImageViewer>
   }
 
   void _onVerticalDragStart(DragStartDetails details) {
-    if (_isZoomed) return;
+    if (!_canSwipeDismiss) return;
     _snapBackAnimController.stop();
     _isDragging = true;
   }
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {
-    if (_isZoomed) return;
+    if (!_canSwipeDismiss || !_isDragging) return;
 
     // Yalnızca aşağı doğru veya aktif sürükleme varsa ilerlet
     final newDy = _dragOffset.dy + details.delta.dy;
@@ -173,7 +225,7 @@ class _SwipeToDismissImageViewerState extends State<SwipeToDismissImageViewer>
   }
 
   void _onVerticalDragEnd(DragEndDetails details) {
-    if (_isZoomed) return;
+    if (!_isDragging) return;
     _isDragging = false;
 
     final velocity = details.primaryVelocity ?? 0.0;
@@ -262,51 +314,89 @@ class _SwipeToDismissImageViewerState extends State<SwipeToDismissImageViewer>
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // 1. DİNAMİK ŞEFFAFLAŞAN ARKA PLAN
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () {
-                if (_dragOffset == Offset.zero && !_isZoomed) {
-                  Navigator.of(context).pop();
-                }
-              },
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.94 * bgOpacity),
+      body: Listener(
+        onPointerDown: _handlePointerDown,
+        onPointerUp: _handlePointerUp,
+        onPointerCancel: _handlePointerCancel,
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          children: [
+            // 1. DİNAMİK ŞEFFAFLAŞAN ARKA PLAN
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () {
+                  if (_dragOffset == Offset.zero && !_isZoomed && _pointerCount <= 1) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.94 * bgOpacity),
+                ),
               ),
             ),
-          ),
 
-          // 2. PARMAKLA AŞAĞI KAYDIRILAN VE KÜÇÜLEN GÖRSEL KATMANI
-          Positioned.fill(
-            child: GestureDetector(
-              onVerticalDragStart: _onVerticalDragStart,
-              onVerticalDragUpdate: _onVerticalDragUpdate,
-              onVerticalDragEnd: _onVerticalDragEnd,
-              child: Transform.translate(
-                offset: _dragOffset,
-                child: Transform.scale(
-                  scale: scale,
-                  alignment: Alignment.center,
-                  child: Center(
-                    child: ClipRRect(
-                      borderRadius: borderRadius,
-                      child: InteractiveViewer(
-                        minScale: 1.0,
-                        maxScale: 4.0,
-                        transformationController: _transformationController,
-                        panEnabled: _isZoomed,
-                        scaleEnabled: true,
-                        child: GestureDetector(
-                          onDoubleTapDown: _handleDoubleTap,
-                          onDoubleTap: () {}, // onDoubleTapDown'ın çalışması için gereklidir
-                          child: widget.heroTag != null
-                              ? Hero(
-                                  tag: widget.heroTag!,
-                                  child: _buildImage(),
-                                )
-                              : _buildImage(),
+            // 2. PARMAKLA AŞAĞI KAYDIRILAN VE KÜÇÜLEN GÖRSEL KATMANI
+            Positioned.fill(
+              child: GestureDetector(
+                onVerticalDragStart: _canSwipeDismiss ? _onVerticalDragStart : null,
+                onVerticalDragUpdate: _canSwipeDismiss ? _onVerticalDragUpdate : null,
+                onVerticalDragEnd: _canSwipeDismiss ? _onVerticalDragEnd : null,
+                behavior: HitTestBehavior.translucent,
+                child: Transform.translate(
+                  offset: _dragOffset,
+                  child: Transform.scale(
+                    scale: scale,
+                    alignment: Alignment.center,
+                    child: Center(
+                      child: ClipRRect(
+                        borderRadius: borderRadius,
+                        child: InteractiveViewer(
+                          minScale: 1.0,
+                          maxScale: 4.0,
+                          transformationController: _transformationController,
+                          panEnabled: _isZoomed || _pointerCount >= 2,
+                          scaleEnabled: true,
+                          clipBehavior: Clip.none,
+                          onInteractionStart: (details) {
+                            _isInteractingWithViewer = true;
+                            if (details.pointerCount >= 2) {
+                              if (_isDragging || _dragOffset != Offset.zero) {
+                                _isDragging = false;
+                                setState(() {
+                                  _dragOffset = Offset.zero;
+                                });
+                              }
+                            }
+                          },
+                          onInteractionUpdate: (details) {
+                            final currentScale = _transformationController.value.getMaxScaleOnAxis();
+                            final isZoomedNow = currentScale > 1.02;
+                            if (isZoomedNow != _isZoomed) {
+                              setState(() {
+                                _isZoomed = isZoomedNow;
+                              });
+                            }
+                          },
+                          onInteractionEnd: (details) {
+                            _isInteractingWithViewer = false;
+                            final currentScale = _transformationController.value.getMaxScaleOnAxis();
+                            final isZoomedNow = currentScale > 1.02;
+                            if (isZoomedNow != _isZoomed) {
+                              setState(() {
+                                _isZoomed = isZoomedNow;
+                              });
+                            }
+                          },
+                          child: GestureDetector(
+                            onDoubleTapDown: _handleDoubleTap,
+                            onDoubleTap: () {}, // onDoubleTapDown'ın çalışması için gereklidir
+                            child: widget.heroTag != null
+                                ? Hero(
+                                    tag: widget.heroTag!,
+                                    child: _buildImage(),
+                                  )
+                                : _buildImage(),
+                          ),
                         ),
                       ),
                     ),
@@ -314,46 +404,46 @@ class _SwipeToDismissImageViewerState extends State<SwipeToDismissImageViewer>
                 ),
               ),
             ),
-          ),
 
-          // 3. ÜST SAĞ KAPATMA ÇARPI BUTONU
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            right: 16,
-            child: Opacity(
-              opacity: overlayOpacity,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.of(context).pop();
-                  },
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.50),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.20),
-                        width: 1,
+            // 3. ÜST SAĞ KAPATMA ÇARPI BUTONU
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              right: 16,
+              child: Opacity(
+                opacity: overlayOpacity,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.of(context).pop();
+                    },
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.50),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          width: 1,
+                        ),
                       ),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.close_rounded,
-                        color: Colors.white,
-                        size: 22,
+                      child: const Center(
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

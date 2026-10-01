@@ -46,13 +46,16 @@ final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<Sca
 // Uygulama tamamen kapalıyken bu handler ÇALIŞMAZ; o durumda sistem notification payload ile bildirimi gösterir
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
-  if (kDebugMode) {
-    print('🌙 Arka plan mesajı alındı: ${message.messageId}');
-    print('🌙 Data: ${message.data}');
-    print('🌙 Notification: ${message.notification?.title}');
-  }
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    }
+    
+    if (kDebugMode) {
+      print('🌙 Arka plan mesajı alındı: ${message.messageId}');
+      print('🌙 Data: ${message.data}');
+      print('🌙 Notification: ${message.notification?.title}');
+    }
 
   // ⚠️ DUPLİKE ÖNLEYİCİ: FCM notification payload varsa, Android zaten sistem bildirimi gösteriyor
   // Bu durumda biz tekrar local notification göstermemeliyiz (çift bildirim önleme)
@@ -200,6 +203,11 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } catch (e) {
     if (kDebugMode) print('❌ Arka plan bildirimi gösterme hatası: $e');
   }
+  } catch (e, st) {
+    if (kDebugMode) {
+      print('❌ Arka plan bildirim işleyicisi kritik hata: $e\n$st');
+    }
+  }
 }
 
 void main() async {
@@ -216,9 +224,12 @@ void main() async {
 
     // Layout/RenderFlex taşmaları uygulamayı çökertmez (Crashlytics'te fatal: false olarak izlenir)
     // Ancak kesinlikle çözülmesi gereken UI hatalarıdır; Web Admin panelinde ve Firestore'da görünmesi için 'error' olarak kaydedilir
+    final isFirebaseReady = Firebase.apps.isNotEmpty;
     final isOverflow = details.exceptionAsString().contains('overflowed by');
     if (isOverflow) {
-      FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
+      if (isFirebaseReady) {
+        FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
+      }
       SystemLogService.instance.logError(
         category: 'mobile',
         subCategory: 'ui_layout',
@@ -230,7 +241,9 @@ void main() async {
       return;
     }
 
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    if (isFirebaseReady) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    }
     SystemLogService.instance.logError(
       category: 'app_crash',
       errorType: 'FlutterError',
@@ -280,10 +293,11 @@ void main() async {
       print('Stack: $stack');
     }
 
+    final isFirebaseReady = Firebase.apps.isNotEmpty;
     final isPermissionDenied = error.toString().contains('permission-denied');
     if (isPermissionDenied) {
       // Yalnızca kullanıcı oturumu kapalıyken veya çıkış esnasında beklenen durumdur
-      if (FirebaseAuth.instance.currentUser == null) {
+      if (!isFirebaseReady || FirebaseAuth.instance.currentUser == null) {
         if (kDebugMode) {
           print('ℹ️ PlatformDispatcher: Çıkış esnasında yetkisiz dinleyici kapanışı (yoksayıldı)');
         }
@@ -300,7 +314,9 @@ void main() async {
       return true;
     }
 
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    if (isFirebaseReady) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
     SystemLogService.instance.logError(
       category: 'app_crash',
       errorType: 'PlatformDispatcherUnhandledError',
@@ -321,16 +337,21 @@ void main() async {
   }
 
   // Kritik olmayan servisleri arka planda, ilk kare çizimini (runApp) bloklamadan başlat
-  _initializeBackgroundServices();
+  if (Firebase.apps.isNotEmpty) {
+    _initializeBackgroundServices();
+  } else {
+    _log('⚠️ Firebase başlatılamadığı için arka plan servisleri başlatılamadı.');
+  }
 
   runApp(const MyApp());
 
   }, (error, stack) {
+    final isFirebaseReady = Firebase.apps.isNotEmpty;
     // Güvenlik & Yetki Hata Ayrımı:
     final isPermissionDenied = error.toString().contains('permission-denied');
     if (isPermissionDenied) {
       // Yalnızca kullanıcı oturumu kapalıyken veya çıkış esnasında beklenen bir durumdur
-      if (FirebaseAuth.instance.currentUser == null) {
+      if (!isFirebaseReady || FirebaseAuth.instance.currentUser == null) {
         if (kDebugMode) {
           print('ℹ️ ZonedGuarded: Çıkış sırasında beklenen permission-denied hatası (yoksayıldı)');
         }
@@ -350,7 +371,9 @@ void main() async {
       print('ZonedGuarded yakalanmamış hata: $error');
       print('Stack: $stack');
     }
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    if (isFirebaseReady) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
     SystemLogService.instance.logError(
       category: 'app_crash',
       errorType: 'ZonedGuardedUnhandledError',
@@ -364,6 +387,7 @@ void main() async {
 /// Kritik olmayan arka plan servislerini ve başlangıç konfigürasyonlarını
 /// ana UI thread'ini ve açılış çizimini (runApp) BLOKLAMADAN asenkron başlatır.
 void _initializeBackgroundServices() {
+  if (Firebase.apps.isEmpty) return;
   // Background message handler'ı sadece web dışı platformlarda kaydet
   if (!kIsWeb) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -582,36 +606,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
   final NotificationService _notificationService = NotificationService();
   final FirestoreService _firestoreService = FirestoreService();
   String? _lastUserId;
-  Timer? _cleanupTimer;
   StreamSubscription? _blockedUserListener;
   
   @override
   void initState() {
     super.initState();
-    // Temizlik işlemlerini ilk frame sonrası çalıştır (uygulama açılmadan Firestore'a yüklenmesin)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _runCleanupTasks();
-    });
-    // Her 6 saatte bir kontrol et
-    _cleanupTimer = Timer.periodic(const Duration(hours: 6), (timer) {
-      if (mounted) _runCleanupTasks();
-    });
-  }
-
-  /// Tüm temizlik işlemlerini çalıştır (hatanın uygulamayı kapatmaması için .catchError)
-  void _runCleanupTasks() {
-    void onError(Object e, StackTrace? st) {
-      if (kDebugMode) print('Temizlik hatası: $e');
-    }
-    _firestoreService.deleteUnapprovedDealsAfter24Hours().catchError(onError);
-    _firestoreService.deleteOldDeals().catchError(onError);
-    _firestoreService.cleanupExpiredDeals().catchError(onError);
+    // NOT: Eski fırsat temizliği (purgeOldDeals ve cleanupExpiredDeals) sunucu tarafında
+    // Firebase Cloud Functions cron job'ları ile güvenli ve yetkili biçimde yürütülür.
+    // Mobil istemcilerden toplu doküman okuyup silme girişimi (DDoS ve kota tüketimi) kaldırıldı.
   }
 
   @override
   void dispose() {
-    _cleanupTimer?.cancel();
     _blockedUserListener?.cancel();
     super.dispose();
   }
@@ -630,7 +636,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         await _authService.signOut();
         
         final ctx = navigatorKey.currentContext;
-        if (mounted && ctx != null) {
+        if (ctx != null && ctx.mounted) {
           final messenger = ScaffoldMessenger.of(ctx);
           messenger.removeCurrentSnackBar();
           messenger.showSnackBar(
@@ -700,7 +706,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             _log('✅ Oturum kapatıldı');
             
             final ctx = navigatorKey.currentContext;
-            if (mounted && ctx != null) {
+            if (ctx != null && ctx.mounted) {
               final messenger = ScaffoldMessenger.of(ctx);
               messenger.removeCurrentSnackBar();
               messenger.showSnackBar(

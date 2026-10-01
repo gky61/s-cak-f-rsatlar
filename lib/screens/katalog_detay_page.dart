@@ -36,6 +36,10 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
   int _currentPage = 0;
   bool _isZoomed = false;
   int _pointerCount = 0;
+  bool _isInteractingWithViewer = false;
+
+  bool get _canSwipeDismiss =>
+      !_isZoomed && _pointerCount <= 1 && !_isInteractingWithViewer;
 
   @override
   void initState() {
@@ -90,6 +94,53 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
     });
   }
 
+  void _handlePointerDown(PointerDownEvent event) {
+    _pointerCount++;
+    // Ekrana 2 veya daha fazla parmak temas ettiği anda kapatma sürüklemesini iptal et
+    if (_pointerCount >= 2) {
+      _snapBackAnimController.stop();
+      _dismissAnimController.stop();
+      if (_isDragging || _dragOffset != Offset.zero) {
+        setState(() {
+          _isDragging = false;
+          _dragOffset = Offset.zero;
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 99);
+    if (_pointerCount < 2) {
+      final scale = _transformationController.value.getMaxScaleOnAxis();
+      final isZoomedNow = scale > 1.02;
+      if (isZoomedNow != _isZoomed) {
+        setState(() {
+          _isZoomed = isZoomedNow;
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 99);
+    if (_pointerCount < 2) {
+      final scale = _transformationController.value.getMaxScaleOnAxis();
+      final isZoomedNow = scale > 1.02;
+      if (isZoomedNow != _isZoomed) {
+        setState(() {
+          _isZoomed = isZoomedNow;
+        });
+      } else {
+        setState(() {});
+      }
+    }
+  }
+
   void _handleZoomChange() {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     final isZoomedNow = scale > 1.02;
@@ -100,7 +151,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
     }
   }
 
-  void _handleDoubleTap() {
+  void _handleDoubleTap(TapDownDetails details) {
     HapticFeedback.lightImpact();
     final currentScale = _transformationController.value.getMaxScaleOnAxis();
     final Matrix4 targetMatrix;
@@ -109,12 +160,11 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
       // Zoom out smoothly to identity
       targetMatrix = Matrix4.identity();
     } else {
-      // Zoom in to 2.5x, centered on screen
+      // Zoom in to 2.5x, focused on double-tapped point
       const double scale = 2.5;
-      final double width = MediaQuery.of(context).size.width;
-      final double height = MediaQuery.of(context).size.height;
-      final double x = -(width * (scale - 1)) / 2;
-      final double y = -(height * (scale - 1)) / 2;
+      final position = details.localPosition;
+      final double x = -position.dx * (scale - 1);
+      final double y = -position.dy * (scale - 1);
       targetMatrix = Matrix4.identity()
         ..translateByDouble(x, y, 0.0, 1.0)
         ..scaleByDouble(scale, scale, 1.0, 1.0);
@@ -143,13 +193,13 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
   }
 
   void _onVerticalDragStart(DragStartDetails details) {
-    if (_isZoomed) return;
+    if (!_canSwipeDismiss) return;
     _snapBackAnimController.stop();
     _isDragging = true;
   }
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {
-    if (_isZoomed) return;
+    if (!_canSwipeDismiss || !_isDragging) return;
     final newDy = _dragOffset.dy + details.delta.dy;
     if (newDy < 0 && !_isDragging) return;
 
@@ -161,7 +211,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
   }
 
   void _onVerticalDragEnd(DragEndDetails details) {
-    if (_isZoomed) return;
+    if (!_isDragging) return;
     _isDragging = false;
 
     final velocity = details.primaryVelocity ?? 0.0;
@@ -269,102 +319,111 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
     final overlayOpacity = _calculateOverlayOpacity();
     final progress = _calculateProgress();
     final borderRadius = BorderRadius.circular(progress * 22.0);
+    final isPageLocked = _isZoomed || _pointerCount >= 2 || _isInteractingWithViewer;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // 0. DİNAMİK ŞEFFAFLAŞAN SİYAH ARKA PLAN
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withValues(alpha: 0.96 * bgOpacity),
+      body: Listener(
+        onPointerDown: _handlePointerDown,
+        onPointerUp: _handlePointerUp,
+        onPointerCancel: _handlePointerCancel,
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          children: [
+            // 0. DİNAMİK ŞEFFAFLAŞAN SİYAH ARKA PLAN
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.96 * bgOpacity),
+              ),
             ),
-          ),
 
-          // 1. MAIN PAGEVIEW WITH ZOOMABLE HIGH-RES IMAGES & DISMISS DRAG
-          Positioned.fill(
-            child: GestureDetector(
-              onVerticalDragStart: _onVerticalDragStart,
-              onVerticalDragUpdate: _onVerticalDragUpdate,
-              onVerticalDragEnd: _onVerticalDragEnd,
-              child: Transform.translate(
-                offset: _dragOffset,
-                child: Transform.scale(
-                  scale: scale,
-                  alignment: Alignment.center,
-                  child: ClipRRect(
-                    borderRadius: borderRadius,
-                    child: PageView.builder(
-                      controller: _pageController,
-                      itemCount: pageCount,
-                      onPageChanged: (index) {
-                        _zoomAnimController.stop();
-                        _transformationController.value = Matrix4.identity();
-                        setState(() {
-                          _currentPage = index;
-                          _isZoomed = false;
-                          _pointerCount = 0;
-                        });
-                        // Observability: Katalog sayfa çevirme telemetrisi
-                        AnalyticsService.instance.logCatalogView(
-                          storeName: widget.catalog.magazaKodu,
-                          catalogId: widget.catalog.katalogId,
-                          pageNumber: index + 1,
-                        );
-                      },
-                      physics: _isZoomed
-                          ? const NeverScrollableScrollPhysics()
-                          : const BouncingScrollPhysics(),
-                      itemBuilder: (context, index) {
-                        final isCurrent = index == _currentPage;
-                        return Listener(
-                          onPointerDown: (event) {
-                            if (isCurrent) {
-                              _pointerCount++;
-                              if (_pointerCount >= 2) {
-                                setState(() {
-                                  _isZoomed = true;
-                                });
-                              }
-                            }
-                          },
-                          onPointerUp: (event) {
-                            if (isCurrent) {
-                              _pointerCount = (_pointerCount - 1).clamp(0, 99);
-                              if (_pointerCount < 2 &&
-                                  _transformationController.value.getMaxScaleOnAxis() <= 1.02) {
-                                setState(() {
-                                  _isZoomed = false;
-                                });
-                              }
-                            }
-                          },
-                          onPointerCancel: (event) {
-                            if (isCurrent) {
-                              _pointerCount = (_pointerCount - 1).clamp(0, 99);
-                              if (_pointerCount < 2 &&
-                                  _transformationController.value.getMaxScaleOnAxis() <= 1.02) {
-                                setState(() {
-                                  _isZoomed = false;
-                                });
-                              }
-                            }
-                          },
-                          child: Center(
+            // 1. MAIN PAGEVIEW WITH ZOOMABLE HIGH-RES IMAGES & DISMISS DRAG
+            Positioned.fill(
+              child: GestureDetector(
+                onVerticalDragStart: _canSwipeDismiss ? _onVerticalDragStart : null,
+                onVerticalDragUpdate: _canSwipeDismiss ? _onVerticalDragUpdate : null,
+                onVerticalDragEnd: _canSwipeDismiss ? _onVerticalDragEnd : null,
+                behavior: HitTestBehavior.translucent,
+                child: Transform.translate(
+                  offset: _dragOffset,
+                  child: Transform.scale(
+                    scale: scale,
+                    alignment: Alignment.center,
+                    child: ClipRRect(
+                      borderRadius: borderRadius,
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: pageCount,
+                        onPageChanged: (index) {
+                          _zoomAnimController.stop();
+                          _transformationController.value = Matrix4.identity();
+                          setState(() {
+                            _currentPage = index;
+                            _isZoomed = false;
+                            _pointerCount = 0;
+                            _isInteractingWithViewer = false;
+                            _isDragging = false;
+                            _dragOffset = Offset.zero;
+                          });
+                          // Observability: Katalog sayfa çevirme telemetrisi
+                          AnalyticsService.instance.logCatalogView(
+                            storeName: widget.catalog.magazaKodu,
+                            catalogId: widget.catalog.katalogId,
+                            pageNumber: index + 1,
+                          );
+                        },
+                        physics: isPageLocked
+                            ? const NeverScrollableScrollPhysics()
+                            : const BouncingScrollPhysics(),
+                        itemBuilder: (context, index) {
+                          final isCurrent = index == _currentPage;
+                          return Center(
                             child: InteractiveViewer(
                               minScale: 1.0,
                               maxScale: 4.0,
                               transformationController: isCurrent ? _transformationController : null,
+                              panEnabled: _isZoomed || _pointerCount >= 2,
+                              scaleEnabled: isCurrent,
+                              clipBehavior: Clip.none,
+                              onInteractionStart: (details) {
+                                if (isCurrent) {
+                                  _isInteractingWithViewer = true;
+                                  if (details.pointerCount >= 2) {
+                                    if (_isDragging || _dragOffset != Offset.zero) {
+                                      _isDragging = false;
+                                      setState(() {
+                                        _dragOffset = Offset.zero;
+                                      });
+                                    }
+                                  }
+                                }
+                              },
+                              onInteractionUpdate: (details) {
+                                if (isCurrent) {
+                                  final currentScale = _transformationController.value.getMaxScaleOnAxis();
+                                  final isZoomedNow = currentScale > 1.02;
+                                  if (isZoomedNow != _isZoomed) {
+                                    setState(() {
+                                      _isZoomed = isZoomedNow;
+                                    });
+                                  }
+                                }
+                              },
                               onInteractionEnd: (details) {
-                                if (isCurrent &&
-                                    _transformationController.value.getMaxScaleOnAxis() <= 1.02) {
-                                  setState(() {
-                                    _isZoomed = false;
-                                  });
+                                if (isCurrent) {
+                                  _isInteractingWithViewer = false;
+                                  final currentScale = _transformationController.value.getMaxScaleOnAxis();
+                                  final isZoomedNow = currentScale > 1.02;
+                                  if (isZoomedNow != _isZoomed) {
+                                    setState(() {
+                                      _isZoomed = isZoomedNow;
+                                    });
+                                  }
                                 }
                               },
                               child: GestureDetector(
-                                onDoubleTap: isCurrent ? _handleDoubleTap : null,
+                                onDoubleTapDown: isCurrent ? _handleDoubleTap : null,
+                                onDoubleTap: isCurrent ? () {} : null,
                                 child: CachedNetworkImage(
                                   imageUrl: widget.catalog.sayfaResimleri[index],
                                   fit: BoxFit.contain,
@@ -392,8 +451,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
                                 ),
                               ),
                             ),
-                          ),
-                        );
+                          );
                       },
                     ),
                   ),
@@ -614,6 +672,7 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
             ),
         ],
       ),
-    );
+    ),
+  );
   }
 }

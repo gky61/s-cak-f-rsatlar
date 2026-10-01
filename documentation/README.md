@@ -125,6 +125,7 @@ FırsatKolik'te Geliştirme (DEV) ve Canlı (PROD) ortamları veri, bot, kimlik 
 * 🔗 [Ortam Yönetimi ve Canlıya Geçiş Kılavuzu](file:///d:/firsatkolik/documentation/backend-ve-altyapi/environment_management_guide.md) — Flavor yapılandırması ve operasyonel komutlar.
 * 🔗 [Güncellenmiş Gizli Bilgiler ve Anahtarlar Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/project_secrets_and_credentials_updated.md) — API anahtarları, oturumlar, keystore ve token envanteri.
 * 🔗 [Google Cloud Maliyet Analizi ve Sıfır Maliyet Mimarisi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/google_cloud_cost_analysis.md) — Cloud Run'dan Free Tier VM'e geçiş raporu.
+* 🔗 [Felaket Senaryoları, Zafiyetler ve Güvenlik Kalkanları Rehberi](file:///d:/firsatkolik/documentation/backend-ve-altyapi/felaket_senaryolari_ve_sistem_guvenlik_rehberi.md) — Cloud Functions, Flutter istemci ve Web Admin katmanlarındaki tüm felaket senaryoları, 10 bildirim kolu güvenlik matrisi ve maliyet koruma envanteri.
 
 ---
 

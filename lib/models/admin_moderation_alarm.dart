@@ -36,7 +36,7 @@ class AdminModerationAlarm {
       dealId: data['dealId'] as String?,
       commentId: data['commentId'] as String?,
       reason: data['reason'] as String? ?? 'Uygunsuz içerik tespit edildi',
-      isRead: data['isRead'] as bool? ?? false,
+      isRead: data['isRead'] == true || data['isRead'] == 'true',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }

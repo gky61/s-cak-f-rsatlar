@@ -247,16 +247,15 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       }
     });
     
-    // Kullanıcılar
-    _usersSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .snapshots()
-        .listen((snapshot) {
+    // Kullanıcılar (OOM ve kota patlaması kalkanı: count agregasyonu ile sıfır doküman yükü)
+    FirebaseFirestore.instance.collection('users').count().get().then((aggregate) {
       if (mounted) {
         setState(() {
-          _usersCount = snapshot.docs.length;
+          _usersCount = aggregate.count ?? 0;
         });
       }
+    }).catchError((e) {
+      _log('Kullanıcı sayısı yükleme hatası: $e');
     });
   }
 
@@ -341,6 +340,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   void _loadReportCounts() {
     _reportsSubscription = _firestoreService.reportsCollection
         .where('status', isEqualTo: 'pending')
+        .limit(100)
         .snapshots()
         .listen((snapshot) {
       if (mounted) {
@@ -354,6 +354,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     _autoModSubscription = FirebaseFirestore.instance
         .collection('adminMessages')
         .where('isRead', isEqualTo: false)
+        .limit(100)
         .snapshots()
         .listen((snapshot) {
       if (mounted) {
@@ -1489,8 +1490,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   final nickname = (userData['nickname'] ?? '').toString();
                   final displayName = nickname.isNotEmpty ? nickname : username;
                   final profileImageUrl = migrateAssetPath((userData['profileImageUrl'] ?? '').toString());
-                  final points = (userData['points'] ?? 0) as int;
-                  final totalLikes = (userData['totalLikes'] ?? 0) as int;
+                  final points = (userData['points'] as num?)?.toInt() ?? 0;
+                  final totalLikes = (userData['totalLikes'] as num?)?.toInt() ?? 0;
                   final badges = (userData['badges'] ?? []) as List<dynamic>;
                   final badgeIds = badges.map((e) => e.toString()).toList();
                   final userId = userDoc.id;
@@ -1742,9 +1743,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final displayName = nickname.isNotEmpty ? nickname : username;
     final profileImageUrl = migrateAssetPath((userData['profileImageUrl'] ?? '').toString());
     final email = userData['email']?.toString() ?? 'E-posta bilinmiyor';
-    final points = (userData['points'] ?? 0) as int;
-    final dealCount = (userData['dealCount'] ?? 0) as int;
-    final totalLikes = (userData['totalLikes'] ?? 0) as int;
+    final points = (userData['points'] as num?)?.toInt() ?? 0;
+    final dealCount = (userData['dealCount'] as num?)?.toInt() ?? 0;
+    final totalLikes = (userData['totalLikes'] as num?)?.toInt() ?? 0;
     final badges = (userData['badges'] ?? []) as List<dynamic>;
     final badgeIds = badges.map((e) => e.toString()).toList();
 

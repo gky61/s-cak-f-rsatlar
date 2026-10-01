@@ -46,6 +46,7 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
     _kataloglarStream = FirebaseFirestore.instance
         .collection('kataloglar')
         .where('magazaKodu', isEqualTo: widget.magazaKodu)
+        .limit(50)
         .snapshots();
   }
 

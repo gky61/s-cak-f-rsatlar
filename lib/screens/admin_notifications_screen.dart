@@ -95,7 +95,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     if (currentUserId == null) return;
 
     // Okundu işaretle
-    if (!(item['read'] as bool? ?? false)) {
+    if (!(item['read'] == true || item['read'] == 'true')) {
       await _firestoreService.markNotificationAsRead(currentUserId, item['id'] as String);
       AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
     }
@@ -715,9 +715,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         final allItems = rawItems.where((i) => !_locallyDismissedIds.contains(i['id'])).toList();
 
         // Sekme bazlı okunmamış sayıları
-        final unreadAll = allItems.where((i) => !(i['read'] as bool? ?? false)).length;
+        final unreadAll = allItems.where((i) => !(i['read'] == true || i['read'] == 'true')).length;
         final unreadAdmin = allItems.where((i) {
-          final isUnread = !(i['read'] as bool? ?? false);
+          final isUnread = !(i['read'] == true || i['read'] == 'true');
           final type = i['type'] as String? ?? '';
           return isUnread &&
               (type == 'admin_message' ||
@@ -727,7 +727,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                   type == 'submission_status');
         }).length;
         final unreadReplies = allItems.where((i) {
-          final isUnread = !(i['read'] as bool? ?? false);
+          final isUnread = !(i['read'] == true || i['read'] == 'true');
           final type = i['type'] as String? ?? '';
           return isUnread && (type == 'comment_reply' || type == 'comment');
         }).length;
@@ -1049,7 +1049,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final item = items[index];
-        final isUnread = !(item['read'] as bool? ?? false);
+        final isUnread = !(item['read'] == true || item['read'] == 'true');
         final type = (item['type'] ?? 'deal').toString();
 
         // Akıllı ve karşılıklı dışlayan (mutually exclusive) durum tespiti

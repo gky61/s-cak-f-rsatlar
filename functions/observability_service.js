@@ -20,7 +20,14 @@ async function getObservabilityMetricsHandler(data = {}, context = {}) {
   const callerUid = context.auth.uid;
   const userDoc = await admin.firestore().collection('users').doc(callerUid).get();
   const userData = userDoc.exists ? userDoc.data() : {};
-  const isAdmin = userData.role === 'admin' || userData.isAdmin === true || context.auth.token?.admin === true;
+  const isAdmin = userData && (
+    userData.role === 'admin' ||
+    userData.isAdmin === true ||
+    userData.isadmin === true ||
+    userData.isAdmin === 'true' ||
+    userData.isadmin === 'true' ||
+    context.auth.token?.admin === true
+  );
 
   if (!isAdmin) {
     throw new functions.https.HttpsError('permission-denied', 'Bu işlem için süper yönetici (admin) yetkisi gereklidir.');
@@ -323,6 +330,7 @@ async function getObservabilityMetricsHandler(data = {}, context = {}) {
     const dealsSnapshot = await db.collection('deals')
       .orderBy('createdAt', 'desc')
       .limit(60)
+      .select('store', 'magaza', 'viewCount', 'views', 'voteCount', 'votes')
       .get();
 
     dealsSnapshot.forEach(doc => {

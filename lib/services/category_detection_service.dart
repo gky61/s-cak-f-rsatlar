@@ -28,9 +28,13 @@ class CategoryDetectionService {
   /// 
   /// Returns: Map with 'categoryId' and 'subCategory' keys, or null if no match
   static Map<String, String?>? detectCategory(String text, {String? url, String? store}) {
+    if (text.trim().isEmpty) return null;
+
+    // CPU ve Regex DoS kalkanı: Kategori tespiti için ilk 2500 karakter fazlasıyla yeterlidir
+    final safeText = text.length > 2500 ? text.substring(0, 2500) : text;
     final lowerUrl = (url ?? '').toLowerCase();
     final lowerStore = (store ?? '').toLowerCase();
-    final lowerText = text.toLowerCase();
+    final lowerText = safeText.toLowerCase();
 
     final isGetirOrMigros = lowerUrl.contains('getir.com') ||
         lowerUrl.contains('migros.com.tr') ||
@@ -39,7 +43,7 @@ class CategoryDetectionService {
         lowerText.contains('getir.com') ||
         lowerText.contains('migros.com.tr');
 
-    final result = _detectCategoryInternal(text);
+    final result = _detectCategoryInternal(safeText);
 
     if (isGetirOrMigros) {
       String? subCategory;
@@ -806,7 +810,7 @@ class CategoryDetectionService {
     }
     
     if (w.endsWith('g')) {
-      w = w.substring(0, w.length - 1) + 'k';
+      w = '${w.substring(0, w.length - 1)}k';
     }
     return w;
   }

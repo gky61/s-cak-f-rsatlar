@@ -448,26 +448,46 @@ async function scrapeAndSaveCatalogs() {
   }
 
   const db = admin.firestore();
-  functions.logger.info('🧹 Deleting all existing catalogs...');
-  const querySnapshot = await db.collection('kataloglar').get();
-  const deleteDocs = querySnapshot.docs;
-  for (let i = 0; i < deleteDocs.length; i += 500) {
-    const batch = db.batch();
-    deleteDocs.slice(i, i + 500).forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
+
+  // 1. ADIM: Önce yeni katalogları upsert et (Atomic Merge - Sıfır Kesinti & Kesintisiz Görüntüleme)
+  functions.logger.info('💾 Writing/updating newly scraped catalogs to Firestore...');
+  const writeChunks = [];
+  for (let i = 0; i < allScrapedCatalogs.length; i += 400) {
+    writeChunks.push(allScrapedCatalogs.slice(i, i + 400));
   }
 
-  functions.logger.info('💾 Writing new catalogs to Firestore...');
-  for (let i = 0; i < allScrapedCatalogs.length; i += 500) {
+  for (const chunk of writeChunks) {
     const batch = db.batch();
-    allScrapedCatalogs.slice(i, i + 500).forEach(katalog => {
+    chunk.forEach((katalog) => {
       const docRef = db.collection('kataloglar').doc(katalog.katalogId);
-      batch.set(docRef, { ...katalog, olusturulmaTarihi: admin.firestore.FieldValue.serverTimestamp(), guncellenmeTarihi: admin.firestore.FieldValue.serverTimestamp() });
+      batch.set(docRef, {
+        ...katalog,
+        guncellenmeTarihi: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
     });
     await batch.commit();
   }
+  functions.logger.info(`Successfully updated ${allScrapedCatalogs.length} catalogs in Firestore.`);
 
-  return { success: true, count: allScrapedCatalogs.length };
+  // 2. ADIM: Artık yayında olmayan eski katalogları tespit et ve sadece onları temizle
+  functions.logger.info('🧹 Reconciling and cleaning obsolete catalogs...');
+  const newCatalogIdSet = new Set(allScrapedCatalogs.map(k => k.katalogId));
+  const existingSnapshot = await db.collection('kataloglar').select().get();
+  const obsoleteDocs = existingSnapshot.docs.filter(doc => !newCatalogIdSet.has(doc.id));
+
+  const deleteChunks = [];
+  for (let i = 0; i < obsoleteDocs.length; i += 400) {
+    deleteChunks.push(obsoleteDocs.slice(i, i + 400));
+  }
+
+  for (const chunk of deleteChunks) {
+    const batch = db.batch();
+    chunk.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+  }
+  functions.logger.info(`Reconciled catalogs: ${obsoleteDocs.length} obsolete catalogs deleted.`);
+
+  return { success: true, count: allScrapedCatalogs.length, deletedCount: obsoleteDocs.length };
 }
 
 module.exports = { STORES, scrapeAndSaveCatalogs };

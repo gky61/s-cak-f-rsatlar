@@ -42,15 +42,25 @@ service cloud.firestore {
       // Herkes okuyabilir (profil bilgileri ve yazar detayları için)
       allow read: if true;
       
-      // Kendi profilini, botkolik sistem profilini veya admin oluşturabilir
-      allow create: if isAuthenticated() && (userId() == targetUserId || targetUserId == 'botkolik' || isAdmin());
+      // Kendi profilini oluştururken asla isAdmin veya rol alanlarını set edemez
+      allow create: if isAuthenticated() && (
+        isAdmin() || (
+          userId() == targetUserId &&
+          (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false) &&
+          (!('isadmin' in request.resource.data) || request.resource.data.isadmin == false) &&
+          (!('role' in request.resource.data) || request.resource.data.role != 'admin')
+        )
+      );
       
       // Sadece kendi profilini veya admin güncelleyebilir.
-      // EK OLARAK: Başka bir kullanıcı sadece followersWithNotifications alanını güncelleyebilir (takip/zil için) veya botkolik güncellenebilir
+      // Normal kullanıcı kendi profilinde isAdmin, isadmin, role, isBanned alanlarını ASLA değiştiremez.
+      // Başka bir kullanıcı sadece followersWithNotifications alanını güncelleyebilir (takip/zil için)
       allow update: if isAuthenticated() && (
-        userId() == targetUserId || 
         isAdmin() ||
-        targetUserId == 'botkolik' ||
+        (
+          userId() == targetUserId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isadmin', 'role', 'isBanned'])
+        ) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersWithNotifications']))
       );
       
@@ -88,18 +98,31 @@ service cloud.firestore {
                       request.resource.data.postedBy == userId() &&
                       request.resource.data.hotVotes == 0 &&
                       request.resource.data.coldVotes == 0 &&
+                      (!('commentCount' in request.resource.data) || request.resource.data.commentCount == 0) &&
+                      (!('expiredVotes' in request.resource.data) || request.resource.data.expiredVotes == 0) &&
+                      (!('isExpired' in request.resource.data) || request.resource.data.isExpired == false) &&
                       (!('isEditorPick' in request.resource.data) || request.resource.data.isEditorPick == false) &&
                       (!('isApproved' in request.resource.data) || request.resource.data.isApproved == false || 
                        (exists(/databases/$(database)/documents/settings/app) && get(/databases/$(database)/documents/settings/app).data.dealApprovalRequired == false))
                     ));
       
-      // Sahibi veya admin tüm alanları güncelleyebilir.
-      // Herhangi bir giriş yapmış kullanıcı sadece oy/yorum sayacı alanlarını güncelleyebilir.
+      // Sahibi sadece belirli alanları (başlık, açıklama vb.) güncelleyebilir;
+      // ancak onay durumunu (isApproved), editör seçimini (isEditorPick), yazarı (postedBy) veya oyları (hotVotes, coldVotes) ASLA değiştiremez!
+      // Giriş yapmış herhangi bir kullanıcı sadece oy/yorum sayacı alanlarını güncelleyebilir (Asla negatif olamaz).
       allow update: if canWrite() && (
-        resource.data.postedBy == userId() || 
         isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['hotVotes', 'coldVotes', 'expiredVotes', 'isExpired', 'commentCount', 'updatedAt'])
+        (
+          resource.data.postedBy == userId() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved', 'isEditorPick', 'postedBy', 'hotVotes', 'coldVotes']) &&
+          (!('commentCount' in request.resource.data) || request.resource.data.commentCount >= 0) &&
+          (!('hotVotes' in request.resource.data) || request.resource.data.hotVotes >= 0) &&
+          (!('coldVotes' in request.resource.data) || request.resource.data.coldVotes >= 0)
+        ) ||
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['hotVotes', 'coldVotes', 'expiredVotes', 'isExpired', 'commentCount', 'updatedAt']) &&
+         (!('commentCount' in request.resource.data) || request.resource.data.commentCount >= 0) &&
+         (!('hotVotes' in request.resource.data) || request.resource.data.hotVotes >= 0) &&
+         (!('coldVotes' in request.resource.data) || request.resource.data.coldVotes >= 0))
       );
       
       // Sahibi veya admin silebilir
@@ -124,10 +147,13 @@ service cloud.firestore {
         allow create: if canWrite() && 
                       !exists(/databases/$(database)/documents/commentBannedUsers/$(request.auth.uid)) &&
                       request.resource.data.userId == userId();
-        allow update: if canWrite() && 
-                      (resource.data.userId == userId() || 
-                       isAdmin() ||
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
+        allow update: if canWrite() && (
+                      isAdmin() ||
+                      (
+                        resource.data.userId == userId() &&
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'dealId', 'createdAt'])
+                      ) ||
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
         allow delete: if isAuthenticated() && 
                       (resource.data.userId == userId() || isAdmin());
       }
@@ -147,11 +173,15 @@ service cloud.firestore {
       // Giriş yapmış kullanıcılar mesaj gönderilebilir; admin herhangi bir gönderen adına simüle edebilir
       allow create: if canWrite() && (request.resource.data.senderId == userId() || isAdmin());
       
-      // Alıcı, gönderen veya admin güncelleyebilir
-      allow update: if isAuthenticated() && 
-                    (resource.data.receiverId == userId() || 
-                     resource.data.senderId == userId() || 
-                     isAdmin());
+      // Alıcı veya gönderen sadece tepki (reactions), okundu durumu (isRead, readAt) veya silme referansı (deletedBy) güncelleyebilir.
+      // Mesaj metni veya gönderen/alıcı bilgileri asla sonradan değiştirilemez!
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (
+          (resource.data.receiverId == userId() || resource.data.senderId == userId()) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['senderId', 'receiverId', 'text', 'content', 'createdAt'])
+        )
+      );
       
       // Gönderen, alıcı veya admin silebilir
       allow delete: if isAuthenticated() && 
@@ -164,7 +194,9 @@ service cloud.firestore {
     // TYPING STATUS COLLECTION
     // ========================================
     match /typingStatus/{statusId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create, update: if canWrite() && (request.resource.data.userId == userId() || isAdmin());
+      allow delete: if isAuthenticated();
     }
     
     // ========================================
@@ -259,30 +291,52 @@ service cloud.firestore {
     // SYSTEM ERRORS LOGS (FAZ 4)
     // ========================================
     match /systemErrors/{errorId} {
-      allow read, write: if isAdmin();
-      allow create: if true; // Tüm servislerin hata logu yazabilmesi için
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasAll(['errorType', 'message', 'platform']) &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() <= 1000 &&
+        request.resource.data.errorType is string &&
+        request.resource.data.errorType.size() <= 100 &&
+        request.resource.data.platform in ['android', 'ios', 'web', 'backend', 'bot'] &&
+        (!('severity' in request.resource.data) || request.resource.data.severity in ['info', 'warning', 'error', 'fatal']) &&
+        (!('environment' in request.resource.data) || request.resource.data.environment in ['dev', 'prod'])
+      );
     }
 
     // ========================================
     // NOTIFICATION SUBSCRIPTIONS
     // ========================================
     match /notificationSubscriptions/{subscriptionId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId());
-      allow write: if canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId());
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId() || resource.data.userId == userId());
+      allow write: if canWrite() && 
+                   (request.resource == null || request.resource.data.uid == userId() || request.resource.data.userId == userId()) && 
+                   (resource == null || resource.data.uid == userId() || resource.data.userId == userId());
     }
     // ========================================
     // KUPONLAR COLLECTION
     // ========================================
     match /kuponlar/{kuponId} {
       allow read: if true;
-      allow create: if canWrite();
-      // Sahip veya admin tüm alanları güncelleyebilir/silebilir.
-      // Giriş yapmış herhangi bir kullanıcı sadece oy sayaçlarını ve durumu güncelleyebilir.
+      allow create: if canWrite() && (
+        isAdmin() || (
+          request.resource.data.paylasanKullaniciId == userId() &&
+          (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi == 0) &&
+          (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi == 0)
+        )
+      );
+      // Sahip oyları veya paylaşan kişi ID'sini doğrudan değiştiremez.
+      // Giriş yapmış herhangi bir kullanıcı sadece oy sayaçlarını ve durumu güncelleyebilir (Asla negatif olamaz).
       allow update: if isAuthenticated() && (
-        resource.data.paylasanKullaniciId == userId() ||
         isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['sicakOySayisi', 'sogukOySayisi', 'durum'])
+        (
+          resource.data.paylasanKullaniciId == userId() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['paylasanKullaniciId', 'sicakOySayisi', 'sogukOySayisi'])
+        ) ||
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['sicakOySayisi', 'sogukOySayisi', 'durum']) &&
+         (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi >= 0) &&
+         (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi >= 0))
       );
       allow delete: if isAuthenticated() && (resource.data.paylasanKullaniciId == userId() || isAdmin());
 
@@ -302,12 +356,13 @@ service cloud.firestore {
     }
 
     // ========================================
-
     // USER DEVICES
     // ========================================
     match /userDevices/{deviceId} {
-      allow read: if isAdmin() || (isAuthenticated() && (resource == null || resource.data.uid == userId()));
-      allow write: if isAdmin() || (canWrite() && (request.resource == null || request.resource.data.uid == userId()) && (resource == null || resource.data.uid == userId()));
+      allow read: if isAdmin() || (isAuthenticated() && (resource == null || resource.data.uid == userId() || resource.data.userId == userId()));
+      allow write: if isAdmin() || (canWrite() && 
+                   (request.resource == null || request.resource.data.uid == userId() || request.resource.data.userId == userId()) && 
+                   (resource == null || resource.data.uid == userId() || resource.data.userId == userId()));
     }
 
     // ========================================

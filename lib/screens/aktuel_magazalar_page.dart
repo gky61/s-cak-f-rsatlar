@@ -103,7 +103,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     super.initState();
     AnalyticsService.instance.logScreenView(screenName: 'AktuelMagazalarPage');
     _scrollController.addListener(_onScroll);
-    _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').snapshots();
+    _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').limit(150).snapshots();
   }
 
   void _onScroll() {

@@ -64,8 +64,8 @@ class Kupon {
       paylasanKullaniciId: data['paylasanKullaniciId'] ?? '',
       paylasanKullaniciAdi: data['paylasanKullaniciAdi'] ?? '',
       kaynakTipi: data['kaynakTipi'] ?? 'topluluk',
-      sicakOySayisi: data['sicakOySayisi'] ?? 0,
-      sogukOySayisi: data['sogukOySayisi'] ?? 0,
+      sicakOySayisi: (data['sicakOySayisi'] as num?)?.toInt() ?? 0,
+      sogukOySayisi: (data['sogukOySayisi'] as num?)?.toInt() ?? 0,
       durum: data['durum'] ?? 'aktif',
     );
   }

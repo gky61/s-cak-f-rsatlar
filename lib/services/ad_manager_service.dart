@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../firebase_options.dart';
@@ -283,11 +284,34 @@ class AdManagerService extends ChangeNotifier {
   // FIRESTORE SETTINGS/ADMOB CANLI SENKRONİZASYON (Web Admin ↔ Mobil Köprüsü)
   // ===========================================================================
 
+  static bool _parseBool(dynamic val, bool defaultVal) {
+    if (val == null) return defaultVal;
+    if (val is bool) return val;
+    if (val is String) {
+      final lower = val.trim().toLowerCase();
+      if (lower == 'true' || lower == '1') return true;
+      if (lower == 'false' || lower == '0') return false;
+    }
+    if (val is num) return val != 0;
+    return defaultVal;
+  }
+
+  static int _parseInt(dynamic val, int defaultVal) {
+    if (val == null) return defaultVal;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val.trim()) ?? defaultVal;
+    return defaultVal;
+  }
+
   /// Firestore `settings/admob` dokümanını gerçek zamanlı dinler.
   /// Web Admin panelinden yapılan her değişiklik (Kill-Switch, format şalterleri,
   /// cooldown, frekans sınırı, kupon kredileri) mobil uygulamaya anında yansır.
   void _startFirestoreSettingsListener() {
     try {
+      if (Firebase.apps.isEmpty) {
+        _log('ℹ️ Firebase henüz başlatılmadı. settings/admob dinleyicisi ertelendi.');
+        return;
+      }
       _settingsSubscription?.cancel();
       _settingsSubscription = FirebaseFirestore.instance
           .collection('settings')
@@ -306,7 +330,7 @@ class AdManagerService extends ChangeNotifier {
           final settings = data['settings'] as Map<String, dynamic>? ?? data;
 
           // 1. Kill-Switch Senkronizasyonu
-          final killSwitchActive = settings['killSwitchActive'] as bool? ?? false;
+          final killSwitchActive = _parseBool(settings['killSwitchActive'], false);
           final newAdsEnabled = !killSwitchActive;
           bool hasChanges = false;
 
@@ -324,11 +348,11 @@ class AdManagerService extends ChangeNotifier {
           }
 
           // 2. Format Bazlı Şalterler
-          final newBanner = settings['bannerEnabled'] as bool? ?? true;
-          final newRewarded = settings['rewardedEnabled'] as bool? ?? true;
-          final newNative = settings['nativeEnabled'] as bool? ?? true;
-          final newNativeCoupons = settings['nativeCouponsEnabled'] as bool? ?? true;
-          final newNativeAktuel = settings['nativeAktuelEnabled'] as bool? ?? true;
+          final newBanner = _parseBool(settings['bannerEnabled'], true);
+          final newRewarded = _parseBool(settings['rewardedEnabled'], true);
+          final newNative = _parseBool(settings['nativeEnabled'], true);
+          final newNativeCoupons = _parseBool(settings['nativeCouponsEnabled'], true);
+          final newNativeAktuel = _parseBool(settings['nativeAktuelEnabled'], true);
 
           if (bannerEnabled != newBanner) {
             bannerEnabled = newBanner;
@@ -361,23 +385,23 @@ class AdManagerService extends ChangeNotifier {
           }
 
           // 3. Cooldown Süresi
-          final cooldownSec = settings['cooldownSeconds'] as int? ?? 25;
+          final cooldownSec = _parseInt(settings['cooldownSeconds'], 25);
           _failureCooldown = Duration(seconds: cooldownSec);
 
           // 4. Native Grid, Kuponlar ve Aktüel Sıklığı (Faz 3.3)
-          final newGridInterval = settings['nativeGridInterval'] as int? ?? 6;
+          final newGridInterval = _parseInt(settings['nativeGridInterval'], 6);
           if (nativeGridInterval != newGridInterval && newGridInterval >= 4 && newGridInterval <= 20) {
             nativeGridInterval = newGridInterval;
             hasChanges = true;
             _log('⚙️ [FIRESTORE-SYNC] Native grid sıklığı: $nativeGridInterval');
           }
-          final newCouponsInterval = settings['nativeCouponsInterval'] as int? ?? 5;
+          final newCouponsInterval = _parseInt(settings['nativeCouponsInterval'], 5);
           if (nativeCouponsInterval != newCouponsInterval && newCouponsInterval >= 3 && newCouponsInterval <= 15) {
             nativeCouponsInterval = newCouponsInterval;
             hasChanges = true;
             _log('⚙️ [FIRESTORE-SYNC] Native Kuponlar sıklığı: $nativeCouponsInterval');
           }
-          final newAktuelInterval = settings['nativeAktuelInterval'] as int? ?? 6;
+          final newAktuelInterval = _parseInt(settings['nativeAktuelInterval'], 6);
           if (nativeAktuelInterval != newAktuelInterval && newAktuelInterval >= 4 && newAktuelInterval <= 20) {
             nativeAktuelInterval = newAktuelInterval;
             hasChanges = true;
@@ -385,8 +409,8 @@ class AdManagerService extends ChangeNotifier {
           }
 
           // 5. Kupon Kredi Parametreleri → CouponCreditService'e aktar
-          final dailyCredits = settings['dailyFreeCredits'] as int? ?? 2;
-          final rewardCredits = settings['rewardCreditsPerVideo'] as int? ?? 2;
+          final dailyCredits = _parseInt(settings['dailyFreeCredits'], 2);
+          final rewardCredits = _parseInt(settings['rewardCreditsPerVideo'], 2);
           if (CouponCreditService.instance.dailyFreeCredits != dailyCredits ||
               CouponCreditService.instance.rewardCreditsPerVideo != rewardCredits) {
             hasChanges = true;

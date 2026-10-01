@@ -4,11 +4,12 @@ import '../models/kupon.dart';
 class KuponService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Kuponları real-time dinleme
+  // Kuponları real-time dinleme (Maksimum 100 güncel kupon ile sınırlandırılmış güvenli akış)
   Stream<List<Kupon>> getKuponlarStream() {
     return _firestore
         .collection('kuponlar')
         .orderBy('olusturulmaTarihi', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) => Kupon.fromFirestore(doc)).toList();
@@ -84,8 +85,8 @@ class KuponService {
         final voteDoc = await transaction.get(voteRef);
         final data = kuponDoc.data() as Map<String, dynamic>;
 
-        int sicakOySayisi = data['sicakOySayisi'] ?? 0;
-        int sogukOySayisi = data['sogukOySayisi'] ?? 0;
+        int sicakOySayisi = (data['sicakOySayisi'] as num?)?.toInt() ?? 0;
+        int sogukOySayisi = (data['sogukOySayisi'] as num?)?.toInt() ?? 0;
         String? currentDbVote;
         if (voteDoc.exists) {
           currentDbVote = voteDoc.data()?['type'] as String?;
@@ -162,8 +163,8 @@ class KuponService {
         final voteDoc = await transaction.get(voteRef);
         final data = kuponDoc.data() as Map<String, dynamic>;
 
-        int sicakOySayisi = data['sicakOySayisi'] ?? 0;
-        int sogukOySayisi = data['sogukOySayisi'] ?? 0;
+        int sicakOySayisi = (data['sicakOySayisi'] as num?)?.toInt() ?? 0;
+        int sogukOySayisi = (data['sogukOySayisi'] as num?)?.toInt() ?? 0;
         String? oldVoteType;
         if (voteDoc.exists) {
           oldVoteType = voteDoc.data()?['type'] as String?;
