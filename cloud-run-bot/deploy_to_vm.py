@@ -49,8 +49,7 @@ try:
     # Finally, we prune old images to keep disk space usage at 0 (without failing if prune conflicts).
     docker_run_cmd = (
         f"docker pull gcr.io/{project_id}/{service_name}:latest && "
-        f"docker stop {container_name} || true && "
-        f"docker rm {container_name} || true && "
+        f"docker rm -f {container_name} || true && "
         f"docker run -d --name {container_name} --restart always -p {port}:8080 "
         f"--env-file {remote_dir}/.env "
         f"-v {remote_dir}/{env}_firebase_key.json:/app/firebase_key.json "
