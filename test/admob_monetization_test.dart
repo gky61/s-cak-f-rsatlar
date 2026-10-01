@@ -197,5 +197,68 @@ void main() {
       expect(homeScreenCode.contains('addAutomaticKeepAlives: true'), isTrue,
           reason: 'home_screen.dart ListView.builder must enable addAutomaticKeepAlives for ad preservation');
     });
+
+    test('16. Faz 3.4: AdManagerService supports nativePopular and nativeFollowedCategories settings', () {
+      final adManager = AdManagerService.instance;
+      expect(adManager.nativePopularEnabled, isTrue);
+      expect(adManager.nativePopularInterval, equals(6));
+      expect(adManager.nativeFollowedCategoriesEnabled, isTrue);
+      expect(adManager.nativeFollowedCategoriesInterval, equals(6));
+
+      // Test field mutation and notifyListeners
+      bool notified = false;
+      void listener() => notified = true;
+      adManager.addListener(listener);
+
+      adManager.nativePopularEnabled = false;
+      adManager.nativeFollowedCategoriesEnabled = false;
+      adManager.nativePopularInterval = 8;
+      adManager.nativeFollowedCategoriesInterval = 7;
+      adManager.notifyListeners();
+
+      expect(notified, isTrue);
+      expect(adManager.nativePopularEnabled, isFalse);
+      expect(adManager.nativeFollowedCategoriesEnabled, isFalse);
+      expect(adManager.nativePopularInterval, equals(8));
+      expect(adManager.nativeFollowedCategoriesInterval, equals(7));
+
+      // Revert to defaults
+      adManager.nativePopularEnabled = true;
+      adManager.nativeFollowedCategoriesEnabled = true;
+      adManager.nativePopularInterval = 6;
+      adManager.nativeFollowedCategoriesInterval = 6;
+      adManager.notifyListeners();
+      adManager.removeListener(listener);
+    });
+
+    test('17. Faz 3.4: popular_deals_screen.dart injects horizontal Native Ads into 2-column grid and list view', () {
+      final popularCode = File('lib/screens/popular_deals_screen.dart').readAsStringSync();
+      expect(popularCode.contains("import '../widgets/ad_deal_card.dart';"), isTrue,
+          reason: 'Must import AdDealCard');
+      expect(popularCode.contains("import '../services/ad_manager_service.dart';"), isTrue,
+          reason: 'Must import AdManagerService');
+      expect(popularCode.contains("_buildGridWithHorizontalAdsSlivers"), isTrue,
+          reason: 'Must use chunked 2-column SliverGrid to avoid single-cell FittedBox scale down');
+      expect(popularCode.contains("placement: 'popular'"), isTrue,
+          reason: 'Must route placement to popular');
+      expect(popularCode.contains("ListenableBuilder"), isTrue,
+          reason: 'Must listen to AdManagerService for live remote Firestore updates');
+    });
+
+    test('18. Faz 3.4: favorites_screen.dart injects Native Ads into Favori Kategorilerim while guaranteeing 100% ad-free isolation for Kaydettiklerim', () {
+      final favoritesCode = File('lib/screens/favorites_screen.dart').readAsStringSync();
+      expect(favoritesCode.contains("import '../widgets/ad_deal_card.dart';"), isTrue,
+          reason: 'Must import AdDealCard');
+      expect(favoritesCode.contains("import '../services/ad_manager_service.dart';"), isTrue,
+          reason: 'Must import AdManagerService');
+      expect(favoritesCode.contains("_buildFollowedCategoriesDealGrid"), isTrue,
+          reason: 'Must have dedicated grid builder with AdMob support for Tab 2');
+      expect(favoritesCode.contains("placement: 'favorite_categories'"), isTrue,
+          reason: 'Must tag ad impressions as favorite_categories placement');
+      
+      // CRITICAL FAIR-PLAY CHECK: Tab 1 ("Kaydettiklerim") must remain 100% ad-free!
+      expect(favoritesCode.contains("_buildDealGrid(displayedDeals, isDark, _myFavoritesScrollController)"), isTrue,
+          reason: 'Tab 1 (Kaydettiklerim) MUST use clean _buildDealGrid without any ads to protect high-intent affiliate conversions');
+    });
   });
 }

@@ -133,7 +133,7 @@ async function main() {
                 communityNotificationsEnabled: { booleanValue: true },
                 submissionStatusNotificationsEnabled: { booleanValue: true },
                 marketingNotificationsEnabled: { booleanValue: false },
-                quietHoursEnabled: { booleanValue: false },
+                quietHoursEnabled: { booleanValue: true },
                 quietHoursStart: { stringValue: '23:00' },
                 quietHoursEnd: { stringValue: '08:00' },
                 timezone: { stringValue: 'Europe/Istanbul' },

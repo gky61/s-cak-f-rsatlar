@@ -1405,9 +1405,66 @@ exports.onCouponCreated = functions
     functions.logger.info(`🎟️ Yeni topluluk kuponu bildirimi oluşturuluyor: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
 
     try {
+      // 1. ANLIK TOPLULUK KUPONU FCM TOPIC PUSH (Sıfır Ek Maliyet, 100.000+ kullanıcıya 0 Fan-out yükü)
+      try {
+        const topicPayload = {
+          topic: 'community_coupons',
+          notification: {
+            title: `🎟️ ${magazaAdi} Kuponu!`,
+            body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
+          },
+          data: {
+            type: 'coupon',
+            reason: 'community',
+            kuponId: String(kuponId),
+            magazaAdi: String(magazaAdi),
+            kuponKodu: String(kuponKodu),
+            authorName: String(paylasanAdi),
+            authorId: String(paylasanId),
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              channelId: 'sicak_firsatlar_general_v2',
+              sound: 'default',
+              color: '#8E24AA',
+              icon: '@mipmap/ic_launcher',
+              tag: `coupon_${kuponId}`,
+              defaultSound: true,
+              defaultVibrateTimings: true
+            }
+          },
+          apns: {
+            headers: {
+              'apns-push-type': 'alert',
+              'apns-priority': '10'
+            },
+            payload: {
+              aps: {
+                alert: {
+                  title: `🎟️ ${magazaAdi} Kuponu!`,
+                  body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
+                },
+                sound: 'default',
+                badge: 1,
+                'content-available': 1,
+                'interruption-level': 'active',
+                category: 'COUPON_NOTIFICATION'
+              }
+            }
+          }
+        };
+
+        const topicResponse = await admin.messaging().send(topicPayload);
+        functions.logger.info(`📢 Topluluk kuponu FCM konusuna (topic: community_coupons) gönderildi: ${topicResponse}`);
+      } catch (topicErr) {
+        functions.logger.warn('⚠️ Topluluk kuponu FCM topic gönderim uyarısı:', topicErr.message);
+      }
+
       const targetUserIds = new Set();
 
-      // 1. Hedefli Mağaza ve Yazar Abonelikleri
+      // 2. Hedefli Mağaza ve Yazar Abonelikleri (In-App Bildirim Merkezi Doküman Yazımı)
       const storeKeyword = normalize(magazaAdi).trim();
       const queries = [];
 
@@ -1445,7 +1502,7 @@ exports.onCouponCreated = functions
         }
       }
 
-      // 2. Kota ve Bounded Fan-out Koruması:
+      // 3. Kota ve Bounded Fan-out Koruması:
       // Yalnızca mağaza anahtar kelimesini veya yazarı takip eden abonelere gönderilir.
       // Eşleşen abone sayısı 300'ü aşarsa azami 300 ile sınırlandırılır.
       const MAX_COUPON_NOTIF_TARGETS = 300;
@@ -1457,7 +1514,7 @@ exports.onCouponCreated = functions
       }
 
       if (finalTargetUserIds.length === 0) {
-        functions.logger.info(`ℹ️ Kupon (${kuponId}) için aktif abone bulunamadı (${magazaAdi} / ${paylasanAdi}), bildirim oluşturulmadı.`);
+        functions.logger.info(`ℹ️ Kupon (${kuponId}) için aktif abone bulunamadı (${magazaAdi} / ${paylasanAdi}), in-app bildirim dokümanı oluşturulmadı.`);
         return null;
       }
 
@@ -1483,6 +1540,7 @@ exports.onCouponCreated = functions
           authorName: paylasanAdi,
           authorId: paylasanId,
           read: false,
+          isTopicDelivered: true,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
@@ -1577,6 +1635,17 @@ exports.onNotificationCreated = functions.firestore
       }
     }
 
+    // 00.1 Topic ile dağıtılmış kupon bildirimleri için mükerrer push engeli:
+    if (notification.isTopicDelivered === true) {
+      functions.logger.info(`ℹ️ Kupon bildirimi (${notificationId}) global FCM topic üzerinden zaten iletildi, tekil push atlanıyor.`);
+      await snap.ref.set({
+        pushEligible: false,
+        pushStatus: 'delivered_via_topic',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      return null;
+    }
+
     // 0. Check global Master Switch for push notifications
     let sysConfig = {};
     try {
@@ -1604,7 +1673,7 @@ exports.onNotificationCreated = functions.firestore
       communityNotificationsEnabled: true,
       submissionStatusNotificationsEnabled: true,
       marketingNotificationsEnabled: false,
-      quietHoursEnabled: false,
+      quietHoursEnabled: true,
       quietHoursStart: '23:00',
       quietHoursEnd: '08:00',
       timezone: 'Europe/Istanbul'
@@ -3908,7 +3977,7 @@ exports.generateTestData = functions.https.onCall(wrapCall('generateTestData', a
       communityNotificationsEnabled: true,
       submissionStatusNotificationsEnabled: true,
       marketingNotificationsEnabled: false,
-      quietHoursEnabled: false,
+      quietHoursEnabled: true,
       quietHoursStart: '23:00',
       quietHoursEnd: '08:00',
       timezone: 'Europe/Istanbul',

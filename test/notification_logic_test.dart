@@ -10,7 +10,7 @@ void main() {
       expect(prefs.communityNotificationsEnabled, isTrue);
       expect(prefs.submissionStatusNotificationsEnabled, isTrue);
       expect(prefs.marketingNotificationsEnabled, isFalse); // Varsayılan kapalı olmalı
-      expect(prefs.quietHoursEnabled, isFalse);
+      expect(prefs.quietHoursEnabled, isTrue); // Varsayılan sessiz saatler açık olmalı (23:00-08:00)
       expect(prefs.quietHoursStart, '23:00');
       expect(prefs.quietHoursEnd, '08:00');
       expect(prefs.timezone, 'Europe/Istanbul');

@@ -71,10 +71,14 @@
                 nativeEnabled: true, // Anasayfa Grid ve Liste akış içi Native reklam şalteri
                 nativeCouponsEnabled: true, // Kuponlar sayfası akış içi Native reklam şalteri
                 nativeAktuelEnabled: true, // Aktüel kataloglar sayfası akış içi Native reklam şalteri
+                nativePopularEnabled: true, // Popüler Fırsatlar sayfası akış içi Native reklam şalteri
+                nativeFollowedCategoriesEnabled: true, // Favori Kategorilerim sayfası akış içi Native reklam şalteri
                 rewardedEnabled: true,
                 nativeGridInterval: 6, // Her 6 fırsat kartında bir (3 satırda bir) tam genişlik Native reklam
                 nativeCouponsInterval: 5, // Her 5 öğede bir (4 kuponda bir) yatay Native reklam
                 nativeAktuelInterval: 6, // Her 6 broşürde bir (3 satırda bir) tam genişlik Native reklam
+                nativePopularInterval: 6, // Her 6 popüler fırsatta bir tam genişlik Native reklam
+                nativeFollowedCategoriesInterval: 6, // Her 6 favori kategori fırsatında bir tam genişlik Native reklam
                 cooldownSeconds: 25,
                 rewardCreditsPerVideo: 2,
                 dailyFreeCredits: 2
@@ -137,8 +141,8 @@
             inspection: {
                 lastInspected: new Date().toISOString(),
                 status: 'ALL_CHECKS_PASSED',
-                totalChecks: 8,
-                passedChecks: 8,
+                totalChecks: 10,
+                passedChecks: 10,
                 checks: [
                     { file: 'android/app/build.gradle', rule: 'Dev & Prod manifestPlaceholders ayrımı', passed: true, details: 'Dev test ID (3347511713) ve Prod gerçek ID (8861215767) kusursuz ayrılmış.' },
                     { file: 'android/app/src/main/AndroidManifest.xml', rule: 'Dinamik ${admob_app_id} enjeksiyonu', passed: true, details: 'Sabit kodlu ID kaldırılmış, gradle placeholder ile besleniyor.' },
@@ -147,6 +151,8 @@
                     { file: 'lib/screens/home_screen.dart', rule: 'Faz 3.3 Akış Mimarisi (CustomScrollView & SliverGrid)', passed: true, details: 'Grid ve Liste modlarında tam genişlikli (124dp) Native Ad yatay şeritleri kusursuz entegre.' },
                     { file: 'lib/screens/kuponlar_page.dart', rule: 'Kuponlar Akış İçi Native Ad (Her 4 kuponda 1)', passed: true, details: 'Her 4 kuponda 1 (5., 10., 15... sıralarda) 124dp yatay Native Ad enjeksiyonu.' },
                     { file: 'lib/screens/katalog_listesi_page.dart', rule: 'Aktüel Akış İçi Native Ad (Her 6 broşürde 1)', passed: true, details: '2 sütunlu grid yapısında her 6 broşürde (3 satırda bir) tam genişlik yatay Native Ad enjeksiyonu.' },
+                    { file: 'lib/screens/popular_deals_screen.dart', rule: 'Popüler Fırsatlar Akış İçi Native Ad (Her 6 üründe 1)', passed: true, details: 'Grid ve Liste modlarında her 6 fırsattan sonra tam genişlik 124dp yatay Native Ad enjeksiyonu.' },
+                    { file: 'lib/screens/favorites_screen.dart', rule: 'Favori Kategorilerim Native Ad & Kaydettiklerim Ad-Free İzolasyonu', passed: true, details: 'Favori Kategorilerim sekmesinde 6 üründe 1 Native Ad; Kaydettiklerim sekmesinde %100 reklamsız koruma.' },
                     { file: 'lib/services/ad_manager_service.dart', rule: 'Singleton Mimari, 25s Cooldown & Kill-Switch', passed: true, details: 'onPaidEvent telemetrisi, soğuma ve uzaktan Firestore şalteri aktif.' }
                 ]
             },
@@ -160,6 +166,8 @@
                     { item: 'kuponlar_page.dart', rule: 'Rewarded Ad Opt-in Kullanıcı Rızası', passed: true, note: 'Zorunlu video yok, kullanıcı açık isteğiyle (+2 hak için) açılıyor.' },
                     { item: 'kuponlar_page.dart', rule: 'Fair-Play İade Garantisi', passed: true, note: 'Çalışmayan kuponda hak iadesi garantileniyor.' },
                     { item: 'katalog_listesi_page.dart', rule: 'Aktüel 2 Sütunlu Grid Native Ad Yerleşimi', passed: true, note: '3 satırda bir (6 broşür) tam genişlik 124dp yatay Native Ad enjeksiyonu, sıfır-taşma.' },
+                    { item: 'popular_deals_screen.dart', rule: 'Popüler Fırsatlar 2 Sütunlu Grid Native Ad Yerleşimi', passed: true, note: '3 satırda bir (6 fırsat) tam genişlik 124dp yatay Native Ad enjeksiyonu, sıfır AdMob Validator sorunu.' },
+                    { item: 'favorites_screen.dart', rule: 'Kaydettiklerim Sekmesi Reklamsızlık İzolasyonu (Fair-Play)', passed: true, note: 'Yüksek dönüşümlü kişisel kayıtlar reklamsız korunurken yalnızca kategori keşfinde Native Ad aktif.' },
                     { item: 'ad_manager_service.dart', rule: 'Anti-Spam 25s Cooldown & Firestore Kill-Switch', passed: true, note: 'Arka arkaya istek engeli ve Firestore uzaktan acil şalter koruması aktif.' }
                 ]
             },
@@ -1022,6 +1030,40 @@
                                 </button>
                             </div>
 
+                            <!-- 1.4. Akış İçi Native (Popüler Fırsatlar Sayfası) -->
+                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-[20px] text-amber-500">whatshot</span>
+                                    <div>
+                                        <div class="flex items-center">
+                                            <span class="text-xs font-black text-slate-900 dark:text-white">Akış İçi Native (Popüler Fırsatlar)</span>
+                                            ${this.renderInfoTip('Native Reklam (Popüler Fırsatlar)', 'Popüler Fırsatlar sayfasında Grid ve Liste modlarında belirlenen sıklıkta tam genişlik yatay Small Native reklam gösterir. Kapatıldığında organik reklamsız akışa geçer.', 'Yerleşim: Popüler Fırsatlar Akışı (Her 6 Fırsatta 1 Reklam)')}
+                                        </div>
+                                        <div class="text-[11px] text-slate-500">Popüler Fırsatlar akışında her 6 fırsatta 1 sponsorlu kart</div>
+                                    </div>
+                                </div>
+                                <button onclick="window.AdMobManager.toggleFormat('nativePopularEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.nativePopularEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
+                                    ${s.nativePopularEnabled ? 'AÇIK' : 'KAPALI'}
+                                </button>
+                            </div>
+
+                            <!-- 1.5. Akış İçi Native (Favori Kategorilerim Sayfası) -->
+                            <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-[20px] text-rose-500">favorite</span>
+                                    <div>
+                                        <div class="flex items-center">
+                                            <span class="text-xs font-black text-slate-900 dark:text-white">Akış İçi Native (Favori Kategorilerim)</span>
+                                            ${this.renderInfoTip('Native Reklam (Favori Kategorilerim)', 'Kaydedilenler altındaki Favori Kategorilerim sekmesinde her 6 fırsattan sonra tam genişlik yatay Small Native reklam gösterir. Kaydettiklerim sekmesi ise %100 reklamsız korunur.', 'Yerleşim: Favori Kategorilerim Akışı (Kaydettiklerim Reklamsızdır)')}
+                                        </div>
+                                        <div class="text-[11px] text-slate-500">Favori Kategorilerim sekmesinde sponsorlu kart (Kaydettiklerim reklamsız)</div>
+                                    </div>
+                                </div>
+                                <button onclick="window.AdMobManager.toggleFormat('nativeFollowedCategoriesEnabled')" class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${s.nativeFollowedCategoriesEnabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500'}">
+                                    ${s.nativeFollowedCategoriesEnabled ? 'AÇIK' : 'KAPALI'}
+                                </button>
+                            </div>
+
                             <!-- 2. Ödüllü Video (Rewarded) -->
                             <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
                                 <div class="flex items-center gap-3">
@@ -1127,6 +1169,30 @@
                                 <span class="absolute right-3 top-2.5 text-xs text-slate-400">Broşür</span>
                             </div>
                             <span class="text-[10px] text-slate-500 mt-1 block">Her 6 broşürde 1 reklam şeridi</span>
+                        </div>
+
+                        <div>
+                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
+                                <span>Native Sıklığı (Popüler)</span>
+                                ${this.renderInfoTip('Native Reklam Sıklığı (Popüler Fırsatlar)', 'Popüler Fırsatlar sayfasında her kaç fırsat kartından sonra tam genişlikte yatay Native Reklam yerleştirileceğini belirler. Standart: 6 (3 satırda bir).', '💡 Önerilen: 6 Ürün (3 Satır)', 'left')}
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="inputNativePopularInterval" min="4" max="20" value="${s.nativePopularInterval || 6}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Ürün</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Her 6 popüler fırsatta 1 reklam</span>
+                        </div>
+
+                        <div>
+                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
+                                <span>Native Sıklığı (Favori Kat.)</span>
+                                ${this.renderInfoTip('Native Reklam Sıklığı (Favori Kategorilerim)', 'Favori Kategorilerim akışında her kaç fırsattan sonra tam genişlikte yatay Native Reklam yerleştirileceğini belirler. Standart: 6 (3 satırda bir).', '💡 Önerilen: 6 Ürün (3 Satır)', 'left')}
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="inputNativeFollowedCategoriesInterval" min="4" max="20" value="${s.nativeFollowedCategoriesInterval || 6}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Ürün</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Her 6 favori kategori ilanında 1 reklam</span>
                         </div>
 
                         <div>
@@ -1588,6 +1654,8 @@
                 nativeEnabled: 'Akış İçi Native Reklam (Anasayfa)',
                 nativeCouponsEnabled: 'Akış İçi Native Reklam (Kuponlar)',
                 nativeAktuelEnabled: 'Akış İçi Native Reklam (Aktüel)',
+                nativePopularEnabled: 'Akış İçi Native Reklam (Popüler Fırsatlar)',
+                nativeFollowedCategoriesEnabled: 'Akış İçi Native Reklam (Favori Kategorilerim)',
                 rewardedEnabled: 'Ödüllü Video (Rewarded)',
                 bannerEnabled: 'Banner (Arşiv / Pasif)'
             };
@@ -1613,12 +1681,16 @@
             const nInput = parseInt(document.getElementById('inputNativeGridInterval')?.value, 10);
             const ncInput = parseInt(document.getElementById('inputNativeCouponsInterval')?.value, 10);
             const naInput = parseInt(document.getElementById('inputNativeAktuelInterval')?.value, 10);
+            const npInput = parseInt(document.getElementById('inputNativePopularInterval')?.value, 10);
+            const nfcInput = parseInt(document.getElementById('inputNativeFollowedCategoriesInterval')?.value, 10);
             const cInput = parseInt(document.getElementById('inputCooldownSeconds')?.value, 10);
             const dailyCredits = isNaN(dInput) || dInput < 1 ? 2 : Math.min(dInput, 20);
             const rewardCredits = isNaN(rInput) || rInput < 1 ? 2 : Math.min(rInput, 10);
             const nativeGridInterval = isNaN(nInput) || nInput < 4 ? 6 : Math.min(nInput, 20);
             const nativeCouponsInterval = isNaN(ncInput) || ncInput < 3 ? 5 : Math.min(ncInput, 15);
             const nativeAktuelInterval = isNaN(naInput) || naInput < 4 ? 6 : Math.min(naInput, 20);
+            const nativePopularInterval = isNaN(npInput) || npInput < 4 ? 6 : Math.min(npInput, 20);
+            const nativeFollowedCategoriesInterval = isNaN(nfcInput) || nfcInput < 4 ? 6 : Math.min(nfcInput, 20);
             const cooldown = isNaN(cInput) || cInput < 5 ? 25 : Math.min(cInput, 300);
 
             this.data.settings.dailyFreeCredits = dailyCredits;
@@ -1626,10 +1698,12 @@
             this.data.settings.nativeGridInterval = nativeGridInterval;
             this.data.settings.nativeCouponsInterval = nativeCouponsInterval;
             this.data.settings.nativeAktuelInterval = nativeAktuelInterval;
+            this.data.settings.nativePopularInterval = nativePopularInterval;
+            this.data.settings.nativeFollowedCategoriesInterval = nativeFollowedCategoriesInterval;
             this.data.settings.cooldownSeconds = cooldown;
 
             await this.persistSettings();
-            this.logToConsole(`💾 [SETTINGS] Kupon kredileri (Günlük: ${dailyCredits}, Video: ${rewardCredits}), Native Sıklığı (Anasayfa: ${nativeGridInterval} ürün, Kuponlar: ${nativeCouponsInterval} öğe, Aktüel: ${nativeAktuelInterval} broşür) ve güvenlik eşikleri (Cooldown: ${cooldown}s) güncellendi.`);
+            this.logToConsole(`💾 [SETTINGS] Kupon kredileri (Günlük: ${dailyCredits}, Video: ${rewardCredits}), Native Sıklığı (Anasayfa: ${nativeGridInterval}, Kupon: ${nativeCouponsInterval}, Aktüel: ${nativeAktuelInterval}, Popüler: ${nativePopularInterval}, Favori: ${nativeFollowedCategoriesInterval}) ve güvenlik eşikleri (Cooldown: ${cooldown}s) güncellendi.`);
 
             if (typeof window.showToast === 'function') {
                 window.showToast('AdMob ve Kupon parametreleri başarıyla kaydedildi!', 'success');
@@ -1649,6 +1723,8 @@
             const inGrid = document.getElementById('inputNativeGridInterval');
             const inCoupons = document.getElementById('inputNativeCouponsInterval');
             const inAktuel = document.getElementById('inputNativeAktuelInterval');
+            const inPopular = document.getElementById('inputNativePopularInterval');
+            const inFavCat = document.getElementById('inputNativeFollowedCategoriesInterval');
             const inCooldown = document.getElementById('inputCooldownSeconds');
 
             if (inDaily) inDaily.value = def.dailyFreeCredits;
@@ -1656,6 +1732,8 @@
             if (inGrid) inGrid.value = def.nativeGridInterval;
             if (inCoupons) inCoupons.value = def.nativeCouponsInterval;
             if (inAktuel) inAktuel.value = def.nativeAktuelInterval;
+            if (inPopular) inPopular.value = def.nativePopularInterval;
+            if (inFavCat) inFavCat.value = def.nativeFollowedCategoriesInterval;
             if (inCooldown) inCooldown.value = def.cooldownSeconds;
 
             if (this.data && this.data.settings) {
@@ -1664,6 +1742,8 @@
                 this.data.settings.nativeGridInterval = def.nativeGridInterval;
                 this.data.settings.nativeCouponsInterval = def.nativeCouponsInterval;
                 this.data.settings.nativeAktuelInterval = def.nativeAktuelInterval;
+                this.data.settings.nativePopularInterval = def.nativePopularInterval;
+                this.data.settings.nativeFollowedCategoriesInterval = def.nativeFollowedCategoriesInterval;
                 this.data.settings.cooldownSeconds = def.cooldownSeconds;
                 await this.persistSettings();
             }
@@ -1911,16 +1991,20 @@
             const nInterval = this.data?.settings?.nativeGridInterval || 6;
             const ncInterval = this.data?.settings?.nativeCouponsInterval || 5;
             const naInterval = this.data?.settings?.nativeAktuelInterval || 6;
+            const npInterval = this.data?.settings?.nativePopularInterval || 6;
+            const nfcInterval = this.data?.settings?.nativeFollowedCategoriesInterval || 6;
             const nOn = this.data?.settings?.nativeEnabled ? 'AÇIK' : 'KAPALI';
             const ncOn = this.data?.settings?.nativeCouponsEnabled ? 'AÇIK' : 'KAPALI';
             const naOn = this.data?.settings?.nativeAktuelEnabled ? 'AÇIK' : 'KAPALI';
+            const npOn = this.data?.settings?.nativePopularEnabled ? 'AÇIK' : 'KAPALI';
+            const nfcOn = this.data?.settings?.nativeFollowedCategoriesEnabled ? 'AÇIK' : 'KAPALI';
             const bOn = this.data?.settings?.bannerEnabled ? 'AÇIK' : 'PASİF (ARŞİV)';
             const rwOn = this.data?.settings?.rewardedEnabled ? 'AÇIK' : 'KAPALI';
 
             switch(cmd) {
                 case 'status':
                     this.logToConsole('⚡ CMD: python admob_cli.py status --platform all --env prod');
-                    this.logToConsole(`✅ STATUS: ${ks ? 'PAUSED (KILL-SWITCH AKTİF)' : 'OPERATIONAL'} | KillSwitch: ${ks ? 'TRUE (DURDURULDU)' : 'FALSE (AKTİF)'} | Native(Anasayfa): ${nOn} (${nInterval} üründe 1) | Native(Kuponlar): ${ncOn} (${ncInterval} öğede 1 / 4 kuponda 1) | Native(Aktüel): ${naOn} (${naInterval} broşürde 1) | Rewarded: ${rwOn} | Banner: ${bOn} | Kupon: Günlük ${dCredits} / Video +${rCredits}`);
+                    this.logToConsole(`✅ STATUS: ${ks ? 'PAUSED (KILL-SWITCH AKTİF)' : 'OPERATIONAL'} | KillSwitch: ${ks ? 'TRUE (DURDURULDU)' : 'FALSE (AKTİF)'} | Native(Anasayfa): ${nOn} (${nInterval}) | Native(Kuponlar): ${ncOn} (${ncInterval}) | Native(Aktüel): ${naOn} (${naInterval}) | Native(Popüler): ${npOn} (${npInterval}) | Native(FavoriKat): ${nfcOn} (${nfcInterval}) | Rewarded: ${rwOn} | Banner: ${bOn} | Kupon: Günlük ${dCredits} / Video +${rCredits}`);
                     break;
                 case 'ecpm-optimize':
                     this.logToConsole('⚡ CMD: Agent AdMob Mediation & Floor Price Analizi Başlatıldı');

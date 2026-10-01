@@ -137,19 +137,23 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
    - Ani AdMob hesap incelemelerinde veya trafik anomalilerinde tek tıkla tüm mobil uygulamadaki reklamları anında kapatır.
    - İki adımlı onay penceresi (`window.confirm`) ile yanlış tıklamalar engellenir.
    - Şalter indirildiğinde Overview (Genel Bakış) sekmesinin tepesinde yanıp sönen kırmızı bir acil durum uyarı bandı belirir ve tek tıkla yeniden açma olanağı sunar.
-2. **Format Bazlı Bağımsız Şalterler (5 Format):**
+2. **Format Bazlı Bağımsız Şalterler (7 Format):**
    - `Native Reklam (Faz 3.3 Anasayfa)`: Anasayfa ızgara ve liste akış içi native reklamları anında açıp kapatır (Varsayılan: Açık).
    - `Native Reklam (Kuponlar Sayfası)`: Kuponlar akışında her 4 kuponda 1 (5., 10., 15... sıralarda) gösterilen 124dp yatay native reklamı yönetir (Varsayılan: Açık).
    - `Native Reklam (Aktüel Sayfası)`: Aktüel broşür listesinde her 6 broşürden sonra gösterilen tam genişlik 124dp yatay native reklamı yönetir (Varsayılan: Açık).
+   - `Native Reklam (Popüler Fırsatlar)`: Popüler Fırsatlar menüsünde hem Grid hem Liste modunda her 6 fırsattan sonra tam genişlik 124dp yatay native reklamı yönetir (Varsayılan: Açık).
+   - `Native Reklam (Favori Kategorilerim)`: Kaydedilenler altındaki Favori Kategorilerim sekmesinde her 6 fırsattan sonra tam genişlik 124dp yatay native reklamı yönetir. Kaydettiklerim sekmesi ise %100 reklamsız korunur (Varsayılan: Açık).
    - `Ödüllü Video (Rewarded)`: Kupon sayfasındaki video ile kupon açma hakkını yönetir (Varsayılan: Açık).
    - `Yatay Banner (Arşiv / Emekli)`: Faz 3.3 ile emekliye ayrılan eski banner birimlerini temsil eder (Varsayılan: Kapalı/Arşiv).
    - Her şalter değişiminde Firestore anında güncellenir ve sağ üstte etkileşimli toast bildirimi verilir.
-3. **Kupon Açma Kredisi ve Güvenlik Parametreleri (6 Operasyonel Parametre - NaN & Sınır Korumalı):**
+3. **Kupon Açma Kredisi ve Güvenlik Parametreleri (8 Operasyonel Parametre - NaN & Sınır Korumalı):**
    - **Günlük Ücretsiz Kupon Açma:** Kullanıcıya her gün hediye edilecek hak (Varsayılan: `2`, Aralık: 1-20).
    - **Video Başına Kupon Açma:** Rewarded video tamamlandığında hesaba yüklenecek hak (Varsayılan: `+2`, Aralık: 1-10).
    - **Izgara Akışı Reklam Sıklığı (`nativeGridInterval`):** Anasayfa ızgara (Grid) görünümünde kaç üründe bir tam genişlik yatay native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
    - **Kuponlar Akışı Reklam Sıklığı (`nativeCouponsInterval`):** Kupon listesinde kaç kuponda bir native reklam yerleştirileceğini belirler (Varsayılan: `5`, Aralık: 3-15).
    - **Aktüel Akışı Reklam Sıklığı (`nativeAktuelInterval`):** Aktüel broşür 2 sütunlu gridinde kaç broşürde bir tam genişlik native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
+   - **Popüler Fırsatlar Reklam Sıklığı (`nativePopularInterval`):** Popüler Fırsatlar akışında kaç fırsatta bir tam genişlik native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
+   - **Favori Kategorilerim Reklam Sıklığı (`nativeFollowedCategoriesInterval`):** Favori Kategorilerim akışında kaç fırsatta bir tam genişlik native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
    - **Hata Soğuma Süresi (Cooldown):** Reklam yüklenemediğinde kullanıcıyı bekletme süresi (Varsayılan: `25sn`, Aralık: 5-300sn).
    - Form kaydedilirken tüm girdiler `parseInt` ile sayıya çevrilir; boş bırakma veya harf girilmesi durumunda `NaN` hataları engellenerek güvenli alt limitlere otomatik eşitlenir.
 
@@ -169,7 +173,7 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
   - Güvenli olmayan (HTTP) veya izin kısıtlamalı tarayıcılarda görünmez `textarea` ve `document.execCommand('copy')` yedeği devreye girerek kopyalamanın daima kusursuz çalışması garanti edilir.
 
 ### 4.3. Statik Kod Tabanı ve Politika Denetimi (`inspection` Sekmesi)
-* **8-Nokta Kod Tabanı Denetimi:**
+* **10-Nokta Kod Tabanı Denetimi:**
   - `android/app/build.gradle` (Dev test ve Prod gerçek ID manifest placeholder ayrımı)
   - `AndroidManifest.xml` (Dinamik `${admob_app_id}` gradle meta-data enjeksiyonu)
   - `ios/Runner/Info.plist` (GADApplicationIdentifier & 27 SKAdNetwork ağı)
@@ -177,6 +181,8 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
   - `lib/screens/home_screen.dart` (Faz 3.3 Akış Mimarisi: `CustomScrollView`, `SliverGrid`, `_buildGridWithHorizontalAdsSlivers` ve `AdDealCard`)
   - `lib/screens/kuponlar_page.dart` (Kuponlar akış içi Native Ad: Her 4 kuponda 1 reklam entegrasyonu)
   - `lib/screens/katalog_listesi_page.dart` (Aktüel 2 sütunlu grid akış içi Native Ad: Her 6 broşürde 1 tam genişlik şerit entegrasyonu)
+  - `lib/screens/popular_deals_screen.dart` (Popüler Fırsatlar grid ve liste modlarında her 6 fırsatta 1 tam genişlik 124dp yatay Native Ad)
+  - `lib/screens/favorites_screen.dart` (Favori Kategorilerim sekmesinde her 6 fırsatta 1 Native Ad & Kaydettiklerim sekmesinde %100 reklamsız dönüşüm koruması)
   - `lib/services/ad_manager_service.dart` (Singleton mimari, 25s Cooldown, `onPaidEvent` telemetrisi ve Firestore Kill-Switch)
 * **7-Nokta Google AdMob Politika Uyumu:**
   - `ad_deal_card.dart` (Faz 3.3 Native Ads Advanced entegrasyonu, eski FittedBox ihlallerinin temizliği)

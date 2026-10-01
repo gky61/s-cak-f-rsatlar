@@ -8,6 +8,8 @@ import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/scroll_to_top_button.dart';
+import '../widgets/ad_deal_card.dart';
+import '../services/ad_manager_service.dart';
 import 'deal_detail_screen.dart';
 
 class PopularDealsScreen extends StatefulWidget {
@@ -78,6 +80,108 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       final normalizedId = Category.normalizeCategoryId(dealCat);
       return dealCat == targetId || normalizedId == targetId;
     }).toList();
+  }
+
+  /// Reklam pozisyonlarını hesapla (5-6-5-6-5-6 pattern)
+  /// Pattern: İlk reklam 5 deal'den sonra, ikinci 6 deal'den sonra, üçüncü 5 deal'den sonra, vs.
+  List<int> _calculateAdPositions(int dealCount) {
+    List<int> positions = [];
+    int currentPosition = 5; // İlk reklam 5 deal'den sonra
+    int patternIndex = 0;
+
+    while (currentPosition < dealCount) {
+      positions.add(currentPosition);
+      int interval = (patternIndex % 2 == 0) ? 6 : 5;
+      currentPosition += interval + 1;
+      patternIndex++;
+    }
+
+    return positions;
+  }
+
+  /// 2 sütunlu dikey Grid görünümünde her 6 üründe bir (3 satırda bir)
+  /// iki sütunun arasını boydan boya kaplayan tam genişlikte yatay Native Reklam kartı yerleştirir.
+  List<Widget> _buildGridWithHorizontalAdsSlivers({
+    required BuildContext context,
+    required List<Deal> dealsToShow,
+    required bool isDark,
+    required bool showAds,
+    required int chunkSize,
+  }) {
+    final List<Widget> slivers = [];
+    final int totalChunks = (dealsToShow.length / chunkSize).ceil();
+
+    for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      final startIndex = chunkIndex * chunkSize;
+      final endIndex = (startIndex + chunkSize > dealsToShow.length)
+          ? dealsToShow.length
+          : startIndex + chunkSize;
+      final chunkDeals = dealsToShow.sublist(startIndex, endIndex);
+      final isLastChunk = chunkIndex == totalChunks - 1;
+
+      // 1. Ürün Grid Bölümü (2 Sütunlu)
+      slivers.add(
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            12,
+            chunkIndex == 0 ? 8 : 4,
+            12,
+            (isLastChunk && (!showAds || chunkDeals.length < chunkSize)) ? 24 : 4,
+          ),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 11,
+              childAspectRatio: 0.635,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (ctx, idx) {
+                final deal = chunkDeals[idx];
+                return RepaintBoundary(
+                  key: ValueKey('pop_deal_grid_boundary_${deal.id}'),
+                  child: DealCard(
+                    key: ValueKey('pop_deal_${deal.id}_v'),
+                    deal: deal,
+                    viewMode: CardViewMode.vertical,
+                    onTap: () {
+                      Navigator.push(
+                        ctx,
+                        MaterialPageRoute(
+                          builder: (_) => DealDetailScreen(dealId: deal.id),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+              childCount: chunkDeals.length,
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              addSemanticIndexes: false,
+            ),
+          ),
+        ),
+      );
+
+      // 2. Tam Genişlikte Yatay Native Reklam (Her chunkSize üründen sonra)
+      if (showAds && chunkDeals.length == chunkSize) {
+        slivers.add(
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(12, 6, 12, isLastChunk ? 24 : 6),
+            sliver: SliverToBoxAdapter(
+              child: AdDealCard(
+                key: ValueKey('ad_card_popular_grid_$chunkIndex'),
+                viewMode: CardViewMode.horizontal,
+                placement: 'popular',
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return slivers;
   }
 
   @override
@@ -390,52 +494,40 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                     });
                   },
                   color: primaryColor,
-                  child: _viewMode == CardViewMode.vertical
-                      ? GridView.builder(
-                          controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(
-                            parent: BouncingScrollPhysics(),
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 11,
-                            childAspectRatio: 0.635,
-                          ),
-                          itemCount: deals.length,
-                          itemBuilder: (context, index) {
-                            final deal = deals[index];
-                            return DealCard(
-                              key: ValueKey('pop_deal_${deal.id}_v'),
-                              deal: deal,
-                              viewMode: CardViewMode.vertical,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => DealDetailScreen(dealId: deal.id),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        )
-                      : ListView.builder(
-                          controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(
-                            parent: BouncingScrollPhysics(),
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          itemCount: deals.length,
-                          itemBuilder: (context, index) {
-                            final deal = deals[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: DealCard(
-                                key: ValueKey('pop_deal_${deal.id}_h'),
+                  child: ListenableBuilder(
+                    listenable: AdManagerService.instance,
+                    builder: (context, _) {
+                      final adManager = AdManagerService.instance;
+                      final bool showAds = adManager.isAdsEnabled &&
+                          adManager.nativeEnabled &&
+                          adManager.nativePopularEnabled;
+                      final int chunkSize = (adManager.nativePopularInterval >= 4 &&
+                              adManager.nativePopularInterval <= 20)
+                          ? adManager.nativePopularInterval
+                          : 6;
+
+                      if (_viewMode == CardViewMode.vertical) {
+                        if (!showAds || deals.length < chunkSize) {
+                          // Reklamlar kapalıysa veya yeterli ürün yoksa standart GridView
+                          return GridView.builder(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(
+                              parent: BouncingScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.all(12),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 11,
+                              childAspectRatio: 0.635,
+                            ),
+                            itemCount: deals.length,
+                            itemBuilder: (context, index) {
+                              final deal = deals[index];
+                              return DealCard(
+                                key: ValueKey('pop_deal_${deal.id}_v'),
                                 deal: deal,
-                                viewMode: CardViewMode.horizontal,
+                                viewMode: CardViewMode.vertical,
                                 onTap: () {
                                   Navigator.push(
                                     context,
@@ -444,10 +536,90 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                                     ),
                                   );
                                 },
+                              );
+                            },
+                          );
+                        } else {
+                          // Reklamlar aktif: 2 sütunlu SliverGrid aralarında tam genişlikte yatay Native Ad
+                          return CustomScrollView(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(
+                              parent: BouncingScrollPhysics(),
+                            ),
+                            slivers: _buildGridWithHorizontalAdsSlivers(
+                              context: context,
+                              dealsToShow: deals,
+                              isDark: isDark,
+                              showAds: showAds,
+                              chunkSize: chunkSize,
+                            ),
+                          );
+                        }
+                      } else {
+                        // Liste Modu (5-6-5-6 pattern)
+                        final List<int> adPositions = showAds ? _calculateAdPositions(deals.length) : const [];
+                        final int adCount = adPositions.length;
+                        final int totalItemCount = deals.length + adCount;
+
+                        return ListView.builder(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          cacheExtent: 500,
+                          addAutomaticKeepAlives: true,
+                          addRepaintBoundaries: true,
+                          addSemanticIndexes: false,
+                          itemCount: totalItemCount,
+                          itemBuilder: (context, index) {
+                            int passedAds = 0;
+                            for (int i = 0; i < adPositions.length; i++) {
+                              final adPosition = adPositions[i];
+                              if (index == adPosition) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: AdDealCard(
+                                    key: ValueKey('ad_card_popular_horizontal_$i'),
+                                    viewMode: CardViewMode.horizontal,
+                                    placement: 'popular',
+                                  ),
+                                );
+                              }
+                              if (index > adPosition) {
+                                passedAds++;
+                              }
+                            }
+
+                            final actualIndex = index - passedAds;
+                            if (actualIndex >= deals.length || actualIndex < 0) {
+                              return const SizedBox.shrink();
+                            }
+                            final deal = deals[actualIndex];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: RepaintBoundary(
+                                key: ValueKey('pop_deal_list_boundary_${deal.id}'),
+                                child: DealCard(
+                                  key: ValueKey('pop_deal_${deal.id}_h'),
+                                  deal: deal,
+                                  viewMode: CardViewMode.horizontal,
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => DealDetailScreen(dealId: deal.id),
+                                      ),
+                                    );
+                                  },
+                                ),
                               ),
                             );
                           },
-                        ),
+                        );
+                      }
+                    },
+                  ),
                 );
               },
             ),

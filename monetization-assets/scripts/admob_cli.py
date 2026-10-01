@@ -116,7 +116,9 @@ def get_status(platform_filter="all", env_filter="all"):
             {"format": "Native Ads Advanced (Anasayfa)", "placement": "Home Feed & Grid", "size": "Responsive Card (Small/Medium)", "status": "ACTIVE ($1.50 - $3.50 eCPM, 100% Compliant)"},
             {"format": "Native Ads Advanced (Kuponlar)", "placement": "Coupons Stream (Her 4 kuponda 1 reklam)", "size": "Responsive Horizontal (Small Template)", "status": "ACTIVE ($1.50 - $3.50 eCPM)"},
             {"format": "Native Ads Advanced (Aktüel)", "placement": "Aktüel Catalogs Grid (Her 6 broşürde 1 tam genişlik şerit)", "size": "Responsive Horizontal (Small Template)", "status": "ACTIVE ($1.50 - $3.50 eCPM)"},
-            {"format": "House Promo Fallback", "placement": "Home Feed, Kuponlar & Aktüel Stream", "size": "Responsive Card", "status": "ACTIVE (Zero-Fill Fallback)"},
+            {"format": "Native Ads Advanced (Popüler Fırsatlar)", "placement": "Popular Deals Grid & List (Her 6 fırsatta 1 şerit)", "size": "Responsive Horizontal (Small Template)", "status": "ACTIVE ($1.50 - $3.50 eCPM)"},
+            {"format": "Native Ads Advanced (Favori Kategorilerim)", "placement": "Followed Categories Grid (Her 6 fırsatta 1 şerit, Kaydettiklerim Reklamsız)", "size": "Responsive Horizontal (Small Template)", "status": "ACTIVE ($1.50 - $3.50 eCPM)"},
+            {"format": "House Promo Fallback", "placement": "Home Feed, Kuponlar, Aktüel, Popüler & Favori Kat. Stream", "size": "Responsive Card", "status": "ACTIVE (Zero-Fill Fallback)"},
             {"format": "Rewarded Video", "placement": "Coupon Unlock (+2 Credits)", "size": "Fullscreen Video", "status": "ACTIVE ($8.00 - $18.00 eCPM)"},
             {"format": "Legacy Banner", "placement": "Deprecated", "size": "320x100", "status": "RETIRED (Migrated to Native Ads)"}
         ]
@@ -333,6 +335,39 @@ def inspect_codebase():
         })
     else:
         checks.append({"file": "lib/screens/katalog_listesi_page.dart", "rule": "File existence", "passed": False})
+
+    # 9. lib/screens/popular_deals_screen.dart (Popüler Fırsatlar Akış İçi Native Reklam)
+    popular_path = os.path.join(WORKSPACE_ROOT, "lib", "screens", "popular_deals_screen.dart")
+    if os.path.exists(popular_path):
+        with open(popular_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        has_popular_ad = "AdDealCard" in content and "placement: 'popular'" in content
+        has_popular_freq = "nativePopularInterval" in content or "nativePopularEnabled" in content
+        checks.append({
+            "file": "lib/screens/popular_deals_screen.dart",
+            "rule": "Popüler Fırsatlar Akış İçi Native Ad (Her 6 üründe 1 reklam)",
+            "passed": has_popular_ad and has_popular_freq,
+            "details": "Popüler Fırsatlar grid ve liste akışında her 6 fırsattan sonra 124dp yatay Small Native Ad entegre"
+        })
+    else:
+        checks.append({"file": "lib/screens/popular_deals_screen.dart", "rule": "File existence", "passed": False})
+
+    # 10. lib/screens/favorites_screen.dart (Favori Kategorilerim Akış İçi Native Ad & Kaydettiklerim İzolasyonu)
+    fav_path = os.path.join(WORKSPACE_ROOT, "lib", "screens", "favorites_screen.dart")
+    if os.path.exists(fav_path):
+        with open(fav_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        has_fav_ad = "AdDealCard" in content and "placement: 'favorite_categories'" in content
+        has_fav_freq = "nativeFollowedCategoriesInterval" in content or "nativeFollowedCategoriesEnabled" in content
+        has_clean_favorites = "_buildDealGrid(displayedDeals" in content # Kaydettiklerim sekmesi %100 reklamsız kalmalıdır
+        checks.append({
+            "file": "lib/screens/favorites_screen.dart",
+            "rule": "Favori Kategorilerim Native Ad & Kaydettiklerim Ad-Free İzolasyonu",
+            "passed": has_fav_ad and has_fav_freq and has_clean_favorites,
+            "details": "Favori Kategorilerim sekmesinde 6 üründe 1 Native Ad; Kaydettiklerim sekmesinde %100 reklamsız koruma"
+        })
+    else:
+        checks.append({"file": "lib/screens/favorites_screen.dart", "rule": "File existence", "passed": False})
 
     all_passed = all(c["passed"] for c in checks)
     return {

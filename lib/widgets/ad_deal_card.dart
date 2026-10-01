@@ -35,10 +35,12 @@ class AdDealCard extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        // Native reklam şalteri kontrolü (Genel, Kuponlar, Aktüel veya Native kapatılmışsa fallback veya shrink)
+        // Native reklam şalteri kontrolü (Genel, Kuponlar, Aktüel, Popüler veya Favori Kategoriler kapatılmışsa fallback veya shrink)
         if (!adManager.nativeEnabled ||
             (placement == 'kuponlar' && !adManager.nativeCouponsEnabled) ||
-            (placement == 'aktuel' && !adManager.nativeAktuelEnabled)) {
+            (placement == 'aktuel' && !adManager.nativeAktuelEnabled) ||
+            (placement == 'popular' && !adManager.nativePopularEnabled) ||
+            (placement == 'favorite_categories' && !adManager.nativeFollowedCategoriesEnabled)) {
           return _buildHousePromoCard(context);
         }
 
@@ -58,7 +60,11 @@ class AdDealCard extends StatelessWidget {
               ? 'kuponlar_list'
               : (placement == 'aktuel'
                   ? 'aktuel_grid'
-                  : (viewMode == CardViewMode.horizontal ? 'home_list' : 'home_grid')),
+                  : (placement == 'popular'
+                      ? (viewMode == CardViewMode.horizontal ? 'popular_list' : 'popular_grid')
+                      : (placement == 'favorite_categories'
+                          ? (viewMode == CardViewMode.horizontal ? 'favorite_categories_list' : 'favorite_categories_grid')
+                          : (viewMode == CardViewMode.horizontal ? 'home_list' : 'home_grid')))),
           fallbackBuilder: (ctx) => _buildHousePromoCard(ctx),
         );
       },
@@ -253,7 +259,7 @@ class AdDealCard extends StatelessWidget {
                 Navigator.of(context).popUntil((route) => route.isFirst);
               } else {
                 AnalyticsService.instance.logCustomEvent('sponsored_deal_card_click', {
-                  'placement': 'home_list_horizontal_fallback',
+                  'placement': '${placement}_list_horizontal_fallback',
                 });
                 Navigator.push(
                   context,

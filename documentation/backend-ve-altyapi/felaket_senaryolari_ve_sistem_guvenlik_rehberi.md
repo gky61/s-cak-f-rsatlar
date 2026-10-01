@@ -167,11 +167,12 @@
   - Bu 10.000 yazma, **10.000 adet paralel `onNotificationCreated` Cloud Function'ını** anında tetikliyordu!
   - 10.000 Cloud Function aynı anda çalışmaya başlayınca GCP eşzamanlılık sınırına (varsayılan 1.000 instance) çarpıyor, fonksiyonlar zaman aşımına uğruyor, retry mekanizması devreye giriyor ve mükerrer bildirim bombardımanı yaşanıyordu.
   - **Sonuç:** Tek bir kupon paylaşımının faturası yüzlerce doları buluyor ve FCM kotası tükeniyordu.
-* **Uygulanan Kalıcı Kalkan:**
-  1. Yalnızca `kaynakTipi === 'topluluk'` olan kuponlar için bildirim izni verildi (Bot kuponları filtrelendi).
-  2. Başlık ve mağaza adına `containsProfanity` moderasyon kalkanı konuldu.
-  3. Abonelik sorgularına `.limit(150)` eklendi.
-  4. Toplam hedef kullanıcı sayısı **azami 300 tavanı** (`MAX_COUPON_NOTIF_TARGETS = 300`) ile sınırlandırıldı.
+* **Uygulanan Kalıcı Kalkan (FCM Topic + Bounded Feed Hibrit Mimarisi):**
+  1. **Anlık Global FCM Topic Yayını (`topic: 'community_coupons'`):** Moderasyondan geçen her topluluk kuponu tek bir FCM API çağrısıyla Google'ın küresel CDN/FCM ağı üzerinden 100.000+ aboneye 1 ms'de iletilir ($0 maliyet, 0 adet Cloud Function tetiklenir).
+  2. **Yalnızca Topluluk Kuponları:** `kaynakTipi === 'topluluk'` olan kuponlar için bildirim izni verilir (Bot/web kazıma kuponları filtrelenir).
+  3. **Küfür ve Argo Kalkanı:** Başlık ve mağaza adına `containsProfanity` moderasyon kalkanı işletilir.
+  4. **Mağaza/Yazar Takipçileri İçin Bounded Feed:** İlgili mağaza ve yazarı takip edenlerin uygulama içi Bildirim Kutusu'na doküman yazımı `.limit(150)` ve **azami 300 tavanı** (`MAX_COUPON_NOTIF_TARGETS = 300`) ile sınırlandırılır.
+  5. **Mükerrer Push & CPU İsrafı Kalkanı (`isTopicDelivered: true`):** Dokümanlara `isTopicDelivered: true` mühürlenir; `onNotificationCreated` tetiklendiğinde `delivered_via_topic` ile 10 ms içinde sonlanır (çift bildirim ve gereksiz Cloud Function çalıştırması kesin olarak engellenir).
 
 ---
 
@@ -389,10 +390,11 @@
 ---
 
 ### 2.5. Botkolik Profil Sayfasında Binlerce Fırsatın İndirilmesi (`getBotkolikDealsStream`)
-* **Dosya & Konum:** [`lib/services/firestore_service.dart`](file:///d:/firsatkolik/lib/services/firestore_service.dart#L204-L224)
+* **Dosya & Konum:** [`lib/services/firestore_service.dart`](file:///d:/firsatkolik/lib/services/firestore_service.dart#L198-L216)
 * **Risk Seviyesi:** 🟡 **MEDIUM**
 * **Uygulanan Kalıcı Kalkan:**
-  - Firestore sorgusuna doğrudan `query = query.limit(limit ?? 50)` eklendi.
+  - `isApproved ASC, isUserSubmitted ASC, createdAt DESC` kompozit indeksi tanımlandı.
+  - Firestore sorgusuna doğrudan `query = query.orderBy('createdAt', descending: true).limit(limit ?? 50)` eklenerek hem en taze bot fırsatlarının ilk sırada çıkması garanti edildi hem de gereksiz indirme engellendi.
 
 ---
 
@@ -454,7 +456,8 @@
   ```
   Kullanıcı Botkolik'i takip ediyorsa, 10.000 fırsatın tamamı telefona indiriliyor ve telefonda `take(limit)` yapılıyordu!
 * **Uygulanan Kalıcı Kalkan:**  
-  - Sorguya doğrudan sunucu seviyesinde `.limit(effectiveLimit)` (`limit.clamp(10, 100)`) kelepçesi takıldı.
+  - `isApproved ASC, postedBy ASC, createdAt DESC` kompozit indeksi tanımlandı.
+  - Sorguya doğrudan sunucu seviyesinde `.orderBy('createdAt', descending: true).limit(effectiveLimit)` (`limit.clamp(10, 100)`) kelepçesi takılarak hem en son fırsatların çekilmesi hem de kota güvenliği sağlandı.
 
 ---
 

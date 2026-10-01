@@ -43,9 +43,13 @@ class AdManagerService extends ChangeNotifier {
   bool nativeEnabled = true;
   bool nativeCouponsEnabled = true; // Kuponlar sayfasında akış içi Native Ad şalteri
   bool nativeAktuelEnabled = true; // Aktüel kataloglar sayfasında akış içi Native Ad şalteri
+  bool nativePopularEnabled = true; // Popüler Fırsatlar sayfasında akış içi Native Ad şalteri
+  bool nativeFollowedCategoriesEnabled = true; // Favori Kategorilerim sayfasında akış içi Native Ad şalteri
   int nativeGridInterval = 6; // Anasayfa Grid'de kaç üründe bir yatay Native Ad gösterileceği
   int nativeCouponsInterval = 5; // Kuponlar sayfasında her kaç öğede bir Native Ad gösterileceği (4 kupon + 1 reklam = 5)
   int nativeAktuelInterval = 6; // Aktüel sayfasında kaç katalogda bir yatay Native Ad gösterileceği (varsayılan: 6)
+  int nativePopularInterval = 6; // Popüler Fırsatlar sayfasında kaç fırsatta bir yatay Native Ad gösterileceği (varsayılan: 6)
+  int nativeFollowedCategoriesInterval = 6; // Favori Kategorilerim sayfasında kaç fırsatta bir yatay Native Ad gösterileceği (varsayılan: 6)
 
   // ─── Hata Soğuma (Cooldown) Takibi ───────────────────────────────────────
   final Map<String, DateTime> _lastFailedTime = {};
@@ -353,6 +357,8 @@ class AdManagerService extends ChangeNotifier {
           final newNative = _parseBool(settings['nativeEnabled'], true);
           final newNativeCoupons = _parseBool(settings['nativeCouponsEnabled'], true);
           final newNativeAktuel = _parseBool(settings['nativeAktuelEnabled'], true);
+          final newNativePopular = _parseBool(settings['nativePopularEnabled'], true);
+          final newNativeFollowed = _parseBool(settings['nativeFollowedCategoriesEnabled'], true);
 
           if (bannerEnabled != newBanner) {
             bannerEnabled = newBanner;
@@ -383,12 +389,22 @@ class AdManagerService extends ChangeNotifier {
             hasChanges = true;
             _log('⚙️ [FIRESTORE-SYNC] Native Aktüel şalteri: $nativeAktuelEnabled');
           }
+          if (nativePopularEnabled != newNativePopular) {
+            nativePopularEnabled = newNativePopular;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Popüler şalteri: $nativePopularEnabled');
+          }
+          if (nativeFollowedCategoriesEnabled != newNativeFollowed) {
+            nativeFollowedCategoriesEnabled = newNativeFollowed;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Favori Kategoriler şalteri: $nativeFollowedCategoriesEnabled');
+          }
 
           // 3. Cooldown Süresi
           final cooldownSec = _parseInt(settings['cooldownSeconds'], 25);
           _failureCooldown = Duration(seconds: cooldownSec);
 
-          // 4. Native Grid, Kuponlar ve Aktüel Sıklığı (Faz 3.3)
+          // 4. Native Grid, Kuponlar, Aktüel, Popüler ve Favori Kategoriler Sıklığı
           final newGridInterval = _parseInt(settings['nativeGridInterval'], 6);
           if (nativeGridInterval != newGridInterval && newGridInterval >= 4 && newGridInterval <= 20) {
             nativeGridInterval = newGridInterval;
@@ -407,6 +423,18 @@ class AdManagerService extends ChangeNotifier {
             hasChanges = true;
             _log('⚙️ [FIRESTORE-SYNC] Native Aktüel sıklığı: $nativeAktuelInterval');
           }
+          final newPopularInterval = _parseInt(settings['nativePopularInterval'], 6);
+          if (nativePopularInterval != newPopularInterval && newPopularInterval >= 4 && newPopularInterval <= 20) {
+            nativePopularInterval = newPopularInterval;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Popüler sıklığı: $nativePopularInterval');
+          }
+          final newFollowedInterval = _parseInt(settings['nativeFollowedCategoriesInterval'], 6);
+          if (nativeFollowedCategoriesInterval != newFollowedInterval && newFollowedInterval >= 4 && newFollowedInterval <= 20) {
+            nativeFollowedCategoriesInterval = newFollowedInterval;
+            hasChanges = true;
+            _log('⚙️ [FIRESTORE-SYNC] Native Favori Kategoriler sıklığı: $nativeFollowedCategoriesInterval');
+          }
 
           // 5. Kupon Kredi Parametreleri → CouponCreditService'e aktar
           final dailyCredits = _parseInt(settings['dailyFreeCredits'], 2);
@@ -421,9 +449,12 @@ class AdManagerService extends ChangeNotifier {
           _log('✅ [FIRESTORE-SYNC] settings/admob senkronize edildi → '
               'Kill:$killSwitchActive | Banner:$newBanner | Rewarded:$newRewarded | '
               'Native:$newNative | NativeCoupons:$nativeCouponsEnabled | NativeAktuel:$nativeAktuelEnabled | '
+              'NativePopular:$nativePopularEnabled | NativeFollowed:$nativeFollowedCategoriesEnabled | '
               'NativeGridInterval:$nativeGridInterval | '
               'NativeCouponsInterval:$nativeCouponsInterval | '
               'NativeAktuelInterval:$nativeAktuelInterval | '
+              'NativePopularInterval:$nativePopularInterval | '
+              'NativeFollowedInterval:$nativeFollowedCategoriesInterval | '
               'Cooldown:${cooldownSec}s | '
               'DailyCredits:$dailyCredits | RewardCredits:$rewardCredits');
 

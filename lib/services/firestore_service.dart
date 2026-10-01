@@ -203,7 +203,7 @@ class FirestoreService {
       query = query.where('category', isEqualTo: categoryId);
     }
 
-    query = query.limit(limit ?? 50);
+    query = query.orderBy('createdAt', descending: true).limit(limit ?? 50);
 
     return query.snapshots().map((s) {
       final list = s.docs
@@ -417,6 +417,7 @@ class FirestoreService {
           .collection('deals')
           .where('isApproved', isEqualTo: true)
           .where('postedBy', whereIn: chunks.first)
+          .orderBy('createdAt', descending: true)
           .limit(effectiveLimit)
           .snapshots()
           .map((snapshot) {
@@ -453,6 +454,7 @@ class FirestoreService {
               .collection('deals')
               .where('isApproved', isEqualTo: true)
               .where('postedBy', whereIn: chunks[index])
+              .orderBy('createdAt', descending: true)
               .limit(effectiveLimit)
               .snapshots()
               .listen((snapshot) {

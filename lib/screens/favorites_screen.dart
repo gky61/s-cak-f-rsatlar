@@ -13,6 +13,8 @@ import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/scroll_to_top_button.dart';
 import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
+import '../services/ad_manager_service.dart';
+import '../widgets/ad_deal_card.dart';
 import '../widgets/app_snack_bar.dart';
 
 class FavoritesScreen extends StatefulWidget {
@@ -1354,9 +1356,131 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               duration: const Duration(milliseconds: 200),
             ),
             Expanded(
-              child: _buildDealGrid(deals, isDark, _followedCategoriesScrollController),
+              child: _buildFollowedCategoriesDealGrid(deals, isDark, _followedCategoriesScrollController),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// Favori Kategorilerim (Takip Edilenler) sekmesi için AdMob destekli dinamik Grid.
+  /// Anasayfa ve Popüler Fırsatlar ile birebir aynı mimaride:
+  /// 2 sütunlu ürün grid'i her [chunkSize] üründe bir bölünerek araya tam genişlikte
+  /// 124dp yatay Native Reklam kartı (TemplateType.small) yerleştirilir.
+  /// Reklam kapalıysa veya eşiğin altındaysa temiz ızgara (_buildDealGrid) kullanılır.
+  Widget _buildFollowedCategoriesDealGrid(
+    List<Deal> deals,
+    bool isDark,
+    ScrollController scrollController,
+  ) {
+    return ListenableBuilder(
+      listenable: AdManagerService.instance,
+      builder: (context, _) {
+        final adManager = AdManagerService.instance;
+        final bool isAdEnabled = adManager.isAdsEnabled &&
+            adManager.nativeEnabled &&
+            adManager.nativeFollowedCategoriesEnabled;
+        final int chunkSize = (adManager.nativeFollowedCategoriesInterval >= 4 &&
+                adManager.nativeFollowedCategoriesInterval <= 20)
+            ? adManager.nativeFollowedCategoriesInterval
+            : 6;
+
+        // Eşik koruması: Reklam kapalıysa veya ilan sayısı chunk boyutundan azsa standart temiz grid göster
+        if (!isAdEnabled || deals.length < chunkSize) {
+          return _buildDealGrid(deals, isDark, scrollController);
+        }
+
+        final int totalChunks = (deals.length / chunkSize).ceil();
+        final List<Widget> slivers = [];
+
+        for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          final startIndex = chunkIndex * chunkSize;
+          final endIndex = (startIndex + chunkSize > deals.length)
+              ? deals.length
+              : startIndex + chunkSize;
+          final chunkDeals = deals.sublist(startIndex, endIndex);
+          final isLastChunk = chunkIndex == totalChunks - 1;
+
+          // 1. Ürün Grid Bölümü (2 Sütunlu)
+          slivers.add(
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                chunkIndex == 0 ? 12 : 6,
+                16,
+                (isLastChunk && chunkDeals.length < chunkSize) ? 24 : 6,
+              ),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.635,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 11,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (ctx, idx) {
+                    final deal = chunkDeals[idx];
+                    return RepaintBoundary(
+                      key: ValueKey('fav_cat_deal_grid_boundary_${deal.id}'),
+                      child: DealCard(
+                        key: ValueKey('fav_cat_deal_${deal.id}_v'),
+                        deal: deal,
+                        viewMode: CardViewMode.vertical,
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            ctx,
+                            MaterialPageRoute(
+                              builder: (_) => DealDetailScreen(dealId: deal.id),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                  childCount: chunkDeals.length,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: true,
+                  addSemanticIndexes: false,
+                ),
+              ),
+            ),
+          );
+
+          // 2. Tam Genişlikte Yatay Native Reklam (Her chunkSize üründen sonra)
+          if (chunkDeals.length == chunkSize) {
+            slivers.add(
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, 6, 16, isLastChunk ? 24 : 6),
+                sliver: SliverToBoxAdapter(
+                  child: AdDealCard(
+                    key: ValueKey('ad_card_fav_cat_grid_$chunkIndex'),
+                    viewMode: CardViewMode.horizontal,
+                    placement: 'favorite_categories',
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+
+        return RefreshIndicator(
+          color: AppTheme.primary,
+          onRefresh: () async {
+            final currentUser = FirebaseAuth.instance.currentUser;
+            if (currentUser != null) {
+              setState(() {
+                _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
+                _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
+              });
+            }
+          },
+          child: CustomScrollView(
+            controller: scrollController,
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            slivers: slivers,
+          ),
         );
       },
     );

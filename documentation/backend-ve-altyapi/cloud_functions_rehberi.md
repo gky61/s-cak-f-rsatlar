@@ -169,17 +169,18 @@ Bu rehber, FırsatKolik backend sisteminde (`functions/index.js`) yer alan **27 
 
 ---
 
-### 10. `onCouponCreated` (Hedefli Mağaza/Yazar Aboneliği, 300 Kullanıcı Tavanı & Moderasyon)
+### 10. `onCouponCreated` (Anlık FCM Topic Yayını, Hedefli 300 Feed Tavanı & Moderasyon)
 * **Tetikleyici Türü:** Firestore Trigger (`kuponlar/{kuponId}` - Create)
 * **Kullanıldığı / Tetiklendiği Yerler:**
   - `lib/screens/coupons/add_coupon_bottom_sheet.dart` (Mobil topluluk kuponu ekleme)
   - `web/admin/app.js` (Admin paneli kupon yönetimi)
   - Otonom kazıyıcı botlar (`dh_coupons_scraper`, `kuponla_scraper`)
-* **Kullanım Amacı:** Sisteme yeni bir indirim kuponu eklendiğinde devreye girer. Başlık ve mağaza adını küfür/argo filtresinden geçirir; uygunsuz içerikleri anında geçersiz kılıp işaretler, geçerli kuponlarda ise kuponu paylaşan hariç hedefli veya topluluk kullanıcılarına bildirim kuyruğu oluşturur.
+* **Kullanım Amacı:** Sisteme yeni bir indirim kuponu eklendiğinde devreye girer. Başlık ve mağaza adını küfür/argo filtresinden geçirir; uygunsuz içerikleri anında geçersiz kılıp işaretler. Geçerli topluluk kuponlarında ise hem anlık global FCM topic yayını (`community_coupons`) yapar hem de mağaza/yazar takipçilerine uygulama içi bildirim kuyruğu oluşturur.
 * **Mimari Güvenceler:**
-  - **Sınırsız Fan-Out ve Zaman Aşımı Koruması (Fan-Out Cascade Guard):** Veritabanındaki on binlerce kullanıcıya aynı anda bildirim yazarak Cloud Function'ın 60 saniyelik zaman aşımına uğraması ve 50.000 `onNotificationCreated` tetikleyicisini aynı anda ateşlemesi engellenmiştir. `runWith({ timeoutSeconds: 120, memory: '512MB' })` ile donatılmış olup, kuponun mağazasını (`storeKeywords`) veya yazarını takip eden hedefli kullanıcılara öncelik verir; genel topluluk dağıtımı ise azami 300 kullanıcı ile sınırlandırılmıştır (`limit(300)`).
+  - **Anlık Global FCM Topic Yayını (`community_coupons`):** 100.000+ kullanıcıya tek bir atomik FCM çağrısıyla anında push iletilir ($0 maliyet, 0 adet Cloud Function tetiklenir).
+  - **Sınırsız Fan-Out ve Zaman Aşımı Koruması (Fan-Out Cascade Guard):** Veritabanındaki on binlerce kullanıcıya aynı anda bildirim yazarak Cloud Function'ın 60 saniyelik zaman aşımına uğraması ve 50.000 `onNotificationCreated` tetikleyicisini aynı anda ateşlemesi engellenmiştir. `runWith({ timeoutSeconds: 120, memory: '512MB' })` ile donatılmış olup, kuponun mağazasını (`storeKeywords`) veya yazarını takip eden hedefli kullanıcılara uygulama içi feed yazımı azami 300 kullanıcı ile sınırlandırılmıştır (`limit(300)`).
+  - **Mükerrer Push & CPU Kalkanı (`isTopicDelivered: true`):** Yazılan bildirim dokümanları `isTopicDelivered: true` alanı içerir. `onNotificationCreated` tetiklendiğinde `delivered_via_topic` durumu ile anında sonlanır; mükerrer push gönderilmez ve CPU harcanmaz.
   - **Otomatik İçerik Moderasyonu:** Topluluktan gelen kupon başlığı veya mağaza adı küfür/argo filtresine (`containsProfanity`) takılırsa, kupon otomatik olarak `durum: 'gecersiz'`, `moderationFlag: true` ve gerekçesiyle etiketlenir; kullanıcılara bildirim dağıtımı engellenir.
-  - **Bellek ve Ağ Koruyucu Projeksiyon (`.select()`):** Tüm kullanıcı profillerini megabaytlarca veriyle belleğe yüklemek yerine `users.select().get()` ile yalnızca doküman kimlikleri çekilir. Bu sayede bellek tüketimi %98 düşürülür ve OOM çökmeleri önlenir.
   - **Kendi Kendine Bildirim Engeli:** Kuponu paylaşan kullanıcıya (`paylasanId === userId`) kendi paylaştığı kuponun bildirimi gönderilmez.
   - **400 Batch Sınırı Güvencesi:** Bildirim dokümanları 400'lük gruplar halinde atomik commit edilir.
 

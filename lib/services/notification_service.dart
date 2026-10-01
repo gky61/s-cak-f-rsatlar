@@ -751,6 +751,38 @@ class NotificationService {
     }
   }
 
+  // Topluluk Kuponları bildirimlerine abone ol (Retry mekanizmalı - NOTIF-15)
+  Future<void> subscribeToCommunityTopic() async {
+    if (kIsWeb) return;
+    int attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        await _messaging.subscribeToTopic('community_coupons');
+        _log('✅ Topluluk kuponu bildirimlerine (community_coupons) abone olundu (Deneme ${attempts + 1})');
+        return;
+      } catch (e) {
+        attempts++;
+        _log('❌ Topluluk kuponu abonelik hatası (Deneme $attempts/$maxAttempts): $e');
+        if (attempts >= maxAttempts) break;
+        await Future.delayed(Duration(seconds: 2 * attempts));
+      }
+    }
+    _log('❌ Topluluk kuponu aboneliği $maxAttempts denemeden sonra BAŞARISIZ oldu.');
+  }
+
+  // Topluluk Kuponları bildirimlerinden çık
+  Future<void> unsubscribeFromCommunityTopic() async {
+    if (kIsWeb) return;
+    try {
+      await _messaging.unsubscribeFromTopic('community_coupons');
+      _log('🚫 Topluluk kuponu bildirimlerinden (community_coupons) çıkıldı');
+    } catch (e) {
+      _log('❌ Topluluk kuponu abonelik çıkış hatası: $e');
+    }
+  }
+
   /// Çıkış yapıldığında TÜM topic aboneliklerini temizle
   /// Bu fonksiyon signOut sırasında çağrılmalı
   // Yorum cevabı bildirim listener'ını durdur
@@ -933,6 +965,9 @@ class NotificationService {
       
       // Admin topic'inden çık
       await _messaging.unsubscribeFromTopic('admin_deals');
+      
+      // Topluluk kuponu topic'inden çık
+      await unsubscribeFromCommunityTopic();
       
       // Genel bildirimlerden çık
       await _messaging.unsubscribeFromTopic('all_deals');
@@ -1405,11 +1440,20 @@ class NotificationService {
     });
   }
   
-  // Kullanıcının takip ettiği tüm topic'lere yeniden abone ol (Legacy FCM topic temizliği)
+  // Kullanıcının tercihlerine göre FCM Topic senkronizasyonunu yap (Topluluk Kuponları & Admin)
   Future<void> resubscribeToTopics() async {
-    // FırsatKolik mimarisinde kategori bildirimleri FCM topic'leri yerine
-    // doğrudan Firestore 'notificationSubscriptions' koleksiyonu ve tekil cihaz token'ı üzerinden
-    // yönetilmektedir. Gereksiz ağ trafiğini ve pil tüketimini önlemek için no-op olarak optimize edildi.
+    if (kIsWeb) return;
+    try {
+      final prefs = await getNotificationPreferences();
+      final shouldSubscribeCommunity = prefs.pushMasterEnabled && prefs.communityNotificationsEnabled;
+      if (shouldSubscribeCommunity) {
+        await subscribeToCommunityTopic();
+      } else {
+        await unsubscribeFromCommunityTopic();
+      }
+    } catch (e) {
+      _log('❌ resubscribeToTopics hatası: $e');
+    }
   }
 
 

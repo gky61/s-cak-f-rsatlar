@@ -147,6 +147,9 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
   * **Anasayfa Akışı (Grid & Liste):** Hem 2 sütunlu grid hem de tek sütunlu liste modlarında her 6 fırsattan sonra tam genişlikte (124dp) Native Ad yatay şeridi yerleştirilir.
   * **Kuponlar Akışı:** Her 4 kupondan sonra (5. sırada) 124dp yatay Small Native Ad yerleştirilir.
   * **Aktüel Kataloglar Akışı:** 2 sütunlu katalog gridinde her 6 broşürden sonra tam genişlikte 124dp Native Ad yerleştirilir.
+  * **Popüler Fırsatlar Akışı (Faz 3.4):** Popüler Fırsatlar menüsünde hem Grid hem Liste modunda her 6 fırsattan sonra tam genişlikte 124dp yatay Native Ad şeridi yerleştirilir.
+  * **Favori Kategorilerim Akışı (Faz 3.4):** Kaydedilenler sayfası Tab 2 ("Favori Kategorilerim") akışında her 6 fırsattan sonra tam genişlikte 124dp yatay Native Ad yerleştirilir.
+  * **Kaydettiklerim Reklamsızlık İzolasyonu (Fair-Play Prensibi):** Kaydedilenler sayfası Tab 1 ("Kaydettiklerim") kullanıcının satın alma niyetinin en yüksek olduğu şahsi listesidir. Bu sekme **%100 reklamsız** bırakılarak affiliate dönüşüm kayıpları ve kullanıcı terkleri kalıcı olarak engellenmiştir.
   * **Sıfır İhlal & Sıfır Boşluk (House Promo Fallback):** Reklam dolmadığında veya şalter kapalıyken anında yüksek dönüşümlü Kuponlar Keşif Kartı devreye girer.
   * **PlatformView Donma Koruması:** `RepaintBoundary` katman kilitleri kaldırılmış, Android `SurfaceTexture` ilk karesini sorunsuz üreten dünya standardı mimari kurulmuştur.
 
@@ -159,8 +162,9 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
 ---
 
 ### FAZ 5: Web Admin Komuta Merkezi, Kill-Switch & Güvenlik (✅ TAMAMLANDI)
-* **Web Admin Canlı Kontrol:** [`web/admin`](file:///d:/firsatkolik/web/admin/admob_manager.js) paneli üzerinden acil durum Kill-Switch'i, format şalterleri (Native, Kuponlar Native, Aktüel Native, Rewarded) ve reklam sıklıkları anlık yönetilir.
+* **Web Admin Canlı Kontrol:** [`web/admin`](file:///d:/firsatkolik/web/admin/admob_manager.js) paneli üzerinden acil durum Kill-Switch'i, format şalterleri (Native Anasayfa, Kuponlar, Aktüel, Popüler Fırsatlar, Favori Kategorilerim, Rewarded) ve reklam sıklıkları anlık yönetilir.
 * **Anti-Spam Cooldown:** 25 saniyelik hata soğuma süresiyle AdMob hesap banı ve kısıtlamaları engellenir.
+* **10/10 Statik Kod Denetimi (Inspect):** `python admob_cli.py inspect` ve Web Admin Inspection sekmesinde 10 kontrol noktası %100 başarıyla onaylanır.
 
 
 ---

@@ -356,9 +356,11 @@ Kupon kazıma ve senkronizasyon motoru iki Cloud Function ile yönetilir ([funct
   - `kaynakTipi === 'topluluk'` (Web kazıma kaynaklı kuponlar için bildirim üretilmez).
   - `durum !== 'gecersiz'` (Geçersiz durumdaki kuponlar elenir).
   - `userId !== paylasanKullaniciId` (Kendi paylaştığı kupon için kullanıcıya bildirim gönderilmez).
-* **Dağıtım:**
-  - Tüm kullanıcılara 400'lük batch parçalarıyla `users/{userId}/notifications/coupon_{kuponId}_{userId}` dokümanları yazılır (`type: 'coupon'`, `reason: 'community'`).
-  - Merkezi push motoru (`onNotificationCreated`) devreye girerek; `communityNotificationsEnabled` kontrolü, sessiz saatler denetimi ve `sicak_firsatlar_general_v2` kanalı (#8E24AA) üzerinden FCM Push bildirimini iletir.
+  - `containsProfanity` (Kupon başlığında veya mağazada küfür/argo tespiti durumunda bildirim iptal edilip kupon geçersizleştirilir).
+* **Dağıtım Mimarisi (Hibrit Kurşun Geçirmez Model):**
+  - **1. Anlık Global FCM Topic Yayını (`topic: 'community_coupons'`):** Tüm topluluk üyelerine Google'ın FCM CDN ağı üzerinden tek API çağrısıyla 1 ms'de anlık push gönderilir ($0 ek maliyet, 0 Cloud Function fan-out çığı).
+  - **2. Bounded Feed Yazımı (Mağaza & Yazar Takipçileri):** İlgili mağazayı veya yazarı takip eden kullanıcıların uygulama içi Bildirim Kutusu'na (`users/{userId}/notifications/coupon_{kuponId}_{userId}`) doküman yazılır (azami 300 tavanı, `isTopicDelivered: true`).
+  - **3. De-duplication Kalkanı:** Dokümanda `isTopicDelivered: true` olduğu için `onNotificationCreated` tetiklendiğinde `delivered_via_topic` ile anında kapanır; böylece hem çift bildirim önlenir hem de Cloud Function kaskat çökme riski sıfırlanır.
   - Bildirime tıklandığında `KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)` ile doğrudan **Topluluk Kuponları** sekmesi açılır. Kullanıcı zaten kuponlar ekranındaysa (`isCouponsScreenActive == true`) ön plan afişi spam korumasıyla bastırılır.
 
 ---
