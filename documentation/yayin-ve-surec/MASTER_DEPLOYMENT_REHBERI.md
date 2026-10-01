@@ -478,9 +478,17 @@ FırsatKolik, **Sıfır Mac (Zero-Mac)** mimarisine sahiptir. Tüm iOS derleme, 
 ### 10.2 CI/CD Tetikleme Yöntemleri
 
 #### Yöntem A: GitHub CLI ile Terminalden Tetikleme (Hızlı)
+> [!NOTE]
+> **Branch (`--ref`) Seçimi:** `gh workflow run` komutunda `--ref` belirtilmezse GitHub varsayılan ana dalı olan **`main`** dalını kullanır. İstenilen dalı açıkça belirterek çalıştırmak için:
+> * **PROD Dağıtımı (Canlı):** `--ref main` ve `-f flavor=prod`
+> * **DEV Dağıtımı (Test/Geliştirme):** `--ref develop` ve `-f flavor=dev`
+
 ```bash
-# PROD ortamı için TestFlight derlemesi başlat
-gh workflow run ios_testflight_deploy.yml -f flavor=prod -f upload_to_testflight=true
+# PROD ortamı için TestFlight derlemesi başlat (main dalı)
+gh workflow run ios_testflight_deploy.yml --ref main -f flavor=prod -f upload_to_testflight=true
+
+# DEV ortamı için TestFlight derlemesi başlat (develop dalı)
+gh workflow run ios_testflight_deploy.yml --ref develop -f flavor=dev -f upload_to_testflight=true
 
 # Dağıtım loglarını canlı izle
 gh run watch
@@ -670,7 +678,8 @@ Tüm temel deploy komutlarının tek bakışta referans özeti:
 | **Android AAB (Google Play)** | **PROD** | `flutter build appbundle --flavor prod --dart-define=FLAVOR=prod --release` |
 | **Android Shorebird Release** | **PROD** | `shorebird release android --flavor prod -t lib/main.dart` |
 | **Android Shorebird Patch** | **PROD** | `shorebird patch android --flavor prod -t lib/main.dart` |
-| **iOS TestFlight (GitHub CI/CD)**| **PROD** | `gh workflow run ios_testflight_deploy.yml -f flavor=prod -f upload_to_testflight=true` |
+| **iOS TestFlight (GitHub CI/CD - PROD)**| **PROD** | `gh workflow run ios_testflight_deploy.yml --ref main -f flavor=prod -f upload_to_testflight=true` |
+| **iOS TestFlight (GitHub CI/CD - DEV)** | **DEV**  | `gh workflow run ios_testflight_deploy.yml --ref develop -f flavor=dev -f upload_to_testflight=true` |
 | **Bot Sağlık Kontrolü** | **DEV** | `curl http://34.135.181.112:8081/health` |
 | **Bot Sağlık Kontrolü** | **PROD** | `curl http://34.135.181.112:8082/health` |
 | **Domain & SSL Doğrulama** | **PROD** | `curl.exe -I https://firsatkolik.app/` |
