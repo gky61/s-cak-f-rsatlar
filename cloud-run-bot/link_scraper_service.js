@@ -28,7 +28,6 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('mavi.com') ||
     lowerUrl.includes('defacto.com.tr') ||
     lowerUrl.includes('zara.com') ||
-    lowerUrl.includes('mango.com') ||
     lowerUrl.includes('beymen.com') ||
     lowerUrl.includes('hb.biz') ||
     lowerUrl.includes('trendyol.com') ||
@@ -38,8 +37,8 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('gaming.gen.tr') ||
     lowerUrl.includes('incehesap.com')) {
     userAgent = 'WhatsApp/2.23.4.15 A';
-  } else if (lowerUrl.includes('vatanbilgisayar.com') || lowerUrl.includes('pazarama.com')) {
-    userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  } else if (lowerUrl.includes('vatanbilgisayar.com') || lowerUrl.includes('pazarama.com') || lowerUrl.includes('mango.com')) {
+    userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
   }
 
   return {

@@ -87,12 +87,19 @@ graph TD
 
 ---
 
-## 2. 🔍 URL Kontrol ve Doğrulama Zinciri (4 Aşamalı Filtre)
+## 2. 🔍 URL Kontrol ve Doğrulama Zinciri (5 Aşamalı Filtre)
 
-Sisteme giren her URL, scraping yapılmadan önce şu 4 aşamalı sıkı filtreden geçirilir:
+Sisteme giren her URL veya paylaşılan metin, scraping yapılmadan önce şu 5 aşamalı sıkı filtreden geçirilir:
 
 ```
-[ Gelen Ham URL (Metin veya Buton) ]
+[ Gelen Ham Veri (Paylaşım Menüsü, Pano veya Manuel Giriş) ]
+                 │
+                 ▼
+ 0. 🧠 AKILLI URL & MOBİL PAYLAŞIM NORMALİZASYONU (DealUrlDetector)
+    - Mavi mobil uygulaması göreli rotaları (/slug/p/code) ➔ https://www.mavi.com/slug/p/code
+    - Boyner mobil uygulaması ürün slug'ları (slug-p-id) ➔ https://www.boyner.com.tr/slug-p-id
+    - Şemasız alan adları (www.mavi.com/..., boyner.com.tr/...) ➔ https:// ile tamamlama
+    - Sondaki noktalama işaretlerinin (. , ; ! ? )) temizlenmesi
                  │
                  ▼
  1. 🔗 KISA LİNK & YÖNLENDİRME ÇÖZME (Redirect Resolution)
@@ -103,7 +110,7 @@ Sisteme giren her URL, scraping yapılmadan önce şu 4 aşamalı sıkı filtred
                  │
                  ▼
  2. 🏪 İZİNLİ MAĞAZA KONTROLÜ (Domain Allowlist)
-    - 23 entegre mağaza alan adı kontrol edilir (assets/data/domain_allowlist_extended.json)
+    - 294 entegre mağaza alan adı kontrol edilir (assets/data/domain_allowlist_extended.json)
                  │
                  ▼
  3. 🎯 ÜRÜN SAYFASI REGEX KONTROLÜ (Product Path Verification)
@@ -211,6 +218,7 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 
 ### 16. Mavi (`mavi.com`)
 - **Standart Yapı:** `WhatsApp` User-Agent taklidi + `application/ld+json` şeması. Görseller `sky-static.mavi.com` CDN deseniyle doğrulanır.
+- **Mobil Paylaşım Rota Normalizasyonu:** Mavi mobil uygulamasından doğrudan paylaşılan `/slug/p/code` göreli yolları (Örn: `/mavi-logo-baskili-mavi-gomlek/p/0212124-70804`), `DealUrlDetector` tarafından otomatik tespit edilerek `https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804` kanonik URL'ine dönüştürülür ve ürün sayfası regex doğrulaması (`\/p\/[a-z0-9-]+\/?$`) ile tam uyumlu çalışır.
 
 ### 17. MediaMarkt (`mediamarkt.com.tr`)
 - **Googlebot UA Taklidi:** Cloudflare korumasını aşmak için `Googlebot/2.1 (+http://www.google.com/bot.html)` User-Agent değeri doğrudan atanır.
@@ -226,6 +234,7 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 
 ### 21. Boyner (`boyner.com.tr`)
 - **JSON-LD & DOM:** Ürün başlığı, görseli, satış fiyatı ve indirimsiz liste fiyatı JSON-LD `Product` ve DOM seçicileriyle çekilir.
+- **Mobil Paylaşım Slug Normalizasyonu:** Boyner mobil uygulamasından doğrudan paylaşılan ve başında alan adı bulunmayan ham ürün slug'ları (Örn: `patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996`), `DealUrlDetector` tarafından `-p-\d{5,}` kalıbıyla anında tespit edilerek `https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996` kanonik URL'ine dönüştürülür ve eksiksiz scrape edilir.
 
 ### 22. Gamer Gen (`gamer.gen.tr`)
 - **Altyapı:** İtopya ile aynı ASP.NET mimarisi (`provider: ITOPYA`) ve Cloudflare koruması. Ürün sayfaları `_u\d+`, hazır sistem sayfaları `_h\d+` regex desenleriyle doğrulanır.

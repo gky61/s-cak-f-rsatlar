@@ -111,16 +111,24 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 *   **Abonelik Rozeti (`priceLabel`):** N11'de Prime/Plus/Premium gibi ücretli üyelik sistemi bulunmadığından `priceLabel` alanı standart dışı mağazalara uygun şekilde daima `null` döner.
 *   **WAF Engeli & Kısa Linkler:** WAF 403 engeli için `WhatsApp` UA taklidi ve HTTP/1.1 TLS istemcisi kullanılır. `sl.n11.com/n/` kısa linkleri Google Translate Proxy üzerinden çözülür.
 
-### 12. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya
+### 12. Mango (`shop.mango.com`)
+*   **User-Agent Politikası & Vercel WAF Bypass:** Mango, `WhatsApp/2.23.4.15 A` User-Agent'ı ile gelen istekleri otomatik olarak `429 Vercel Security Checkpoint` ile bloklamaktadır. Bu nedenle modern tarayıcı User-Agent'ı (`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ... Chrome/124.0.0.0`) kullanılır.
+*   **React CSS-Modules & Erişilebilirlik Fiyat Ayrıştırması:** Mango, Next.js altyapısından React CSS Modules mimarisine geçmiştir (`SinglePrice-module`, `ZoomableImage-module`). Fiyatlar ekranda ekran okuyucu etiketleriyle sunulmaktadır:
+    *   **İndirimli / Güncel Fiyat:** `<span class="srOnly-module...__className">Güncel fiyat [2.299,99 TL ]</span>` veya `[class*="SinglePrice"][class*="discounted"]` ve `itemprop="offers"` içindeki `meta[itemprop="price"]`.
+    *   **İndirimsiz / İlk Fiyat:** `<span class="srOnly-module...__className">Üstü çizili ilk fiyat [2.999,99 TL ]</span>` veya `[class*="SinglePrice"][class*="crossed"]`.
+*   **Deterministik CDN Görsel Desteği:** `og:image` (`media.mango.com`) ve `ZoomableImage` seçicilerine ek olarak, mobil paylaşım URL'lerindeki ürün ve renk kodundan (`/(3\d{7})/(\d{2})/`) doğrudan `https://st.mngbcn.com/rcs/pics/static/T3/fotos/S/${productId}_$colorId.jpg` CDN görseli üretilir.
+*   **Kategori ve Departman Başlık Temizliği:** `og:title` içerisindeki ` - Erkek | MANGO Türkiye` veya ` - Kadın | MANGO Türkiye` uzantıları regex ile elenerek yalın ürün başlığı korunur.
+
+### 13. Vatan Bilgisayar / Teknosa / MediaMarkt / İtopya
 *   Bu mağazalar görece daha standart WAF yapıları kullanırlar. Ağırlıklı olarak `application/ld+json` taranır.
 
-### 13. Getir (`getir.com`)
+### 14. Getir (`getir.com`)
 *   **Çerez ve Konum Entegrasyonu:** Getir, Next.js kullanan konum tabanlı bir teslimat servisidir. Bölgesel/depoya özel ürünlerin çözümlenebilmesi için istek başlıklarına `locale=tr; language=tr; countryCode=TR; appType=GETIR` çerezleri otomatik olarak enjekte edilir.
 *   **Next.js JSON-LD & DOM Verisi:**
     *   **Fiyat ve Görsel:** Ürün bilgileri HTML içerisindeki `<script id="__NEXT_DATA__">` JSON bloğundan parse edilir. Ürün adı, fiyatı ve görsel cdn linkleri (`picURLs`) buradan doğrudan çekilir.
     *   **Uzun Açıklama:** Detaylı açıklama için `shortDescription` yerine Next.js payload'undaki uzun olan `description` veya `content` alanları öncelikli olarak okunur. İkisi de yoksa fallback olarak `shortDescription` ve meta tag'ler (`og:description`) taranır.
 
-### 14. İncehesap (`incehesap.com`, `incehesap.com/u/`)
+### 15. İncehesap (`incehesap.com`, `incehesap.com/u/`)
 *   **User-Agent Politikası:** Cloudflare WAF engellerini aşmak için `WhatsApp/2.23.4.15 A` kullanılır.
 *   **Kısa Link Çözümleme (`/u/{code}/`):** Paylaştıkça Kazan kısa linkleri HTTP 302 yönlendirmesiyle (Location başlığı okunarak) 200 ms içerisinde kanonik ürün sayfasına çözülür (`asus-tuf-...-fiyati-91918/`).
 *   **Dinamik Canlı API & Doğrudan Üretim:** `POST https://www.incehesap.com/uye/paylastikca-kazan/ajax/update.php` endpoint'ine `WhatsApp` UA + `PHPSESSID` çereziyle `{"action":"getSingleProductLink","urunId":...}` isteği atılır. Mobil istemci (Flutter) ve Telegram botu (Node.js) harici proxy'ye gerek olmadan doğrudan ~200 ms'de canlı link üretir.
@@ -140,7 +148,7 @@ Her mağazanın sunucu taraflı davranışları, bot korumaları ve fiyat yerle�
 | **Pazarama** | DOM (Plus Alanı) & JSON-LD | Plus üye indirimli fiyatının JSON-LD şemasında bulunmaması | Plus logosu tarama + DOM fiyat önceliklendirmesi |
 | **Trendyol** | JSON-LD (`ProductGroup`) | Çoklu varyantlarda (beden vb.) yanlış varyant fiyatının çekilmesi | `ProductGroup` şema desteği ile root fiyat analizi |
 | **Zara** | `zara.analyticsData` Script & Meta Tags | Akamai Bot Manager (JA3 TLS parmak izi engellemesi) | **Android (`HttpURLConnection`) & iOS (`URLSession`) Native MethodChannel bypass** + Regex script tarayıcı |
-| **Mango** | Next.js `__next_f.push` Script & Meta Tags | JSON-LD şemasının olmaması ve fiyatların Next.js hydration payload'unda olması | `__next_f.push` payload price regex ayrıştırıcı + og:image meta tag |
+| **Mango** | React CSS-Modules (`SinglePrice`) & Microdata | Vercel 429 WAF engeli, JSON-LD şemasının olmaması ve yeni `sr-only` erişilebilirlik fiyat yapısı | Modern `Chrome/124.0.0.0` UA + `Güncel fiyat` / `Üstü çizili ilk fiyat` regex + `SinglePrice` (`discounted`/`crossed`) parser + `media.mango.com` / CDN fallback görsel motoru |
 | **Beymen** | JSON-LD (`application/ld+json`) & DOM | Hatalı JSON-LD karakter dizilimleri (satır sonu, kaçışsız çift tırnak) ve marka/başlık ayrımı | JSON-LD Sanitizer + DOM başlık (`.o-productDetail__description`) & en ucuz fiyat karşılaştırma |
 | **N11** | `window.model` & Canlı `personalizedDetail` API | WAF bot koruması, dinamik sepet indirimleri & Kısa Linkler | `WhatsApp` User-Agent + HTTP/1.1 TLS ile canlı `personalizedDetail` POST isteği (sepet indirimli ve eski fiyat tespiti, `price`/`displayPrice` min-max analizi). `sl.n11.com/n/` linkleri Google Translate Proxy tüneli ile Play Store yönlendirmesinden kurtarılır. Ücretli üyelik olmadığından `priceLabel` daima `null` döner. |
 | **Vatan Bilgisayar**| DOM Seçicileri | Dinamik render bağımlılığı | `.product-list__price` DOM seçici fallback |

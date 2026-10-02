@@ -87,5 +87,98 @@ void main() {
       final price = await scraper.scrapePrice(doc);
       expect(price, equals(1599.99));
     });
+
+    test('should scrape modern Mango Product #1 (Keten Gömlek) with sr-only and SinglePrice', () async {
+      final html = '''
+      <head>
+        <title>Dar kesim %100 keten gömlek - Erkek | MANGO Türkiye</title>
+        <meta property="og:title" content="Dar kesim %100 keten gömlek - Erkek | MANGO Türkiye">
+        <meta property="og:image" content="https://media.mango.com/is/image/punto/37081422-95-002?wid=1024">
+        <meta property="og:description" content="Slim fit. 100% keten kumaş.">
+      </head>
+      <body>
+        <div class="SinglePrice-module__y_asRG__container">
+          <span class="srOnly-module__3MmknW__className">Üstü çizili ilk fiyat [2.999,99 TL ]</span>
+          <span class="SinglePrice-module__y_asRG__nowrap" aria-hidden="true" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+            <meta itemProp="priceCurrency" content="TRY"/>
+            <meta itemProp="price" content="2999.99"/>
+            <span class="SinglePrice-module__y_asRG__crossed">2.999,99 TL</span>
+          </span>
+          <span class="srOnly-module__3MmknW__className">Güncel fiyat [2.299,99 TL ]</span>
+          <span class="SinglePrice-module__y_asRG__nowrap" aria-hidden="true" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+            <meta itemProp="priceCurrency" content="TRY"/>
+            <meta itemProp="price" content="2299.99"/>
+            <span class="SinglePrice-module__y_asRG__discounted">2.299,99 TL</span>
+          </span>
+        </div>
+      </body>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final title = scraper.scrapeTitle(doc);
+      expect(title, equals('Dar kesim %100 keten gömlek'));
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(2299.99));
+
+      final originalPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(originalPrice, equals(2999.99));
+
+      final img = scraper.scrape(
+        document: doc,
+        url: 'https://shop.mango.com/tr/tr/p/37081422/95/00',
+        isLogoUrl: (urlString) => urlString.contains('logo'),
+        resolveImageUrl: (imgUrl, pageUrl) => imgUrl,
+        log: (msg) {},
+      );
+      expect(img, equals('https://media.mango.com/is/image/punto/37081422-95-002?wid=1024'));
+    });
+
+    test('should scrape modern Mango Product #2 (Modal Ceket) with sr-only and SinglePrice', () async {
+      final html = '''
+      <head>
+        <title>Fermuarlı modal ceket - Erkek | MANGO Türkiye</title>
+        <meta property="og:title" content="Fermuarlı modal ceket - Erkek | MANGO Türkiye">
+        <meta property="og:image" content="https://media.mango.com/is/image/punto/37031333-56-002?wid=1024">
+        <meta property="og:description" content="Modal karışımlı kumaş. Düz kesim.">
+      </head>
+      <body>
+        <div class="SinglePrice-module__y_asRG__container">
+          <span class="srOnly-module__3MmknW__className">Üstü çizili ilk fiyat [4.499,99 TL ]</span>
+          <span class="SinglePrice-module__y_asRG__nowrap" aria-hidden="true" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+            <meta itemProp="priceCurrency" content="TRY"/>
+            <meta itemProp="price" content="4499.99"/>
+            <span class="SinglePrice-module__y_asRG__crossed">4.499,99 TL</span>
+          </span>
+          <span class="srOnly-module__3MmknW__className">Güncel fiyat [2.999,99 TL ]</span>
+          <span class="SinglePrice-module__y_asRG__nowrap" aria-hidden="true" itemProp="offers" itemScope="" itemType="https://schema.org/Offer">
+            <meta itemProp="priceCurrency" content="TRY"/>
+            <meta itemProp="price" content="2999.99"/>
+            <span class="SinglePrice-module__y_asRG__discounted">2.999,99 TL</span>
+          </span>
+        </div>
+      </body>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final title = scraper.scrapeTitle(doc);
+      expect(title, equals('Fermuarlı modal ceket'));
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(2999.99));
+
+      final originalPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(originalPrice, equals(4499.99));
+
+      final img = scraper.scrape(
+        document: doc,
+        url: 'https://shop.mango.com/tr/tr/p/37031333/56/00?utm_source=product-share&utm_medium=social',
+        isLogoUrl: (urlString) => urlString.contains('logo'),
+        resolveImageUrl: (imgUrl, pageUrl) => imgUrl,
+        log: (msg) {},
+      );
+      expect(img, equals('https://media.mango.com/is/image/punto/37031333-56-002?wid=1024'));
+    });
   });
 }
+

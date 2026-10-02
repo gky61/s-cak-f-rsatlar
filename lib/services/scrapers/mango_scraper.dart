@@ -18,7 +18,7 @@ class MangoScraper extends BaseProductScraper {
     required String? Function(String? imageUrl, String pageUrl) resolveImageUrl,
     required void Function(String message) log,
   }) {
-    // 1. og:image meta tag (En güvenli ve net)
+    // 1. og:image meta tag (media.mango.com / st.mngbcn.com)
     final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'] ??
                     document.querySelector('meta[name="twitter:image"]')?.attributes['content'];
     if (ogImage != null && ogImage.isNotEmpty) {
@@ -29,15 +29,19 @@ class MangoScraper extends BaseProductScraper {
       }
     }
 
-    // 2. DOM Seçicileri (Fallback)
+    // 2. Modern DOM Seçicileri (ZoomableImage / product gallery)
     final imgSelectors = [
+      'button[class*="ZoomableImage"] img',
+      'img[class*="ZoomableImage"]',
+      'img[src*="media.mango.com"]',
+      'img[src*="st.mngbcn.com"]',
       '.product-image img',
       'img[class*="product"]',
       'main img',
     ];
     for (final selector in imgSelectors) {
-      final element = document.querySelector(selector);
-      if (element != null) {
+      final elements = document.querySelectorAll(selector);
+      for (final element in elements) {
         final src = element.attributes['src'] ?? element.attributes['data-src'];
         if (src != null && src.isNotEmpty && !isLogoUrl(src)) {
           final resolved = resolveImageUrl(src, url);
@@ -49,26 +53,42 @@ class MangoScraper extends BaseProductScraper {
       }
     }
 
+    // 3. Fallback: URL içindeki ürün kodu ve renk kodundan deterministik CDN görseli üretimi
+    // Örn: https://shop.mango.com/tr/tr/p/37081422/95/00 -> 37081422 ve 95
+    final match = RegExp(r'/(3\d{7})/(\d{2})').firstMatch(url);
+    if (match != null) {
+      final productId = match.group(1);
+      final colorId = match.group(2);
+      final cdnUrl = 'https://st.mngbcn.com/rcs/pics/static/T3/fotos/S/${productId}_$colorId.jpg';
+      log('✅ Mango görseli URL deseninden üretildi: $cdnUrl');
+      return cdnUrl;
+    }
+
     return null;
   }
 
   @override
   String? scrapeTitle(dom.Document document) {
-    // 1. DOM h1 (Varsa en yalın ürün adıdır)
-    final titleEl = document.querySelector('h1') ?? 
-                    document.querySelector('.product-name');
-    if (titleEl != null && titleEl.text.trim().isNotEmpty) {
-      return titleEl.text.trim();
-    }
-
-    // 2. og:title meta tag (Next.js server-side render eder)
+    // 1. og:title / title meta tag
     final ogTitle = document.querySelector('meta[property="og:title"]')?.attributes['content'] ??
                     document.querySelector('title')?.text;
     if (ogTitle != null && ogTitle.isNotEmpty && ogTitle.toLowerCase() != 'null') {
-      return ogTitle
+      final cleaned = ogTitle
           .replaceAll(RegExp(r'\s*\|\s*MANGO.*$', caseSensitive: false), '')
           .replaceAll(RegExp(r'\s*-\s*MANGO.*$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*-\s*(?:Erkek|Kadın|Çocuk|Teen|Home|Baby|Bebek).*$', caseSensitive: false), '')
           .trim();
+      if (cleaned.isNotEmpty) {
+        return cleaned;
+      }
+    }
+
+    // 2. DOM h1 / product-name
+    final titleEl = document.querySelector('h1') ?? 
+                    document.querySelector('[class*="ProductDetail"] h1') ??
+                    document.querySelector('.product-name');
+    if (titleEl != null && titleEl.text.trim().isNotEmpty) {
+      return titleEl.text.trim();
     }
 
     return null;
@@ -76,7 +96,51 @@ class MangoScraper extends BaseProductScraper {
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. DOM finalPrice (İndirimli yeni fiyat)
+    // 1. Yeni Mango CSS Sınıfı: [class*="SinglePrice"][class*="discounted"] veya [class*="discounted"]
+    final discountedEl = document.querySelector('[class*="SinglePrice"][class*="discounted"]') ??
+                         document.querySelector('span[class*="discounted"]');
+    if (discountedEl != null) {
+      final val = parsePriceText(discountedEl.text);
+      if (val != null && val > 0) return val;
+    }
+
+    // 2. Yeni Mango DOM: "Güncel fiyat [2.299,99 TL ]" sr-only seçicisi
+    final srOnlyElements = document.querySelectorAll('span[class*="srOnly"], span[class*="sr-only"]');
+    final guncelRegex = RegExp(r'Güncel\s+fiyat\s*\[?([0-9.,]+)\s*TL', caseSensitive: false);
+    for (final el in srOnlyElements) {
+      final match = guncelRegex.firstMatch(el.text);
+      if (match != null && match.group(1) != null) {
+        final val = parsePriceText(match.group(1)!);
+        if (val != null && val > 0) return val;
+      }
+    }
+
+    // 3. Schema.org Offer (İndirimli ürün teklifi)
+    final offerElements = document.querySelectorAll('[itemprop="offers"]');
+    for (final offer in offerElements) {
+      final isDiscounted = offer.querySelector('[class*="discounted"]') != null;
+      if (isDiscounted) {
+        final priceMeta = offer.querySelector('meta[itemprop="price"]')?.attributes['content'];
+        if (priceMeta != null) {
+          final val = double.tryParse(priceMeta);
+          if (val != null && val > 0) return val;
+        }
+      }
+    }
+
+    // 4. İndirimsiz tek fiyatlı ürünler için Schema.org Offer fiyatı (crossed yoksa)
+    for (final offer in offerElements) {
+      final isCrossed = offer.querySelector('[class*="crossed"]') != null;
+      if (!isCrossed) {
+        final priceMeta = offer.querySelector('meta[itemprop="price"]')?.attributes['content'];
+        if (priceMeta != null) {
+          final val = double.tryParse(priceMeta);
+          if (val != null && val > 0) return val;
+        }
+      }
+    }
+
+    // 5. DOM finalPrice (Eski sürüm uyumluluğu)
     final finalPriceEl = document.querySelector('span[class*="finalPrice"]') ??
                          document.querySelector('[class*="SinglePrice"][class*="finalPrice"]');
     if (finalPriceEl != null) {
@@ -84,21 +148,21 @@ class MangoScraper extends BaseProductScraper {
       if (val != null && val > 0) return val;
     }
 
-    // 2. Next.js script push data
+    // 6. Next.js script push data (Eski sayfa uyumluluğu)
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
       if (text.contains('price')) {
         final match = RegExp(r'\\?"price\\?"\s*:\s*\{\s*\\?"amount\\?"\s*:\s*([0-9.]+)').firstMatch(text) ??
                       RegExp(r'\\?"price\\?"\s*:\s*\\?"?([0-9.]+)\\?"?').firstMatch(text);
-        if (match != null) {
+        if (match != null && match.group(1) != null) {
           final val = double.tryParse(match.group(1)!);
           if (val != null && val > 0) return val;
         }
       }
     }
 
-    // 3. JSON-LD şemasından
+    // 7. JSON-LD şemasından (Fallback)
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceVal = extractPriceFromProductJson(productJson);
@@ -107,7 +171,7 @@ class MangoScraper extends BaseProductScraper {
       }
     }
 
-    // 4. DOM Seçicileri (Fallback)
+    // 8. Genel DOM Seçicileri (Fallback)
     final priceSelectors = [
       '[data-testid="pdp.productInfo.price"]',
       '.pdp-price',
@@ -129,31 +193,54 @@ class MangoScraper extends BaseProductScraper {
   double? scrapeOriginalPrice(dom.Document document, double? currentPrice) {
     if (currentPrice == null || currentPrice <= 0) return null;
 
-    // 1. DOM crossed out price (İndirimsiz çizili fiyat)
-    final crossedEl = document.querySelector('span[class*="crossed"]') ??
-                      document.querySelector('[class*="SinglePrice"][class*="crossed"]');
+    // 1. Yeni Mango CSS Sınıfı: [class*="SinglePrice"][class*="crossed"] veya [class*="crossed"]
+    final crossedEl = document.querySelector('[class*="SinglePrice"][class*="crossed"]') ??
+                      document.querySelector('span[class*="crossed"]');
     if (crossedEl != null) {
       final val = parsePriceText(crossedEl.text);
       if (val != null && val > currentPrice) return val;
     }
 
-    // 2. Next.js script crossedOutPrices
+    // 2. Yeni Mango DOM: "Üstü çizili ilk fiyat [2.999,99 TL ]" sr-only seçicisi
+    final srOnlyElements = document.querySelectorAll('span[class*="srOnly"], span[class*="sr-only"]');
+    final crossedRegex = RegExp(r'Üstü\s+çizili\s+ilk\s+fiyat\s*\[?([0-9.,]+)\s*TL', caseSensitive: false);
+    for (final el in srOnlyElements) {
+      final match = crossedRegex.firstMatch(el.text);
+      if (match != null && match.group(1) != null) {
+        final val = parsePriceText(match.group(1)!);
+        if (val != null && val > currentPrice) return val;
+      }
+    }
+
+    // 3. Schema.org Offer (Üstü çizili / ilk fiyat meta etiketi)
+    final offerElements = document.querySelectorAll('[itemprop="offers"]');
+    for (final offer in offerElements) {
+      final isCrossed = offer.querySelector('[class*="crossed"]') != null;
+      if (isCrossed) {
+        final priceMeta = offer.querySelector('meta[itemprop="price"]')?.attributes['content'];
+        if (priceMeta != null) {
+          final val = double.tryParse(priceMeta);
+          if (val != null && val > currentPrice) return val;
+        }
+      }
+    }
+
+    // 4. Next.js script crossedOutPrices (Eski sayfa uyumluluğu)
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
       if (text.contains('crossedOutPrices')) {
         final match = RegExp(r'\\?"crossedOutPrices\\?"\s*:\s*\[\{\s*\\?"amount\\?"\s*:\s*([0-9.]+)').firstMatch(text);
-        if (match != null) {
+        if (match != null && match.group(1) != null) {
           final val = double.tryParse(match.group(1)!);
           if (val != null && val > currentPrice) return val;
         }
       }
     }
 
-    // 3. Fallback selectors
+    // 5. Fallback etiketleri (del, s, .old-price vb.)
     final candidates = <double>[];
     final selectors = [
-      'span[class*="crossed"]',
       'del',
       's',
       '.old-price',
@@ -172,7 +259,6 @@ class MangoScraper extends BaseProductScraper {
     }
 
     if (candidates.isEmpty) return null;
-
     candidates.sort((a, b) => b.compareTo(a));
     return candidates.first;
   }
@@ -180,8 +266,8 @@ class MangoScraper extends BaseProductScraper {
   @override
   String? scrapeDescription(dom.Document document) {
     // 1. og:description veya description meta tag
-    final descEl = document.querySelector('meta[name="description"]') ?? 
-                   document.querySelector('meta[property="og:description"]');
+    final descEl = document.querySelector('meta[property="og:description"]') ?? 
+                   document.querySelector('meta[name="description"]');
     if (descEl != null) {
       final content = descEl.attributes['content']?.trim();
       if (content != null && content.isNotEmpty && content.toLowerCase() != 'null') {

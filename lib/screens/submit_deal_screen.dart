@@ -18,6 +18,7 @@ import '../widgets/category_selector_widget.dart';
 import '../theme/app_theme.dart';
 import '../utils/store_asset_helper.dart';
 import '../utils/asset_path_migration.dart';
+import '../utils/deal_url_detector.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/store_price_badge.dart';
 import 'deal_detail_screen.dart';
@@ -369,15 +370,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   bool _isFetchingActive = false;
 
   Future<void> _onUrlChanged() async {
-    final url = _urlController.text.trim();
+    final rawUrl = _urlController.text.trim();
 
-    if (url == _lastProcessedUrl) {
+    if (rawUrl == _lastProcessedUrl) {
       return;
     }
 
-    _lastProcessedUrl = url;
+    _lastProcessedUrl = rawUrl;
 
-    if (url.isEmpty || !url.startsWith('http')) {
+    if (rawUrl.isEmpty) {
       _urlDebounceTimer?.cancel();
       setState(() {
         _isAutoDetecting = false;
@@ -403,6 +404,45 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _isSpecialBadgeEnabled = false;
       });
       return;
+    }
+
+    String url = rawUrl;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      final normalized = DealUrlDetector.extractUrl(url);
+      if (normalized != null && (normalized.startsWith('http://') || normalized.startsWith('https://'))) {
+        url = normalized;
+        _lastProcessedUrl = url;
+        _urlController.value = TextEditingValue(
+          text: url,
+          selection: TextSelection.collapsed(offset: url.length),
+        );
+      } else {
+        _urlDebounceTimer?.cancel();
+        setState(() {
+          _isAutoDetecting = false;
+          _isLoadingImage = false;
+          _titleController.clear();
+          _descriptionController.clear();
+          _priceController.clear();
+          _storeController.clear();
+          _customStoreController.clear();
+          _selectedStore = null;
+          _imageUrlController.clear();
+          _previewImageUrl = null;
+          _selectedCategory = 'elektronik';
+          _selectedSubCategory = null;
+          _isCategoryLockedByScraper = false;
+          _isAmazonWarehouse = false;
+          _scrapedOriginalPrice = null;
+          _scrapedRatingValue = null;
+          _scrapedRatingCount = null;
+          _scrapedBrand = null;
+          _priceLabel = null;
+          _detectedPriceLabel = null;
+          _isSpecialBadgeEnabled = false;
+        });
+        return;
+      }
     }
 
     setState(() {

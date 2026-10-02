@@ -6,22 +6,100 @@ class DealUrlDetector {
     caseSensitive: false,
   );
 
-  /// Metin içerisinden ilk geçerli HTTP/HTTPS URL'sini ayıklar
-  static String? extractUrl(String text) {
-    final match = _urlRegex.firstMatch(text.trim());
-    if (match == null) return null;
-    var url = match.group(0) ?? '';
-    // Sondaki noktalama işaretlerini temizle
-    while (url.endsWith('.') || url.endsWith(',') || url.endsWith(';') || url.endsWith(')')) {
-      url = url.substring(0, url.length - 1);
+  /// Bilinen e-ticaret mağaza alan adları (şemasız veya www ile başlayan paylaşımlar için)
+  static final RegExp _bareDomainRegex = RegExp(
+    r'(?:^|[\s(])((?:www\.)?(?:mavi\.com|boyner\.com\.tr|trendyol\.com|hepsiburada\.com|amazon\.com\.tr|amazon\.com|teknosa\.com|n11\.com|pazarama\.com|vatanbilgisayar\.com|mediamarkt\.com\.tr|idefix\.com|itopya\.com|incehesap\.com|migros\.com\.tr|getir\.com|beymen\.com|zara\.com|mango\.com|defacto\.com\.tr|pttavm\.com|havitstore\.com\.tr|gamer\.gen\.tr|gaming\.gen\.tr)\/[^\s)]*)',
+    caseSensitive: false,
+  );
+
+  /// Mavi mobil uygulaması göreli ürün yolu kalıbı:
+  /// Örn: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804 veya mavi-logo-baskili-mavi-gomlek/p/0212124-70804
+  static final RegExp _maviRelativePathRegex = RegExp(
+    r'(?:^|[\s(])(\/?(?:[a-zA-Z0-9_\u00C0-\u017F-]+\/)?p\/[a-zA-Z0-9_-]*\d{4,}[a-zA-Z0-9_-]*(?:\?[^\s)]*)?)',
+    caseSensitive: false,
+  );
+
+  /// Boyner mobil uygulaması ürün slug kalıbı:
+  /// Örn: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996 veya /patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996
+  static final RegExp _boynerProductSlugRegex = RegExp(
+    r'(?:^|[\s(])(\/?[a-zA-Z0-9_\u00C0-\u017F-]+-p-\d{5,}(?:\?[^\s)]*)?)',
+    caseSensitive: false,
+  );
+
+  static String _cleanTrailingPunctuation(String url) {
+    var clean = url.trim();
+    while (clean.endsWith('.') ||
+        clean.endsWith(',') ||
+        clean.endsWith(';') ||
+        clean.endsWith(')') ||
+        clean.endsWith('!') ||
+        clean.endsWith('?')) {
+      clean = clean.substring(0, clean.length - 1);
     }
-    return url.isNotEmpty ? url : null;
+    return clean;
+  }
+
+  /// Metin içerisinden ilk geçerli e-ticaret URL'sini ayıklar ve kanonikleştirir (normalize eder).
+  ///
+  /// Desteklenen Giriş Türleri:
+  /// 1. Standart HTTP/HTTPS URL'leri (Örn: https://www.mavi.com/... veya https://ty.gl/...)
+  /// 2. Şemasız Mağaza Alan Adları (Örn: www.boyner.com.tr/... -> https://www.boyner.com.tr/...)
+  /// 3. Mavi Mobil Uygulama Göreli Yolları (Örn: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804
+  ///    -> https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804)
+  /// 4. Boyner Mobil Uygulama Ürün Slug'ları (Örn: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996
+  ///    -> https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996)
+  static String? extractUrl(String text) {
+    final trimmedText = text.trim();
+    if (trimmedText.isEmpty) return null;
+
+    // 1. Standart HTTP/HTTPS URL
+    final httpMatch = _urlRegex.firstMatch(trimmedText);
+    if (httpMatch != null) {
+      final raw = httpMatch.group(0) ?? '';
+      final clean = _cleanTrailingPunctuation(raw);
+      if (clean.isNotEmpty) return clean;
+    }
+
+    // 2. Şemasız mağaza alan adı (Örn: www.mavi.com/... veya boyner.com.tr/...)
+    final bareMatch = _bareDomainRegex.firstMatch(trimmedText);
+    if (bareMatch != null) {
+      final raw = bareMatch.group(1) ?? '';
+      final clean = _cleanTrailingPunctuation(raw);
+      if (clean.isNotEmpty) {
+        return 'https://$clean';
+      }
+    }
+
+    // 3. Mavi mobil uygulama göreli ürün yolu (Örn: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804)
+    final maviMatch = _maviRelativePathRegex.firstMatch(trimmedText);
+    if (maviMatch != null) {
+      final raw = maviMatch.group(1) ?? '';
+      final clean = _cleanTrailingPunctuation(raw);
+      if (clean.isNotEmpty) {
+        final path = clean.startsWith('/') ? clean : '/$clean';
+        return 'https://www.mavi.com$path';
+      }
+    }
+
+    // 4. Boyner mobil uygulama ürün slug'ı (Örn: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996)
+    final boynerMatch = _boynerProductSlugRegex.firstMatch(trimmedText);
+    if (boynerMatch != null) {
+      final raw = boynerMatch.group(1) ?? '';
+      final clean = _cleanTrailingPunctuation(raw);
+      if (clean.isNotEmpty) {
+        final slug = clean.startsWith('/') ? clean.substring(1) : clean;
+        return 'https://www.boyner.com.tr/$slug';
+      }
+    }
+
+    return null;
   }
 
   /// Verilen URL'nin desteklenen bir e-ticaret mağazasına ait olup olmadığını tespit eder
   /// ve mağazanın kullanıcı dostu adını döndürür.
   static String? detectStoreName(String url) {
-    final lower = url.toLowerCase();
+    final normalized = extractUrl(url) ?? url;
+    final lower = normalized.toLowerCase();
 
     if (lower.contains('trendyol.com') || lower.contains('ty.gl')) {
       return 'Trendyol';

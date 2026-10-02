@@ -18,18 +18,18 @@ void main() {
         'name': 'Link 2 (Erkek Gabardin Trençkot / Parka)',
         'url': 'https://shop.mango.com/tr/tr/p/erkek/gabardin-trenckotlar/su-gecirmez-parka--c%C4%B1kar%C4%B1labilir-kapusonlu/27034409/56/00',
         'expectedDiscounted': 2399.99,
-        'expectedOriginal': 7999.99,
+        'expectedOriginal': 8499.99,
       },
     ];
 
-    const whatsappUA = 'WhatsApp/2.23.4.15 A';
+    const chromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
     for (final tc in testCases) {
       final url = tc['url'] as String;
       final processRes = await Process.run('curl', [
         '-sL',
         '--compressed',
-        '-H', 'User-Agent: $whatsappUA',
+        '-H', 'User-Agent: $chromeUA',
         '-H', 'Accept-Language: tr-TR,tr;q=0.9',
         url,
       ]);

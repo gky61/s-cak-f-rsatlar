@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'link_preview_service.dart';
+import '../utils/deal_url_detector.dart';
 
 enum UrlValidationResult {
   valid,
@@ -179,10 +180,10 @@ class DomainAllowlistService {
     }
 
     try {
-      final trimmed = urlStr.trim();
-      Uri uri = Uri.parse(trimmed);
+      final normalized = DealUrlDetector.extractUrl(urlStr) ?? urlStr.trim();
+      Uri uri = Uri.parse(normalized);
       if (!uri.hasScheme) {
-        uri = Uri.parse('https://$trimmed');
+        uri = Uri.parse('https://$normalized');
       }
       final host = uri.host.toLowerCase();
       if (host.isEmpty) return false;
@@ -203,8 +204,10 @@ class DomainAllowlistService {
     
     await initialize();
 
+    final normalized = DealUrlDetector.extractUrl(urlStr) ?? urlStr.trim();
+
     try {
-      final trimmed = urlStr.trim();
+      final trimmed = normalized.trim();
       Uri uri = Uri.parse(trimmed);
       if (!uri.hasScheme) {
         uri = Uri.parse('https://$trimmed');
@@ -216,10 +219,10 @@ class DomainAllowlistService {
     }
 
     // Kısa link veya yönlendirmeleri çöz
-    String resolved = urlStr;
+    String resolved = normalized;
     try {
       final linkPreviewService = LinkPreviewService();
-      resolved = linkPreviewService.extractAdjustFallback(urlStr);
+      resolved = linkPreviewService.extractAdjustFallback(normalized);
       if (resolved.toLowerCase().contains('sl.n11.com/n/') || resolved.toLowerCase().contains('n11.com/n/')) {
         resolved = await linkPreviewService.resolveN11ShortLink(resolved);
       }
@@ -255,7 +258,8 @@ class DomainAllowlistService {
   static String? getStoreNameForUrl(String urlStr) {
     if (urlStr.trim().isEmpty) return null;
     try {
-      final trimmed = urlStr.trim();
+      final normalized = DealUrlDetector.extractUrl(urlStr) ?? urlStr.trim();
+      final trimmed = normalized.trim();
       Uri uri = Uri.parse(trimmed);
       if (!uri.hasScheme) {
         uri = Uri.parse('https://$trimmed');
@@ -291,7 +295,8 @@ class DomainAllowlistService {
     }
 
     try {
-      final trimmed = urlStr.trim();
+      final normalized = DealUrlDetector.extractUrl(urlStr) ?? urlStr.trim();
+      final trimmed = normalized.trim();
       Uri uri = Uri.parse(trimmed);
       if (!uri.hasScheme) {
         uri = Uri.parse('https://$trimmed');

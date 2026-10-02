@@ -138,7 +138,6 @@ class LinkPreviewService {
         lowerUrl.contains('mavi.com') ||
         lowerUrl.contains('defacto.com.tr') ||
         lowerUrl.contains('zara.com') ||
-        lowerUrl.contains('mango.com') ||
         lowerUrl.contains('beymen.com') ||
         lowerUrl.contains('hb.biz') ||
         lowerUrl.contains('trendyol.com') ||
@@ -146,8 +145,8 @@ class LinkPreviewService {
         lowerUrl.contains('incehesap.com') ||
         lowerUrl.contains('pttavm.com')) {
       userAgent = 'WhatsApp/2.23.4.15 A';
-    } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('havitstore.com.tr')) {
-      userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('havitstore.com.tr') || lowerUrl.contains('mango.com')) {
+      userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
     }
 
     final headers = {

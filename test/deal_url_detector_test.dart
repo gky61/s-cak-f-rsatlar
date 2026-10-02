@@ -16,9 +16,66 @@ void main() {
       const amznText = 'Amazon Fırsatı: https://amzn.eu/d/1a2b3c';
       expect(DealUrlDetector.extractUrl(amznText), 'https://amzn.eu/d/1a2b3c');
 
-      // Link içermeyen metin
-      const noUrlText = 'Bugün hava çok güzel hiçbir link yok.';
-      expect(DealUrlDetector.extractUrl(noUrlText), isNull);
+      // Mavi Mobil Uygulaması Paylaşımı (Relatif yol: /.../p/...)
+      const maviSharedText = '/mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
+      expect(
+        DealUrlDetector.extractUrl(maviSharedText),
+        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
+      );
+
+      // Mavi Mobil Paylaşımı (Metin içerisinde)
+      const maviInText = 'Mavi gömlek fırsatı: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804 mutlaka bak!';
+      expect(
+        DealUrlDetector.extractUrl(maviInText),
+        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
+      );
+
+      // Mavi Mobil Paylaşımı (Başında slash olmayan format)
+      const maviNoSlash = 'mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
+      expect(
+        DealUrlDetector.extractUrl(maviNoSlash),
+        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
+      );
+
+      // Boyner Mobil Uygulaması Paylaşımı (Ürün slug formatı: ...-p-...)
+      const boynerSharedText = 'patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996';
+      expect(
+        DealUrlDetector.extractUrl(boynerSharedText),
+        'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
+      );
+
+      // Boyner Mobil Paylaşımı (Metin içerisinde ve noktalama işaretli)
+      const boynerInText = 'Boyner indiriminde buldum: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996.';
+      expect(
+        DealUrlDetector.extractUrl(boynerInText),
+        'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
+      );
+
+      // Boyner Mobil Paylaşımı (Başında slash olan format)
+      const boynerSlash = '/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996';
+      expect(
+        DealUrlDetector.extractUrl(boynerSlash),
+        'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
+      );
+
+      // Şemasız Mağaza Alan Adı (www. veya çıplak domain)
+      const bareMavi = 'www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
+      expect(
+        DealUrlDetector.extractUrl(bareMavi),
+        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
+      );
+
+      const bareBoyner = 'boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996';
+      expect(
+        DealUrlDetector.extractUrl(bareBoyner),
+        'https://boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
+      );
+
+      // Link içermeyen veya sahte pozitif olabilecek metinler
+      expect(DealUrlDetector.extractUrl('Bugün hava çok güzel hiçbir link yok.'), isNull);
+      expect(DealUrlDetector.extractUrl('Bugün p/ahmet ile buluştuk.'), isNull);
+      expect(DealUrlDetector.extractUrl('Toplantı notları 3/p/5 maddesi.'), isNull);
+      expect(DealUrlDetector.extractUrl('Sadece rastgele kelime-p-abc.'), isNull);
     });
 
     test('21+ E-ticaret mağaza tespiti (detectStoreName)', () {
@@ -36,6 +93,8 @@ void main() {
       expect(DealUrlDetector.detectStoreName('https://www.itopya.com/hazir-sistemler/'), 'İtopya');
       expect(DealUrlDetector.detectStoreName('https://www.zara.com/tr/tr/gomlek-p123.html'), 'Zara');
       expect(DealUrlDetector.detectStoreName('https://www.boyner.com.tr/ayakkabi-c-123'), 'Boyner');
+      expect(DealUrlDetector.detectStoreName('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), 'Mavi');
+      expect(DealUrlDetector.detectStoreName('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), 'Boyner');
 
       // Desteklenmeyen / Alakasız link
       expect(DealUrlDetector.detectStoreName('https://google.com/search?q=test'), isNull);
@@ -45,6 +104,8 @@ void main() {
     test('Desteklenen e-ticaret kontrolü (isSupportedEcommerceUrl)', () {
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://ty.gl/123'), isTrue);
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://app.hb.biz/456'), isTrue);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isTrue);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isTrue);
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://google.com'), isFalse);
     });
   });
