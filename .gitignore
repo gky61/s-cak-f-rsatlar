@@ -145,3 +145,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# Dokümantasyon yalnızca yerelde tutulur (proje değerleri/sırlar içerir; 2026-10-04)
+documentation/
+README.md
+cloud-run-bot/README.md
+ios_ci/README.md

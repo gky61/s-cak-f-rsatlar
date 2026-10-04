@@ -39,16 +39,17 @@ jobs:
       - name: 📥 Check out repository
         uses: actions/checkout@v7
 
-      # 2. Modern Xcode 26 ve iOS 26 SDK Ortamını Seç
-      - name: 🍏 Setup Xcode 26
+      # 2. Modern Xcode Ortamını Sabitle (P1-34 / R-MOB-03: Derleme Tekrarlanabilirliği)
+      - name: 🍏 Setup Xcode 16.2
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: 'latest-stable'
+          xcode-version: '16.2'
 
-      # 3. Flutter Ortamını Kur (Önbellekli)
-      - name: 🐦 Setup Flutter SDK
+      # 3. Flutter Ortamını Sabitle (P1-34 / Sürüm Pinleme & Önbellek)
+      - name: 🐦 Setup Flutter SDK (3.29.0)
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.29.0'
           channel: 'stable'
           cache: true
 

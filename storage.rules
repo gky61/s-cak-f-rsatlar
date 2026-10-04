@@ -6,11 +6,18 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // P1-14 (R-AUTH-10): Hibrit isAdmin Mimarisi (Firebase Custom Claims öncelikli, Firestore fallback)
     function isAdmin() {
       return isAuthenticated() && (
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isadmin == true ||
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == 'true'
+        request.auth.token.admin == true ||
+        (
+          firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+          (
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isadmin == true ||
+            firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == 'true'
+          )
+        )
       );
     }
 
@@ -24,10 +31,10 @@ service firebase.storage {
       // Görseller herkes tarafından okunabilir (mobil istemci ve web)
       allow read: if true;
       
-      // Yalnızca doğrulanmış kullanıcılar geçerli görsel (image/* ve maks 5MB) yükleyebilir
-      allow create, update: if isAuthenticated() && isValidImage();
-      
-      // Silme işlemi yalnızca admin veya sunucu Admin SDK tarafından yapılabilir
+      // P0-07 (R-AUTH-07): Fırsat görsellerini ezme açığına karşı istemci yazması kapatıldı.
+      // Bot görselleri Admin SDK (kurallardan muaf) ile yükler; mobil istemci doğrudan Storage'a yazmaz.
+      // Yazma ve silme işlemi yalnızca admin veya sunucu Admin SDK tarafından yapılabilir.
+      allow write: if isAdmin() && (request.resource == null || isValidImage());
       allow delete: if isAdmin();
     }
 

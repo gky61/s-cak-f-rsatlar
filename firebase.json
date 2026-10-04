@@ -25,7 +25,12 @@
       "firebase.json",
       ".git/**",
       "**/.DS_Store",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/*.md",
+      "**/*.backup",
+      "**/*.bak",
+      "**/test_*.html",
+      "**/.*"
     ],
     "headers": [
       {
@@ -45,9 +50,46 @@
             "value": "application/json"
           }
         ]
+      },
+      {
+        "source": "/admin/**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "SAMEORIGIN"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          }
+        ]
       }
     ],
     "rewrites": [
+      {
+        "source": "/privacy-policy",
+        "destination": "/privacy-policy.html"
+      },
+      {
+        "source": "/privacy",
+        "destination": "/privacy-policy.html"
+      },
+      {
+        "source": "/gizlilik",
+        "destination": "/privacy-policy.html"
+      },
+      {
+        "source": "/delete-account",
+        "destination": "/delete-account.html"
+      },
+      {
+        "source": "/hesap-sil",
+        "destination": "/delete-account.html"
+      },
       {
         "source": "/admin",
         "destination": "/admin/index.html"

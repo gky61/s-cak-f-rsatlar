@@ -5,7 +5,29 @@
 
 const cheerio = require('cheerio');
 const scrapers = require('./scrapers');
-const { execSync, spawnSync } = require('child_process');
+const { execSync, spawnSync, execFile } = require('child_process');
+const util = require('util');
+const execFileAsync = util.promisify(execFile);
+
+/**
+ * P1-04 (R-INF-11): Asenkron, bloklamayan, güvenli curl sarmalayıcısı.
+ * Node.js tek iş parçacıklı event-loop'unu dondurmadan (0 ms blokaj) çalışır.
+ * --proto =http,https ve -- bayrakları ile SSRF ve argüman enjeksiyonunu engeller.
+ */
+async function safeExecCurl(args, options = {}) {
+  const timeoutMs = options.timeout || 8000;
+  const maxBuffer = options.maxBuffer || 2 * 1024 * 1024;
+  try {
+    const { stdout, stderr } = await execFileAsync('curl', args, {
+      timeout: timeoutMs,
+      maxBuffer: maxBuffer,
+      encoding: 'utf-8'
+    });
+    return { stdout, stderr, error: null };
+  } catch (err) {
+    return { stdout: err.stdout || '', stderr: err.stderr || '', error: err };
+  }
+}
 
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
 
@@ -181,6 +203,29 @@ function cleanTeknosaProductUrl(rawUrl) {
 /** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür */
 async function resolveUrlRedirects(url) {
   let targetUrl = extractAdjustFallback(url);
+
+  // P1-04 (R-INF-11) SSRF Koruması: Yerel ağ, bulut metadata ve iç IP'ler tüm yönlendirme akışlarında derhal engellenir
+  try {
+    const parsedTarget = new URL(targetUrl);
+    const targetHost = parsedTarget.hostname.toLowerCase();
+    if (
+      targetHost === 'localhost' ||
+      targetHost === '127.0.0.1' ||
+      targetHost === '::1' ||
+      targetHost === '0.0.0.0' ||
+      targetHost === '169.254.169.254' ||
+      targetHost.startsWith('10.') ||
+      targetHost.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(targetHost)
+    ) {
+      console.warn(`[RESOLVE-REDIRECT] 🚫 SSRF Engeli: Güvenilmeyen/dahili host reddedildi: ${targetHost}`);
+      return targetUrl;
+    }
+  } catch (err) {
+    // Geçersiz URL ise işlem yapmadan dön
+    return targetUrl;
+  }
+
   if (targetUrl.toLowerCase().includes('sl.n11.com/n/') || targetUrl.toLowerCase().includes('n11.com/n/')) {
     targetUrl = await resolveN11ShortLink(targetUrl);
   }
@@ -217,12 +262,14 @@ async function resolveUrlRedirects(url) {
     }
 
     try {
-      const curlRes = spawnSync('curl', [
+      const curlRes = await safeExecCurl([
         '-sI',
         '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
-        '--max-time', '10',
+        '--max-time', '8',
+        '--proto', '=http,https',
+        '--',
         targetUrl
-      ], { encoding: 'utf-8', timeout: 12000 });
+      ], { timeout: 10000 });
       if (!curlRes.error && curlRes.stdout) {
         const locationMatch = curlRes.stdout.match(/location:\s*(.+)/i);
         if (locationMatch) {
@@ -284,12 +331,14 @@ async function resolveUrlRedirects(url) {
     // Yöntem 2: curl -sI HEAD request ile Location header'ını yakala (Node fetch başarısız olursa)
     try {
       console.log(`[RESOLVE-REDIRECT] 🔗 hb.biz curl HEAD fallback deneniyor: ${targetUrl}`);
-      const curlRes = spawnSync('curl', [
+      const curlRes = await safeExecCurl([
         '-sI',
         '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
-        '--max-time', '10',
+        '--max-time', '8',
+        '--proto', '=http,https',
+        '--',
         targetUrl
-      ], { encoding: 'utf-8', timeout: 12000 });
+      ], { timeout: 10000 });
       
       if (!curlRes.error && curlRes.stdout) {
         const locationMatch = curlRes.stdout.match(/location:\s*(.+)/i);
@@ -310,21 +359,24 @@ async function resolveUrlRedirects(url) {
     console.warn(`[RESOLVE-REDIRECT] ⚠️ hb.biz kısa linki hiçbir yöntemle çözülemedi: ${targetUrl}`);
   }
 
-  // Trendyol kısa linkleri (ty.gl) için WhatsApp UA ile curl kullanarak yönlendirmeyi çöz
+  // Trendyol kısa linkleri (ty.gl) için WhatsApp UA ile asenkron curl kullanarak yönlendirmeyi çöz
   if (lowerUrl.includes('ty.gl')) {
     try {
-      console.log(`[RESOLVE-REDIRECT] 🔗 ty.gl kısa linki curl (WhatsApp UA) ile çözülüyor: ${targetUrl}`);
+      console.log(`[RESOLVE-REDIRECT] 🔗 ty.gl kısa linki asenkron curl (WhatsApp UA) ile çözülüyor: ${targetUrl}`);
+      const devNull = process.platform === 'win32' ? 'NUL' : '/dev/null';
       const curlArgs = [
         '-sL',
-        '-o', 'NUL',
+        '-o', devNull,
         '-w', '%{url_effective}',
         '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
         '-H', 'Accept-Language: tr-TR,tr;q=0.9',
         '-H', 'Cookie: storefrontId=1; countryCode=TR; language=tr',
-        '--max-time', '10',
+        '--max-time', '8',
+        '--proto', '=http,https',
+        '--',
         targetUrl
       ];
-      const res = spawnSync('curl', curlArgs, { encoding: 'utf-8', timeout: 12000 });
+      const res = await safeExecCurl(curlArgs, { timeout: 10000 });
       if (!res.error && res.stdout) {
         const finalUrl = res.stdout.trim();
         if (finalUrl && finalUrl.startsWith('http') && finalUrl !== targetUrl) {
@@ -337,18 +389,20 @@ async function resolveUrlRedirects(url) {
     }
   }
 
-  // İncehesap Paylaştıkça Kazan kısa linkleri (incehesap.com/u/...) için Cloudflare WAF bypass (curl WhatsApp UA)
+  // İncehesap Paylaştıkça Kazan kısa linkleri (incehesap.com/u/...) için Cloudflare WAF bypass (asenkron curl WhatsApp UA)
   // NOT: İncehesap Cloudflare koruması Node.js yerel fetch isteklerini 403 Forbidden ile engeller.
-  // Bu yüzden tıpkı ty.gl gibi doğrudan curl HEAD (WhatsApp UA) ile 301 Location header'ı yakalanır.
+  // P1-04 (R-INF-11): spawnSync dondurması kaldırıldı; 0 ms event loop blokajı ile asenkron curl çağrılır.
   if (lowerUrl.includes('incehesap.com/u/')) {
     try {
-      console.log(`[RESOLVE-REDIRECT] 🔗 İncehesap /u/ kısa linki curl (WhatsApp UA) ile çözülüyor: ${targetUrl}`);
-      const curlRes = spawnSync('curl', [
+      console.log(`[RESOLVE-REDIRECT] 🔗 İncehesap /u/ kısa linki asenkron curl (WhatsApp UA) ile çözülüyor: ${targetUrl}`);
+      const curlRes = await safeExecCurl([
         '-sI',
         '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
-        '--max-time', '10',
+        '--max-time', '8',
+        '--proto', '=http,https',
+        '--',
         targetUrl
-      ], { encoding: 'utf-8', timeout: 12000 });
+      ], { timeout: 10000 });
       if (!curlRes.error && curlRes.stdout) {
         const locationMatch = curlRes.stdout.match(/location:\s*(.+)/i);
         if (locationMatch) {
@@ -365,21 +419,23 @@ async function resolveUrlRedirects(url) {
     }
   }
 
-  const isShortOrRedirect = lowerUrl.includes('amzn.eu') ||
-    lowerUrl.includes('amzn.to') ||
-    lowerUrl.includes('link.amazon') ||
-    lowerUrl.includes('amzlinks.in') ||
-    lowerUrl.includes('hb.biz') ||
-    lowerUrl.includes('publicis.link') ||
-    lowerUrl.includes('bit.ly') ||
-    lowerUrl.includes('tinyurl.com') ||
-    lowerUrl.includes('t.co') ||
-    lowerUrl.includes('rebrand.ly') ||
-    lowerUrl.includes('rdrtr.com') ||
-    lowerUrl.includes('onelink.me') ||
-    lowerUrl.includes('paylaskazan.teknosa.com') ||
-    lowerUrl.includes('rdr.btrck.com') ||
-    lowerUrl.includes('sl.n11.com');
+  let isShortOrRedirect = false;
+  try {
+    const parsedTarget = new URL(targetUrl);
+    const targetHost = parsedTarget.hostname.toLowerCase();
+
+    const shortDomains = [
+      'amzn.eu', 'amzn.to', 'link.amazon', 'amzlinks.in',
+      'hb.biz', 'app.hb.biz', 'publicis.link',
+      'bit.ly', 'tinyurl.com', 't.co', 'rebrand.ly',
+      'rdrtr.com', 'onelink.me', 'paylaskazan.teknosa.com',
+      'rdr.btrck.com', 'sl.n11.com'
+    ];
+    isShortOrRedirect = shortDomains.some(d => targetHost === d || targetHost.endsWith('.' + d));
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] URL parse edilemedi: ${targetUrl}`);
+    return targetUrl;
+  }
 
   if (!isShortOrRedirect) return targetUrl;
 

@@ -105,11 +105,17 @@ android {
 
     buildTypes {
         release {
-            // Release key varsa kullan, yoksa debug key (geliştirme için)
+            // Release key varsa kullan, yoksa fail-closed durdur (asla debug key ile release imzalama)
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             } else {
-                signingConfig signingConfigs.debug
+                boolean isReleaseTask = gradle.startParameter.taskNames.any { 
+                    it.toLowerCase().contains("release") || it.toLowerCase().contains("bundle") 
+                }
+                if (isReleaseTask) {
+                    throw new GradleException("❌ KRİTİK DERLEME HATASI: Release derlemesi için key.properties dosyası zorunludur! Debug anahtarıyla release paketi üretilemez.")
+                }
+                signingConfig null
             }
             
             // ProGuard/R8 AÇIK - Release build optimizasyonu için

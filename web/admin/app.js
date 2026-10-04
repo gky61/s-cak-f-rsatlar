@@ -47,6 +47,22 @@ function cleanProfileImageUrl(url) {
     return trimmed;
 }
 
+// P0-17 (R-WEB-04): Güvenli görsel URL denetleyicisi (javascript: / data: / XSS filtreleyici)
+function sanitizeImageUrl(url, fallback = '') {
+    if (typeof url !== 'string') return fallback;
+    const trimmed = url.trim();
+    if (!trimmed) return fallback;
+    // javascript:, data:, vbscript: gibi tehlikeli protokolleri engelle
+    if (/^(javascript|data|vbscript):/i.test(trimmed)) {
+        return fallback;
+    }
+    // Sadece http(s) ve yerel göreli yollara izin ver
+    if (/^(https?:\/\/|\/|assets\/)/i.test(trimmed)) {
+        return trimmed;
+    }
+    return fallback;
+}
+
 // Categories and Subcategories Configuration mapping (synced with Category model)
 const categoriesConfig = {
     elektronik: [
@@ -3382,12 +3398,15 @@ function formatDate(date) {
     });
 }
 
-// Escape HTML
+// P0-17 (R-WEB-04): HTML attribute ve metin kodlayıcı (tırnak ve XSS enjeksiyon kalkanı)
 function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // Global functions for onclick handlers (inline onclick için)
@@ -4147,7 +4166,7 @@ function renderLiveChatMessages(messagesList) {
         if (msg.dealTitle) {
             dealBadgeHtml = `
                 <div class="mb-2 p-2 bg-slate-900/30 rounded border border-white/10 flex items-center gap-2 text-xs">
-                    ${msg.dealImageUrl ? `<img src="${msg.dealImageUrl}" class="w-8 h-8 object-cover rounded bg-slate-800">` : ''}
+                    ${msg.dealImageUrl ? `<img src="${escapeHtml(sanitizeImageUrl(msg.dealImageUrl))}" class="w-8 h-8 object-cover rounded bg-slate-800">` : ''}
                     <div class="flex flex-col min-w-0 flex-1">
                         <span class="font-bold truncate">${escapeHtml(msg.dealTitle)}</span>
                         ${msg.dealPrice ? `<span class="text-amber-400 font-semibold">${escapeHtml(msg.dealPrice)} TL</span>` : ''}
@@ -4174,7 +4193,7 @@ function renderLiveChatMessages(messagesList) {
             return `
                 <div class="flex items-start gap-2.5 max-w-[85%] self-start">
                     <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-500 font-bold flex items-center justify-center text-xs overflow-hidden shrink-0 mt-1">
-                        ${msg.senderImageUrl ? `<img src="${msg.senderImageUrl}" class="w-full h-full object-cover">` : (msg.senderName || 'R').charAt(0).toUpperCase()}
+                        ${msg.senderImageUrl ? `<img src="${escapeHtml(sanitizeImageUrl(msg.senderImageUrl))}" class="w-full h-full object-cover">` : (msg.senderName || 'R').charAt(0).toUpperCase()}
                     </div>
                     <div class="flex flex-col items-start">
                         <div class="p-3.5 bg-white dark:bg-surface-dark text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-2xl rounded-tl-xs shadow-sm flex flex-col gap-1">
@@ -4247,11 +4266,11 @@ function renderUserAvatarHtml(imageUrl, userName, sizeClass = 'w-10 h-10', textC
         }
     }
 
-    const src = resolvedUrl || fallbackAvatar;
+    const src = sanitizeImageUrl(resolvedUrl || fallbackAvatar, fallbackAvatar);
 
     return `
         <div class="${sizeClass} rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-            <img src="${src}" alt="${escapeHtml(displayName)}" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='${fallbackAvatar}';">
+            <img src="${escapeHtml(src)}" alt="${escapeHtml(displayName)}" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='${escapeHtml(fallbackAvatar)}';">
         </div>
     `;
 }
@@ -4634,7 +4653,7 @@ function startBotkolikChatStream(userId) {
                 if (m.dealTitle) {
                     dealBadgeHtml = `
                         <div class="mb-2 p-2 bg-slate-900/30 rounded-lg border border-white/10 flex items-center gap-2 text-xs">
-                            ${m.dealImageUrl ? `<img src="${m.dealImageUrl}" class="w-8 h-8 object-cover rounded bg-slate-800 shrink-0">` : ''}
+                            ${m.dealImageUrl ? `<img src="${escapeHtml(sanitizeImageUrl(m.dealImageUrl))}" class="w-8 h-8 object-cover rounded bg-slate-800 shrink-0">` : ''}
                             <div class="flex flex-col min-w-0 flex-1">
                                 <span class="font-bold truncate text-slate-100">${escapeHtml(m.dealTitle)}</span>
                                 ${m.dealPrice ? `<span class="text-amber-400 font-semibold">${escapeHtml(m.dealPrice)} TL</span>` : ''}
@@ -8569,7 +8588,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                     ${dealInfo ? `
                         <div class="mt-3 pt-3 border-t border-blue-200/40 dark:border-blue-800/30 flex items-center justify-between">
                             <div class="flex items-center gap-2.5 min-w-0">
-                                <img src="${dealInfo.imageUrl || ''}" class="w-9 h-9 rounded-lg object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
+                                <img src="${escapeHtml(sanitizeImageUrl(dealInfo.imageUrl || ''))}" class="w-9 h-9 rounded-lg object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(dealInfo.title || 'Fırsat')}</p>
                                     <p class="text-[11px] text-slate-500">${escapeHtml(dealInfo.store || '')} • ${dealInfo.price ? dealInfo.price + ' TL' : ''}</p>
@@ -8608,7 +8627,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                         </div>
                         ${msgData && msgData.dealTitle ? `
                             <div class="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-3">
-                                <img src="${msgData.dealImageUrl || ''}" class="w-8 h-8 rounded object-cover flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
+                                <img src="${escapeHtml(sanitizeImageUrl(msgData.dealImageUrl || ''))}" class="w-8 h-8 rounded object-cover flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(msgData.dealTitle)}</p>
                                     <p class="text-[11px] text-primary font-semibold">${msgData.dealPrice ? msgData.dealPrice + ' TL' : ''}</p>
@@ -8632,7 +8651,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                 contentHtml = `
                     <div class="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/60 dark:border-amber-800/40 rounded-xl p-4">
                         <div class="flex items-start gap-3.5">
-                            <img src="${deal.imageUrl || ''}" class="w-16 h-16 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
+                            <img src="${escapeHtml(sanitizeImageUrl(deal.imageUrl || ''))}" class="w-16 h-16 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://placehold.co/100?text=Firsat'">
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2 mb-1">
                                     <span class="px-2 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded text-[11px] font-bold">${escapeHtml(deal.store || 'Mağaza')}</span>
@@ -8675,7 +8694,7 @@ window.inspectReportedContent = async function (reportId, type, reportedId) {
                 contentHtml = `
                     <div class="bg-purple-50/50 dark:bg-purple-900/10 border border-purple-200/60 dark:border-purple-800/40 rounded-xl p-4">
                         <div class="flex items-center gap-3">
-                            <img src="${user.profileImageUrl || ''}" class="w-12 h-12 rounded-full object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
+                            <img src="${escapeHtml(sanitizeImageUrl(user.profileImageUrl || ''))}" class="w-12 h-12 rounded-full object-cover bg-slate-200 dark:bg-slate-700 flex-shrink-0" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=135bec&color=fff&size=128'">
                             <div class="min-w-0 flex-1">
                                 <h4 class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(displayName)}</h4>
                                 <p class="text-xs text-slate-500">${escapeHtml(user.email || 'E-posta yok')} • UID: <span class="font-mono">${escapeHtml(user.uid || user.id)}</span></p>

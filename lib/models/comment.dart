@@ -22,7 +22,7 @@ class Comment {
     required this.dealId,
     required this.userId,
     required this.userName,
-    required this.userEmail,
+    this.userEmail = '', // P0-10: Varsayılan boş bırakılır
     this.userProfileImageUrl = '', // Boş olabilir
     required this.text,
     required this.createdAt,
@@ -64,7 +64,7 @@ class Comment {
       'dealId': dealId,
       'userId': userId,
       'userName': userName,
-      'userEmail': userEmail,
+      'userEmail': '', // P0-10 (R-PRV-01): Kişisel e-posta sızıntısını önlemek için boş kaydedilir
       'userProfileImageUrl': userProfileImageUrl,
       'text': text,
       'createdAt': Timestamp.fromDate(createdAt),

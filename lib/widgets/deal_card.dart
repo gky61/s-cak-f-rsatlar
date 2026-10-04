@@ -83,7 +83,7 @@ class _DealCardState extends State<DealCard> {
       final amazonImage = await _linkPreviewService.getAmazonImageSmart(link);
       if (amazonImage != null && mounted) {
         setState(() {
-          _effectiveImageUrl = amazonImage;
+          _effectiveImageUrl = Deal.ensureHttps(amazonImage);
           _isLoadingImage = false;
         });
       } else if (mounted) {

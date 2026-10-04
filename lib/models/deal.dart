@@ -151,6 +151,16 @@ class Deal {
     }
   }
 
+  /// HTTP olan URL'leri HTTPS protokolüne yükseltir (Android Cleartext engeli için güvenlik kalkanı)
+  static String ensureHttps(String urlStr) {
+    final trimmed = urlStr.trim();
+    if (trimmed.isEmpty) return '';
+    if (trimmed.toLowerCase().startsWith('http://')) {
+      return 'https://${trimmed.substring(7)}';
+    }
+    return trimmed;
+  }
+
 
 
   /// Kullanıcı arayüzlerinde (panoya kopyalama, yerel paylaşım, önizleme)
@@ -384,7 +394,7 @@ class Deal {
       category: Category.normalizeCategoryId((data['category'] ?? '').toString()),
       subCategory: data['subCategory'],
       link: data['link'] ?? data['url'] ?? '', // Bot 'url' de yazabilir
-      imageUrl: data['imageUrl'] ?? data['image_url'] ?? '', // Hem imageUrl hem image_url destekle
+      imageUrl: ensureHttps((data['imageUrl'] ?? data['image_url'] ?? '').toString()), // Hem imageUrl hem image_url destekle, HTTPS güvenceli
       hotVotes: (data['hotVotes'] ?? 0) is int ? (data['hotVotes'] ?? 0) : ((data['hotVotes'] ?? 0) as num).toInt(),
       coldVotes: (data['coldVotes'] ?? 0) is int ? (data['coldVotes'] ?? 0) : ((data['coldVotes'] ?? 0) as num).toInt(),
       expiredVotes: (data['expiredVotes'] ?? 0) is int ? (data['expiredVotes'] ?? 0) : ((data['expiredVotes'] ?? 0) as num).toInt(),
@@ -392,7 +402,7 @@ class Deal {
       postedBy: data['postedBy'] ?? '',
       postedByName: data['postedByName']?.toString(),
       postedByAvatar: (data['postedByAvatar'] != null && data['postedByAvatar'].toString().trim().isNotEmpty)
-          ? migrateAssetPath(data['postedByAvatar'].toString().trim())
+          ? ensureHttps(migrateAssetPath(data['postedByAvatar'].toString().trim()))
           : null,
       createdAt: createdAt,
       isEditorPick: data['isEditorPick'] == true,
@@ -441,7 +451,7 @@ class Deal {
       'category': category,
       'subCategory': subCategory,
       'link': link,
-      'imageUrl': imageUrl,
+      'imageUrl': ensureHttps(imageUrl),
       'hotVotes': hotVotes,
       'coldVotes': coldVotes,
       'expiredVotes': expiredVotes,

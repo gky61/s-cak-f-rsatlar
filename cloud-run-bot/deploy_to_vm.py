@@ -30,31 +30,44 @@ try:
     # Current working directory (cloud-run-bot directory)
     cwd = os.path.dirname(os.path.abspath(__file__))
 
+    # P1-02 (R-INF-09): Değişmez (Immutable) Git-SHA etiketleme mimarisi
+    try:
+        commit_sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=cwd).decode().strip()
+    except Exception:
+        commit_sha = "manual"
+
+    image_tag = f"gcr.io/{project_id}/{service_name}:{env}-{commit_sha}"
+    print(f"[INFO] Hedef Docker İmajı: {image_tag}")
+
     # Check if build step should be skipped
     skip_build = "--skip-build" in sys.argv
 
-    # 1. Submit build to Cloud Build (builds Docker container in the cloud)
+    # 1. Submit build to Cloud Build (builds Docker container in the cloud with Git-SHA)
     if not skip_build:
-        print("\n[INFO] Step 1: Submitting build to Google Cloud Build...")
-        build_cmd = f"gcloud builds submit --tag gcr.io/{project_id}/{service_name}:latest --project {project_id} ."
+        print(f"\n[INFO] Step 1: Submitting build to Google Cloud Build ({image_tag})...")
+        build_cmd = f"gcloud builds submit --tag {image_tag} --project {project_id} ."
         run_command(build_cmd, cwd=cwd)
     else:
-        print("\n[INFO] Step 1: Skipping Cloud Build (--skip-build specified, reusing latest image)...")
+        print(f"\n[INFO] Step 1: Skipping Cloud Build (--skip-build specified, reusing {image_tag})...")
 
     # 2. Deploy to VM as a Docker container
     print("\n[INFO] Step 2: Running deployment commands on VM via SSH...")
     
-    # We pull the latest image, stop/rm any old container, run the new container,
-    # mounting the local key JSON as /app/firebase_key.json, and loading the .env file.
-    # Finally, we prune old images to keep disk space usage at 0 (without failing if prune conflicts).
+    # P1-02 & P1-03: Değişmez Git-SHA imajı çek, fail-closed PROJECT_ID enjekte et, güvenli dangling prune yap
+    # docker image prune -f: Yalnızca etiketsiz katmanları siler, önceki SHA imajlarını diskte tutarak 5 sn rollback sağlar.
+    # P1-26 (R-INF-04): e2-micro (1GB RAM) OOM kalkanı - Docker cgroup kaynak sınırları
+    memory_limit = "--memory=500m --memory-swap=500m --cpus=0.70" if env == "prod" else "--memory=250m --memory-swap=250m --cpus=0.25"
+
     docker_run_cmd = (
-        f"docker pull gcr.io/{project_id}/{service_name}:latest && "
+        f"docker pull {image_tag} && "
         f"docker rm -f {container_name} || true && "
         f"docker run -d --name {container_name} --restart always -p {port}:8080 "
+        f"{memory_limit} "
+        f"-e PROJECT_ID={project_id} -e NODE_ENV={env} "
         f"--env-file {remote_dir}/.env "
         f"-v {remote_dir}/{env}_firebase_key.json:/app/firebase_key.json "
-        f"gcr.io/{project_id}/{service_name}:latest && "
-        f"(docker image prune -a -f || true)"
+        f"{image_tag} && "
+        f"(docker image prune -f || true)"
     )
 
     ssh_cmd = f"gcloud compute ssh {vm_name} --zone={zone} --project={project_id} --quiet --command=\"{docker_run_cmd}\""

@@ -15,8 +15,36 @@ const domainAllowlist = require('./domain_allowlist');
 const advertisingComplianceService = require('./advertising_compliance_service');
 const affiliateManager = require('./affiliate_manager');
 
+// P1-03 (R-INF-10): Fail-Closed Ortam Doğrulaması
+let PROJECT_ID = (process.env.PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT || '').trim();
+if (!PROJECT_ID) {
+  try {
+    const fs = require('fs');
+    const keyCandidates = [
+      process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      '/app/firebase_key.json',
+      './firebase_key.json',
+      './prod_firebase_key.json',
+      './dev_firebase_key.json'
+    ].filter(Boolean);
+    for (const kp of keyCandidates) {
+      if (fs.existsSync(kp)) {
+        const parsed = JSON.parse(fs.readFileSync(kp, 'utf8'));
+        if (parsed.project_id) {
+          PROJECT_ID = parsed.project_id.trim();
+          break;
+        }
+      }
+    }
+  } catch (_) {}
+}
+if (!PROJECT_ID) {
+  console.error('❌ KRİTİK HATA (P1-03 / R-INF-10): PROJECT_ID ortam değişkeni veya servis hesabı anahtarı bulunamadı! Fail-closed güvenlik kalkanı devrede, script çalıştırılamaz.');
+  process.exit(1);
+}
+
 // Firebase Admin başlat
-// Cloud Run'da otomatik authentication kullanır
+// Cloud Run ve Docker container'da ortam kimlik doğrulamasını kullanır
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -622,7 +650,7 @@ async function saveDealToFirebase(message, chatInfo) {
         });
 
         if (buffer && buffer.length > 0) {
-          const projectId = process.env.PROJECT_ID || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT || 'firsatkolik-prod-e6eae';
+          const projectId = PROJECT_ID;
           const bucketName = `${projectId}.firebasestorage.app`;
           const bucket = admin.storage().bucket(bucketName);
           const filename = `deals/${chatInfo.id}_${messageId}.jpg`;

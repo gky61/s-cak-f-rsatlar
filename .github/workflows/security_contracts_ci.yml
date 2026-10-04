@@ -1,0 +1,51 @@
+name: Security & Rules Contracts CI
+
+# ==============================================================================
+# FırsatKolik — Otomatik Güvenlik ve Kurallar Sözleşme Test Hattı (P1-39 / R-QA-02)
+# ==============================================================================
+# Her push ve pull request anında çalışarak:
+# 1. Firestore kurallarını (Bait-and-Switch, sayaç delta, ban, yetki gaspı vb.)
+# 2. Cloud Functions güvenlik ve kota optimizasyonlarını
+# 3. VM ve Bot Docker bellek ve kalp atışı izolasyonunu
+# 4. Mobil istemci fail-closed monetizasyon ve rıza politikalarını
+# sözleşme bazında %100 otomatik olarak doğrular ve olası mayınları engeller.
+# ==============================================================================
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - development
+      - dev
+  pull_request:
+    branches:
+      - main
+      - master
+      - development
+      - dev
+  workflow_dispatch:
+
+jobs:
+  test-security-contracts:
+    name: Run Security & Architecture Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js (v22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache-dependency-path: functions/package.json
+
+      - name: 📦 Install Functions Dependencies
+        working-directory: functions
+        run: npm ci || npm install
+
+      - name: 🧪 Execute Security Contracts Test Suite
+        working-directory: functions
+        run: npm test

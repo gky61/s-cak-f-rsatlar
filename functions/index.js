@@ -8,10 +8,12 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Türkçe karakter temizleme fonksiyonu (Harf duyarsız normalize)
+// P1-20 (R-SCL-11): Türkçe karakter temizleme fonksiyonu (Harf duyarsız normalize ve yanlış pozitif kalkanı)
+// "Şık", "şıklar", "şıklık" gibi meşru e-ticaret moda kelimelerinin "sik" küfrüne dönüşmesini engelleyen Unicode token kalkanı
 const normalize = (text = '') =>
   text
     .toString()
+    .replace(/(?<!\p{L})(şık|şıklar|şıklık|şıklığı|şıkkı|şıktır)(?!\p{L})/giu, '___ELEGANT___')
     .replace(/[\-\_]/g, ' ')
     .replace(/([a-zA-ZçğıöşüÇĞİÖŞÜ])([0-9])/g, '$1 $2')
     .replace(/([0-9])([a-zA-ZçğıöşüÇĞİÖŞÜ])/g, '$1 $2')
@@ -26,19 +28,22 @@ const normalize = (text = '') =>
     .replace(/ü/g, 'u');
 
 // Küfür ve uygunsuz içerik kontrolü
+// P1-20 (R-SCL-11): 'bomba' ve 'mal' gibi yaygın e-ticaret kelimeleri ("bomba indirim", "ticari mal") tek başına yasaklı olmaktan çıkarılmış,
+// yerine bağlamsal argo/tehdit öbekleri ('canli bomba', 'mal herif') tanımlanmıştır.
 const profanityWords = [
   'sik', 'sike', 'siker', 'sikmek', 'sikti', 'siktir',
   'amk', 'amcik', 'amcık', 'orospu', 'orospu cocugu', 'orospu çocuğu',
   'pezevenk', 'pezeveng', 'kerhane', 'kerhaneci',
-  'mal', 'malk', 'malak', 'got', 'göt', 'gotu', 'götü',
+  'malk', 'malak', 'mal herif', 'mal ya', 'mal adam', 'got', 'göt', 'gotu', 'götü',
   'cuk', 'çük', 'cukmek', 'çükmek', 'bok', 'boka', 'boku',
   'aptal', 'salak', 'gerizekali', 'geri zekalı', 'pic', 'piç',
   'haysiyetsiz', 'serefsiz', 'şerefsiz', 'namussuz', 'namusuz',
   'porno', 'pornografi', 'seks', 'sex',
   'oldur', 'öldür', 'oldurmek', 'öldürmek', 'katlet', 'katletmek',
-  'bomba', 'bombala', 'bombalamak', 'silah', 'silahla', 'silahlamak',
+  'canli bomba', 'canlı bomba', 'bombali saldiri', 'bombalı saldırı', 'bombala', 'bombalamak',
+  'silahla', 'silahlamak',
   'esrar', 'eroin', 'kokain', 'uyusturucu', 'uyuşturucu',
-  'sarhos', 'sarhoş', 'alkolik',
+  'sarhos', 'sarhoş', 'alkolik'
 ];
 
 // ReDoS ve regex derleme maliyetini sıfırlayan ön derlenmiş regex listesi
@@ -258,6 +263,12 @@ async function handleSendFailure(deviceId, error) {
 
 // Eşleşen kullanıcıları toplayıp tekil bildirim dokümanı üretir
 async function matchAndCreateDealNotifications(deal, dealId) {
+  // P0-01 (R-INF-01): Test ve simülasyon fırsatları asla kullanıcılara bildirim gönderemez
+  if (deal && (deal.isTest === true || deal.source === 'test' || deal.isSimulation === true)) {
+    functions.logger.info(`🧪 Test fırsatı (${dealId}), bildirim dağıtımı engellendi.`);
+    return;
+  }
+
   const title = deal.title || '';
   const description = deal.description || '';
   const postedBy = deal.postedBy || '';
@@ -447,6 +458,102 @@ async function matchAndCreateDealNotifications(deal, dealId) {
 
   functions.logger.info(`📊 Eşleşen kullanıcı sayısı: ${matchedUsers.size}`);
 
+  // P0-13 (R-SCL-01): Sınırsız Ölçeklenebilir FCM Kategori Topic Dağıtımı
+  // In-app bildirim dokümanları bounded kota ile yazılırken; push bildirimi tüm kategori abonelerine
+  // 0 Firestore maliyeti ve 0 Cloud Function fan-out çığı ile doğrudan FCM Topic altyapısı üzerinden iletilir.
+  try {
+    let notificationsEnabled = true;
+    try {
+      const appConfigDoc = await admin.firestore().collection('settings').doc('app').get();
+      if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
+        notificationsEnabled = false;
+      }
+    } catch (cfgErr) {
+      functions.logger.warn('⚠️ Ayarlar okunurken hata, varsayılan açık:', cfgErr.message);
+    }
+
+    const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
+    const currentHm = turkeyTime.substring(0, 5);
+    const isQuiet = (currentHm >= '23:00' || currentHm < '08:00');
+
+    if (notificationsEnabled && !isQuiet) {
+      const rawCategory = deal.category || 'genel';
+      const cleanCategory = String(rawCategory).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+      const categoryTopic = `cat_${cleanCategory}`;
+
+      const formattedPrice = (deal.price === 0 || deal.price === '0') ? 'ÜCRETSİZ' : `${deal.price || 0} TL`;
+      const catTitle = rawCategory ? (rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1)) : 'Fırsat';
+
+      const topicPayload = {
+        topic: categoryTopic,
+        notification: {
+          title: `🎯 ${catTitle} Fırsatı!`,
+          body: `${deal.title}\n💰 ${formattedPrice}`
+        },
+        data: {
+          type: 'deal',
+          reason: 'category',
+          dealId: String(dealId),
+          category: String(rawCategory),
+          imageUrl: String(deal.imageUrl || deal.mainImage || ''),
+          merchant: String(deal.merchant || ''),
+          price: String(deal.price !== undefined ? deal.price : ''),
+          click_action: 'FLUTTER_NOTIFICATION_CLICK'
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'sicak_firsatlar_general_v2',
+            sound: 'default',
+            color: '#FF6D00',
+            icon: '@mipmap/ic_launcher',
+            tag: `deal_${dealId}`,
+            defaultSound: true,
+            defaultVibrateTimings: true
+          }
+        },
+        apns: {
+          headers: {
+            'apns-push-type': 'alert',
+            'apns-priority': '10'
+          },
+          payload: {
+            aps: {
+              alert: {
+                title: `🎯 ${catTitle} Fırsatı!`,
+                body: `${deal.title}\n💰 ${formattedPrice}`
+              },
+              sound: 'default',
+              badge: 1,
+              'content-available': 1,
+              'interruption-level': 'active',
+              category: 'DEAL_NOTIFICATION'
+            }
+          }
+        }
+      };
+
+      const topicRes = await admin.messaging().send(topicPayload);
+      functions.logger.info(`📢 Kategori FCM konusuna (topic: ${categoryTopic}) push gönderildi: ${topicRes}`);
+
+      // Eğer alt kategori ise (örn. elektronik:bilgisayar) ana kategoriye de ilet
+      if (rawCategory.includes(':')) {
+        const parentCat = rawCategory.split(':')[0];
+        const cleanParent = parentCat.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+        if (cleanParent && cleanParent !== cleanCategory) {
+          const parentTopic = `cat_${cleanParent}`;
+          const parentPayload = { ...topicPayload, topic: parentTopic };
+          await admin.messaging().send(parentPayload).catch(e => functions.logger.warn('⚠️ Parent category topic push uyarısı:', e.message));
+          functions.logger.info(`📢 Ana kategori FCM konusuna (topic: ${parentTopic}) push gönderildi.`);
+        }
+      }
+    } else {
+      functions.logger.info(`ℹ️ Kategori FCM topic push atlandı: enabled=${notificationsEnabled}, sessiz=${isQuiet} (${currentHm})`);
+    }
+  } catch (catTopicErr) {
+    functions.logger.warn('⚠️ Kategori FCM topic push gönderim uyarısı:', catTopicErr.message);
+  }
+
   // 2. Kota ve Bounded Fan-Out Koruması (Max 300 bildirim dokümanı tavanı)
   // Canlı ortamda on binlerce abonenin aynı anda Cloud Function çığı (thundering herd)
   // ve kontrolsüz fatura/timeout üretmesini engellemek için azami 300 kullanıcı ile sınırlandırılır.
@@ -466,7 +573,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   }
 
   if (finalTargetUsers.length === 0) {
-    functions.logger.info(`ℹ️ Fırsat (${dealId}) için eşleşen abone bulunamadı, bildirim oluşturulmadı.`);
+    functions.logger.info(`ℹ️ Fırsat (${dealId}) için eşleşen abone bulunamadı, bildirim dokümanı oluşturulmadı.`);
     return;
   }
 
@@ -519,6 +626,8 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       reasonDetail: match.detail,
       reasons: match.reasons || {},
       read: false,
+      isTopicDelivered: match.reason === 'category',
+      pushStatus: match.reason === 'category' ? 'delivered_via_topic' : 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -548,6 +657,12 @@ exports.onDealCreated = functions.firestore
 
     if (!deal) {
       functions.logger.warn(`⚠️ onDealCreated tetiklendi fakat doküman verisi boş: ${dealId}`);
+      return null;
+    }
+
+    // P0-01 (R-INF-01): Test ve simülasyon fırsatları için bildirim ve moderasyon hattını sonlandır
+    if (deal.isTest === true || deal.source === 'test' || deal.isSimulation === true) {
+      functions.logger.info(`🧪 Test/simülasyon fırsatı (${dealId}) algılandı. Bildirim ve moderasyon hattı atlandı.`);
       return null;
     }
 
@@ -673,9 +788,40 @@ exports.onDealCreated = functions.firestore
       return null;
     }
 
-    // Eğer fırsat zaten onaylı geldiyse, bildirimleri oluştur
+    // Eğer fırsat zaten onaylı geldiyse, bildirimleri oluştur ve puan ver
     if (deal.isApproved === true) {
       functions.logger.info('✅ Fırsat onaylı, bildirimler oluşturuluyor...');
+      // P1-11 (R-AUTH-04): Fırsat doğrudan yayına alındıysa kullanıcıya sunucu otoritesiyle puan ver
+      if (isUserSubmitted && deal.postedBy && deal.postedBy !== 'botkolik' && deal.postedBy !== 'admin') {
+        try {
+          const userRef = admin.firestore().collection('users').doc(deal.postedBy);
+          await userRef.set({
+            points: admin.firestore.FieldValue.increment(10),
+            dealCount: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+          
+          const userSnap = await userRef.get();
+          if (userSnap.exists) {
+            const uData = userSnap.data() || {};
+            const dCount = Number(uData.dealCount) || 0;
+            const currentBadges = Array.isArray(uData.badges) ? uData.badges : [];
+            const newBadges = [];
+            if (dCount >= 1 && !currentBadges.includes('first_spark')) newBadges.push('first_spark');
+            if (dCount >= 10 && !currentBadges.includes('hunter_apprentice')) newBadges.push('hunter_apprentice');
+            if (dCount >= 20 && !currentBadges.includes('contributor')) newBadges.push('contributor');
+            if (dCount >= 50 && !currentBadges.includes('master_hunter')) newBadges.push('master_hunter');
+            if (dCount >= 150 && !currentBadges.includes('legendary_hunter')) newBadges.push('legendary_hunter');
+            if (newBadges.length > 0) {
+              await userRef.update({
+                badges: admin.firestore.FieldValue.arrayUnion(...newBadges)
+              });
+            }
+          }
+        } catch (pointErr) {
+          functions.logger.error('Fırsat onay puan artış hatası:', pointErr);
+        }
+      }
       await matchAndCreateDealNotifications(deal, dealId);
       return;
     }
@@ -763,6 +909,12 @@ exports.onDealUpdated = functions.firestore
       return null;
     }
 
+    // P0-01 (R-INF-01): Test fırsatları güncellendiğinde bildirim hattını çalıştırma
+    if (newData.isTest === true || newData.source === 'test' || newData.isSimulation === true) {
+      functions.logger.info(`🧪 Test fırsatı güncellemesi (${dealId}), bildirim hattı atlandı.`);
+      return null;
+    }
+
     const wasApproved = oldData.isApproved === true;
     const isNowApproved = newData.isApproved === true;
 
@@ -800,6 +952,36 @@ exports.onDealUpdated = functions.firestore
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
+
+        // P1-11 (R-AUTH-04): Fırsat onaylandığında sunucu otoritesiyle +10 puan ve +1 dealCount artır, rozetleri güncelle
+        try {
+          const userRef = admin.firestore().collection('users').doc(postedBy);
+          await userRef.set({
+            points: admin.firestore.FieldValue.increment(10),
+            dealCount: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+
+          const userSnap = await userRef.get();
+          if (userSnap.exists) {
+            const uData = userSnap.data() || {};
+            const dCount = Number(uData.dealCount) || 0;
+            const currentBadges = Array.isArray(uData.badges) ? uData.badges : [];
+            const newBadges = [];
+            if (dCount >= 1 && !currentBadges.includes('first_spark')) newBadges.push('first_spark');
+            if (dCount >= 10 && !currentBadges.includes('hunter_apprentice')) newBadges.push('hunter_apprentice');
+            if (dCount >= 20 && !currentBadges.includes('contributor')) newBadges.push('contributor');
+            if (dCount >= 50 && !currentBadges.includes('master_hunter')) newBadges.push('master_hunter');
+            if (dCount >= 150 && !currentBadges.includes('legendary_hunter')) newBadges.push('legendary_hunter');
+            if (newBadges.length > 0) {
+              await userRef.update({
+                badges: admin.firestore.FieldValue.arrayUnion(...newBadges)
+              });
+            }
+          }
+        } catch (pointErr) {
+          functions.logger.error('Fırsat onay puan artış hatası:', pointErr);
+        }
       }
       // Reddedildi bildirimi (oldData.isRejected !== true && newData.isRejected === true)
       else if (oldData.isRejected !== true && newData.isRejected === true) {
@@ -1017,7 +1199,29 @@ exports.onCommentCreated = functions.firestore
     const dealImageUrl = (dealData && (dealData.imageUrl || dealData.mainImage)) ? (dealData.imageUrl || dealData.mainImage) : '';
     const dealOwnerId = dealData ? dealData.postedBy : null;
     const replierUserId = comment.userId || 'unknown';
-    const replyUserName = comment.userName || 'Bir kullanıcı';
+
+    // P1-16 (R-AUTH-14): Gönderici adını sahte istemci verisinden değil, otoriter kullanıcı profilinden doğrula
+    let verifiedSenderName = 'Bir kullanıcı';
+    if (replierUserId && replierUserId !== 'unknown') {
+      try {
+        const senderUserDoc = await admin.firestore().collection('users').doc(replierUserId).get();
+        if (senderUserDoc.exists) {
+          const sData = senderUserDoc.data() || {};
+          verifiedSenderName = sData.displayName || sData.userName || sData.username || (comment.userName || 'Bir kullanıcı');
+        } else {
+          verifiedSenderName = comment.userName || 'Bir kullanıcı';
+        }
+      } catch (_) {
+        verifiedSenderName = comment.userName || 'Bir kullanıcı';
+      }
+    }
+    // Rezerve sistem isimlerinin filtrelenmesi (Phishing / impersonation koruması)
+    const lowerSender = verifiedSenderName.toLowerCase();
+    const reservedNames = ['firsatkolik', 'admin', 'yonetim', 'moderatör', 'moderator', 'botkolik', 'sistem'];
+    if (reservedNames.some(r => lowerSender.includes(r))) {
+      verifiedSenderName = 'Kullanıcı';
+    }
+    const replyUserName = verifiedSenderName;
 
     // Yanıt bildirimi gönder (eğer bu yorum başka bir yoruma cevap ise)
     const parentCommentId = comment.parentCommentId || null;
@@ -1237,6 +1441,25 @@ exports.onUserMessageCreated = functions.firestore
         resolvedSenderName = senderData.username || senderData.displayName || resolvedSenderName;
       }
 
+      // P1-17 (R-AUTH-15): Mesaj seli (Flooding / Spam) kalkanı
+      // Son 60 saniyede aynı alıcıya 12'den fazla mesaj atılmışsa bildirim spamını kısıtla
+      try {
+        const oneMinuteAgo = new Date(Date.now() - 60000);
+        const recentMsgsSnap = await admin.firestore().collection('messages')
+          .where('senderId', '==', senderId)
+          .where('receiverId', '==', receiverId)
+          .where('createdAt', '>=', oneMinuteAgo)
+          .orderBy('createdAt', 'desc')
+          .limit(15)
+          .get();
+        if (recentMsgsSnap.size >= 12) {
+          functions.logger.warn(`⚠️ [P1-17 Kalkanı] Mesaj seli algılandı: Gönderici ${senderId}, Alıcı ${receiverId}. Push bildirimi kısıtlandı.`);
+          return null;
+        }
+      } catch (floodErr) {
+        functions.logger.warn('Mesaj seli kontrol uyarısı:', floodErr.message);
+      }
+
       // Alıcı kontrolleri (Engellenenler ve Sessize alınanlar)
       if (receiverDoc && receiverDoc.exists) {
         const receiverData = receiverDoc.data() || {};
@@ -1405,59 +1628,82 @@ exports.onCouponCreated = functions
     functions.logger.info(`🎟️ Yeni topluluk kuponu bildirimi oluşturuluyor: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
 
     try {
-      // 1. ANLIK TOPLULUK KUPONU FCM TOPIC PUSH (Sıfır Ek Maliyet, 100.000+ kullanıcıya 0 Fan-out yükü)
+      // 1. ANLIK TOPLULUK KUPONU FCM TOPIC PUSH (P0-08 / R-AUTH-11 & P0-14 / R-BIZ-01 Kalkanları)
       try {
-        const topicPayload = {
-          topic: 'community_coupons',
-          notification: {
-            title: `🎟️ ${magazaAdi} Kuponu!`,
-            body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
-          },
-          data: {
-            type: 'coupon',
-            reason: 'community',
-            kuponId: String(kuponId),
-            magazaAdi: String(magazaAdi),
-            kuponKodu: String(kuponKodu),
-            authorName: String(paylasanAdi),
-            authorId: String(paylasanId),
-            click_action: 'FLUTTER_NOTIFICATION_CLICK'
-          },
-          android: {
-            priority: 'high',
+        // A. Acil durum şalteri kontrolü (settings/app.notificationsEnabled)
+        let notificationsEnabled = true;
+        try {
+          const appConfigDoc = await admin.firestore().collection('settings').doc('app').get();
+          if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
+            notificationsEnabled = false;
+          }
+        } catch (cfgErr) {
+          functions.logger.warn('⚠️ Ayarlar okunurken hata, varsayılan açık:', cfgErr.message);
+        }
+
+        // B. Sessiz Saatler kontrolü (23:00 - 08:00 Türkiye Saati)
+        const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
+        const currentHm = turkeyTime.substring(0, 5);
+        const isQuiet = (currentHm >= '23:00' || currentHm < '08:00');
+
+        // C. Moderasyon Durumu: Kupon 'aktif' değilse (beklemede/taslak ise) genel push gönderilmez
+        const isEligibleForTopic = notificationsEnabled && !isQuiet && (kupon.durum === 'aktif');
+
+        if (!isEligibleForTopic) {
+          functions.logger.info(`ℹ️ Topluluk kuponu topic push atlandı: durum='${kupon.durum}', enabled=${notificationsEnabled}, sessiz=${isQuiet} (${currentHm})`);
+        } else {
+          const topicPayload = {
+            topic: 'community_coupons',
             notification: {
-              channelId: 'sicak_firsatlar_general_v2',
-              sound: 'default',
-              color: '#8E24AA',
-              icon: '@mipmap/ic_launcher',
-              tag: `coupon_${kuponId}`,
-              defaultSound: true,
-              defaultVibrateTimings: true
-            }
-          },
-          apns: {
-            headers: {
-              'apns-push-type': 'alert',
-              'apns-priority': '10'
+              title: `🎟️ ${magazaAdi} Kuponu!`,
+              body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
             },
-            payload: {
-              aps: {
-                alert: {
-                  title: `🎟️ ${magazaAdi} Kuponu!`,
-                  body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
-                },
+            data: {
+              type: 'coupon',
+              reason: 'community',
+              kuponId: String(kuponId),
+              magazaAdi: String(magazaAdi),
+              hasCode: kuponKodu ? 'true' : 'false', // P0-14 (R-BIZ-01): kuponKodu plaintext olarak push payload'a konmaz
+              authorName: String(paylasanAdi),
+              authorId: String(paylasanId),
+              click_action: 'FLUTTER_NOTIFICATION_CLICK'
+            },
+            android: {
+              priority: 'high',
+              notification: {
+                channelId: 'sicak_firsatlar_general_v2',
                 sound: 'default',
-                badge: 1,
-                'content-available': 1,
-                'interruption-level': 'active',
-                category: 'COUPON_NOTIFICATION'
+                color: '#8E24AA',
+                icon: '@mipmap/ic_launcher',
+                tag: `coupon_${kuponId}`,
+                defaultSound: true,
+                defaultVibrateTimings: true
+              }
+            },
+            apns: {
+              headers: {
+                'apns-push-type': 'alert',
+                'apns-priority': '10'
+              },
+              payload: {
+                aps: {
+                  alert: {
+                    title: `🎟️ ${magazaAdi} Kuponu!`,
+                    body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
+                  },
+                  sound: 'default',
+                  badge: 1,
+                  'content-available': 1,
+                  'interruption-level': 'active',
+                  category: 'COUPON_NOTIFICATION'
+                }
               }
             }
-          }
-        };
+          };
 
-        const topicResponse = await admin.messaging().send(topicPayload);
-        functions.logger.info(`📢 Topluluk kuponu FCM konusuna (topic: community_coupons) gönderildi: ${topicResponse}`);
+          const topicResponse = await admin.messaging().send(topicPayload);
+          functions.logger.info(`📢 Topluluk kuponu FCM konusuna (topic: community_coupons) gönderildi: ${topicResponse}`);
+        }
       } catch (topicErr) {
         functions.logger.warn('⚠️ Topluluk kuponu FCM topic gönderim uyarısı:', topicErr.message);
       }
@@ -1536,11 +1782,12 @@ exports.onCouponCreated = functions
           body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`,
           kuponId: kuponId,
           magazaAdi: magazaAdi,
-          kuponKodu: kuponKodu,
+          hasCode: Boolean(kuponKodu),
           authorName: paylasanAdi,
           authorId: paylasanId,
           read: false,
           isTopicDelivered: true,
+          pushStatus: 'delivered_via_topic',
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
@@ -1635,14 +1882,9 @@ exports.onNotificationCreated = functions.firestore
       }
     }
 
-    // 00.1 Topic ile dağıtılmış kupon bildirimleri için mükerrer push engeli:
+    // 00.1 P1-21 (R-SCL-02): Topic ile dağıtılmış bildirimler için mükerrer push ve fazladan Firestore yazma tasarrufu
     if (notification.isTopicDelivered === true) {
-      functions.logger.info(`ℹ️ Kupon bildirimi (${notificationId}) global FCM topic üzerinden zaten iletildi, tekil push atlanıyor.`);
-      await snap.ref.set({
-        pushEligible: false,
-        pushStatus: 'delivered_via_topic',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      functions.logger.info(`ℹ️ Bildirim (${notificationId}) global FCM topic üzerinden zaten iletildi, tekil push ve mükerrer doküman yazması atlanıyor.`);
       return null;
     }
 
@@ -2217,11 +2459,11 @@ exports.onNotificationCreated = functions.firestore
         safeData.imageUrl = imageUrl;
       }
 
-      // Kupon bildirimleri için ek meta veriler
+      // Kupon bildirimleri için ek meta veriler (P0-14 Kalkanı: kupon kodu push payload'ında açık iletilmez)
       if (type === 'coupon' || type === 'community_coupon') {
         safeData.kuponId = String(notification.kuponId || '');
         safeData.magazaAdi = String(notification.magazaAdi || '');
-        safeData.kuponKodu = String(notification.kuponKodu || '');
+        safeData.hasCode = (notification.hasCode === true || notification.hasCode === 'true' || Boolean(notification.kuponKodu)) ? 'true' : 'false';
       }
 
       // Admin mesajları için Flutter tarafının doğru yönlendirme yapabilmesi için ek alanlar
@@ -2468,6 +2710,9 @@ async function resolveRedirect(initialUrl, options = {}) {
   return currentUrl;
 }
 
+// P1-18 (R-API-01): IP Başına Hız Limiti Haritası (Dakikada azami 60 istek)
+const _resolveShortLinkRateMap = new Map();
+
 // Kısa linki gerçek URL'ye dönüştürme fonksiyonu (SSRF Korumalı & Dayanıklı)
 exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLink', async (req, res) => {
   // CORS headers
@@ -2478,6 +2723,37 @@ exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLi
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
     return;
+  }
+
+  // P1-18 (R-API-01): IP Hız Limiti Denetimi
+  const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').toString().split(',')[0].trim();
+  const now = Date.now();
+  const windowMs = 60000;
+  const maxReqs = 60;
+
+  // Bellek sızıntısı önleme: Map boyutu 1000'i aşarsa süresi geçmiş pencereleri buda
+  if (_resolveShortLinkRateMap.size > 1000) {
+    for (const [key, val] of _resolveShortLinkRateMap.entries()) {
+      if (now - val.startTime > windowMs) {
+        _resolveShortLinkRateMap.delete(key);
+      }
+    }
+  }
+
+  let ipData = _resolveShortLinkRateMap.get(clientIp);
+  if (!ipData || (now - ipData.startTime > windowMs)) {
+    ipData = { count: 1, startTime: now };
+    _resolveShortLinkRateMap.set(clientIp, ipData);
+  } else {
+    ipData.count++;
+    if (ipData.count > maxReqs) {
+      functions.logger.warn(`⚠️ [P1-18 Kalkanı] Hız limiti aşıldı (IP: ${clientIp}): ${ipData.count} istek/dk`);
+      res.status(429).json({
+        success: false,
+        error: 'Çok fazla istek gönderildi. Lütfen bir dakika sonra tekrar deneyin.'
+      });
+      return;
+    }
   }
 
   try {
@@ -3097,14 +3373,24 @@ exports.cleanupInvalidTokens = functions.https.onCall(wrapCall('cleanupInvalidTo
 
 /**
  * Storage'dan Fırsat Görselini Silen Yardımcı Fonksiyon
- * file.exists() ek HTTP gidiş-dönüşü kaldırıldı; doğrudan silinip 404 durumu yoksayılır.
+ * P0-09 (R-AUTH-12): Confused Deputy ve Path Traversal kalkanı eklendi.
+ * Yalnızca 'deals/' öneki ile başlayan ve traversal ('..') içermeyen geçerli fırsat görselleri silinebilir.
  */
-async function deleteDealImage(imageUrl) {
-  if (!imageUrl || !imageUrl.includes('firebasestorage.googleapis.com')) return;
+async function deleteDealImage(imageUrl, expectedPrefix = 'deals/') {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.includes('firebasestorage.googleapis.com')) return;
   try {
     const match = imageUrl.match(/\/o\/([^?]+)/);
     if (match && match[1]) {
       const filePath = decodeURIComponent(match[1]);
+
+      // Güvenlik Kalkanı: Beklenen önekler dışındaki veya dizin tırmanma içeren dosya yolları kesinlikle silinmez
+      const allowedPrefixes = Array.isArray(expectedPrefix) ? expectedPrefix : [expectedPrefix];
+      const isAllowed = allowedPrefixes.some(prefix => filePath.startsWith(prefix));
+      if (!isAllowed || filePath.includes('..') || filePath.includes('//')) {
+        functions.logger.warn(`🛡️ [P0-09 Kalkanı] Yetkisiz/şüpheli Storage silme isteği engellendi: ${filePath}`);
+        return;
+      }
+
       const bucket = admin.storage().bucket();
       const file = bucket.file(filePath);
       try {
@@ -3737,24 +4023,51 @@ async function _cleanupUserDataCore(userId) {
     functions.logger.error(`❌ notificationSubscriptions silme hatası:`, err.message);
   }
 
-  // 3. Kullanıcının kendi fırsatlarını, fırsat alt yorumlarını ve görsellerini sil
+  // 3. P0-11 (R-PRV-04): Kullanıcının kendi fırsatlarını, fırsat alt yorumlarını, oylarını ve görsellerini sil
   try {
     let dealsDeleted = 0;
-    const dealsSnap = await db.collection('deals').where('postedBy', '==', userId).limit(300).get();
-    for (const dealDoc of dealsSnap.docs) {
-      const dealData = dealDoc.data();
-      await deleteQueryInBatches(dealDoc.ref.collection('comments'));
-      const img = dealData.imageUrl || dealData.mainImage;
-      if (img) {
-        await deleteDealImage(img);
+    while (true) {
+      const dealsSnap = await db.collection('deals').where('postedBy', '==', userId).limit(100).get();
+      if (dealsSnap.empty) break;
+
+      for (const dealDoc of dealsSnap.docs) {
+        const dealData = dealDoc.data();
+        await deleteQueryInBatches(dealDoc.ref.collection('comments'));
+        await deleteQueryInBatches(dealDoc.ref.collection('votes'));
+        await deleteQueryInBatches(dealDoc.ref.collection('expired_votes'));
+        const img = dealData.imageUrl || dealData.mainImage;
+        if (img) {
+          await deleteDealImage(img);
+        }
+        await dealDoc.ref.delete();
+        dealsDeleted++;
       }
-      await dealDoc.ref.delete();
-      dealsDeleted++;
+      if (dealsSnap.size < 100) break;
     }
     deletedStats.deals = dealsDeleted;
-    functions.logger.info(`✅ Kullanıcı fırsatları (${dealsDeleted} fırsat, yorumları ve görselleri) silindi: ${userId}`);
+    functions.logger.info(`✅ Kullanıcı fırsatları (${dealsDeleted} fırsat, yorumları, oyları ve görselleri) silindi: ${userId}`);
   } catch (err) {
     functions.logger.error(`❌ Fırsat silme hatası:`, err.message);
+  }
+
+  // 3.1 P0-11 (R-PRV-04): Kullanıcının paylaştığı kuponları ve kupon alt oylarını sil
+  try {
+    let couponsDeleted = 0;
+    while (true) {
+      const couponSnap = await db.collection('kuponlar').where('paylasanKullaniciId', '==', userId).limit(100).get();
+      if (couponSnap.empty) break;
+
+      for (const couponDoc of couponSnap.docs) {
+        await deleteQueryInBatches(couponDoc.ref.collection('votes'));
+        await couponDoc.ref.delete();
+        couponsDeleted++;
+      }
+      if (couponSnap.size < 100) break;
+    }
+    deletedStats.coupons = couponsDeleted;
+    functions.logger.info(`✅ Kullanıcı kuponları (${couponsDeleted} kupon ve oyları) silindi: ${userId}`);
+  } catch (err) {
+    functions.logger.error(`❌ Kupon silme hatası:`, err.message);
   }
 
   // 4. Kullanıcının diğer fırsatlara yazdığı yorumları sil (collectionGroup)
@@ -3787,17 +4100,12 @@ async function _cleanupUserDataCore(userId) {
     functions.logger.error(`❌ Rapor silme hatası:`, err.message);
   }
 
-  // 7. Ban ve engelleme kayıtlarını sil
-  try {
-    await db.collection('blockedUsers').doc(userId).delete().catch(() => {});
-    await db.collection('commentBannedUsers').doc(userId).delete().catch(() => {});
-    await db.collection('dealBannedUsers').doc(userId).delete().catch(() => {});
-    functions.logger.info(`✅ Ban/Engel kayıtları temizlendi: ${userId}`);
-  } catch (err) {
-    functions.logger.error(`❌ Ban/Engel silme hatası:`, err.message);
-  }
+  // 7. P1-17 (R-AUTH-15): Ban ve engelleme kayıtları (blockedUsers, commentBannedUsers, dealBannedUsers)
+  // Sybil ve ban sıfırlama (Ban Evasion) saldırılarını engellemek için kullanıcı hesap silse dahi KORUNUR!
+  // Yalnızca admin paneli üzerinden açıkça af/engel kaldırma işlemi yapılabilir.
+  functions.logger.info(`🛡️ [P1-17 Kalkanı] Ban ve ceza kayıtları silinmedi, güvenlik için muhafaza edildi: ${userId}`);
 
-  // 8. Kullanıcının alt koleksiyonlarını ve profilini sil
+  // 8. P0-11 & P0-14: Kullanıcının alt koleksiyonlarını (ledger, favori, bildirim) ve profilini sil
   try {
     const userRef = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
@@ -3805,19 +4113,34 @@ async function _cleanupUserDataCore(userId) {
       const uData = userSnap.data();
       const pImage = uData.profileImageUrl || uData.photoURL;
       if (pImage && pImage.includes('firebasestorage.googleapis.com')) {
-        await deleteDealImage(pImage);
+        await deleteDealImage(pImage, ['deals/', 'avatars/']);
       }
     }
 
     const notifCount = await deleteQueryInBatches(userRef.collection('notifications'));
     const prefCount = await deleteQueryInBatches(userRef.collection('notificationPreferences'));
     const favCount = await deleteQueryInBatches(userRef.collection('favorites'));
-    deletedStats.subcollections = notifCount + prefCount + favCount;
+    const ledgerCount = await deleteQueryInBatches(userRef.collection('couponLedger'));
+    const unlockedCount = await deleteQueryInBatches(userRef.collection('unlockedCoupons'));
+    deletedStats.subcollections = notifCount + prefCount + favCount + ledgerCount + unlockedCount;
 
     await userRef.delete();
     functions.logger.info(`✅ Kullanıcı ana dokümanı ve alt koleksiyonları (${deletedStats.subcollections} öğe) silindi: ${userId}`);
   } catch (err) {
     functions.logger.error(`❌ Profil/alt koleksiyon silme hatası:`, err.message);
+  }
+
+  // 9. P0-11: KVKK/GDPR Silme Mührü (Erasure Job Log)
+  try {
+    await db.collection('erasureJobs').doc(userId).set({
+      userId: userId,
+      status: 'completed',
+      deletedStats: deletedStats,
+      completedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    functions.logger.info(`✅ KVKK/GDPR ErasureJob mühürlendi: ${userId}`);
+  } catch (jobErr) {
+    functions.logger.warn(`⚠️ ErasureJob kayıt uyarısı:`, jobErr.message);
   }
 
   functions.logger.info(`🎉 Kullanıcı verisi kalıcı temizliği tamamlandı (${userId}):`, deletedStats);
@@ -3829,6 +4152,44 @@ exports.onUserDeleted = functions.auth.user().onDelete(wrapTrigger('onUserDelete
   functions.logger.info(`🗑️ Kullanıcı hesabı kalıcı silme tetiklendi: ${userId}`);
   await _cleanupUserDataCore(userId);
   return null;
+}));
+
+/**
+ * P0-12 (R-PRV-08): KULLANICI KENDİ HESABINI SİLME (Callable)
+ * İstemci tarafı güvenli kimlik doğrulama sonrası çağrılır. Verileri kaskat olarak temizler ve Auth kullanıcısını siler.
+ */
+exports.deleteMyAccount = functions.https.onCall(wrapCall('deleteMyAccount', async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
+  }
+
+  const userId = context.auth.uid;
+  functions.logger.info(`🗑️ deleteMyAccount çağrıldı: ${userId}`);
+
+  try {
+    // 1. Kaskat Firestore, Storage ve ilişkili verileri kalıcı sil
+    const stats = await _cleanupUserDataCore(userId);
+
+    // 2. Firebase Auth'dan kullanıcıyı kalıcı olarak sil
+    let authDeleted = false;
+    try {
+      await admin.auth().deleteUser(userId);
+      authDeleted = true;
+      functions.logger.info(`✅ Firebase Auth kullanıcısı başarıyla silindi: ${userId}`);
+    } catch (authErr) {
+      if (authErr.code === 'auth/user-not-found') {
+        functions.logger.warn(`⚠️ Auth kullanıcısı zaten silinmiş: ${userId}`);
+      } else {
+        throw authErr;
+      }
+    }
+
+    return { success: true, userId, authDeleted, stats };
+  } catch (error) {
+    functions.logger.error(`❌ deleteMyAccount hatası (${userId}):`, error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', `Hesap silinirken hata oluştu: ${error.message}`);
+  }
 }));
 
 /**

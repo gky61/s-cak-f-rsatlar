@@ -3,152 +3,678 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gizlilik Politikası - FIRSATKOLİK</title>
+    <title>Gizlilik Politikası & Aydınlatma Metni — FırsatKolik</title>
+    <meta name="description" content="FırsatKolik resmi Gizlilik Politikası, KVKK Aydınlatma Metni, veri işleme ilkeleri ve hesap silme hakları bilgilendirmesi.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary: #FF6B00;
+            --primary-hover: #E65A00;
+            --primary-light: rgba(255, 107, 0, 0.08);
+            --primary-border: rgba(255, 107, 0, 0.2);
+            --text-main: #0F172A;
+            --text-secondary: #334155;
+            --text-muted: #64748B;
+            --bg-page: #F8FAFC;
+            --bg-card: #FFFFFF;
+            --border-color: #E2E8F0;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.06);
+            --radius-lg: 16px;
+            --radius-md: 10px;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-            padding: 20px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-secondary);
+            line-height: 1.65;
+            padding: 30px 16px 60px;
+            -webkit-font-smoothing: antialiased;
         }
+
         .container {
-            max-width: 800px;
+            max-width: 860px;
             margin: 0 auto;
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        h1 {
-            color: #2196F3;
-            margin-bottom: 30px;
-            font-size: 28px;
+
+        /* Top Navigation */
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding: 0 4px;
         }
-        h2 {
-            color: #333;
-            margin-top: 30px;
-            margin-bottom: 15px;
+
+        .brand-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-main);
+            font-weight: 800;
             font-size: 20px;
-            font-weight: 700;
+            letter-spacing: -0.5px;
         }
-        p {
-            margin-bottom: 15px;
-            color: #666;
-            font-size: 14px;
-        }
-        ul {
-            margin-left: 20px;
-            margin-bottom: 15px;
-        }
-        li {
-            margin-bottom: 8px;
-            color: #666;
-            font-size: 14px;
-        }
-        a {
-            color: #2196F3;
-            text-decoration: underline;
-        }
-        a:hover {
-            color: #1976D2;
-        }
-        .date {
-            font-weight: 600;
-            color: #333;
-            margin-top: 20px;
-        }
-        .info-box {
-            background-color: #f5f5f5;
-            padding: 16px;
+
+        .brand-badge {
+            background: linear-gradient(135deg, #FF6B00 0%, #FF8800 100%);
+            color: white;
+            padding: 4px 10px;
             border-radius: 8px;
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-            font-style: italic;
+            font-size: 13px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
-        @media (max-width: 600px) {
-            .container {
-                padding: 20px;
+
+        .nav-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .btn-nav-outline {
+            background: white;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-nav-outline:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-nav-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-nav-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        /* Header Card */
+        .header-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 36px 32px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #FF6B00, #FFA726, #FF6B00);
+        }
+
+        .header-badge-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(34, 197, 94, 0.1);
+            color: #16A34A;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #16A34A;
+        }
+
+        .compliance-pill {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: var(--bg-page);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .header-card h1 {
+            color: var(--text-main);
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.6px;
+            margin-bottom: 10px;
+        }
+
+        .header-meta {
+            color: var(--text-muted);
+            font-size: 13px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* Content Card */
+        .content-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 36px 32px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .section {
+            margin-bottom: 32px;
+            padding-bottom: 28px;
+            border-bottom: 1px solid #F1F5F9;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        h2 {
+            color: var(--text-main);
+            font-size: 19px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        h3 {
+            color: var(--text-main);
+            font-size: 15px;
+            font-weight: 700;
+            margin: 16px 0 8px;
+        }
+
+        p {
+            font-size: 14.5px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            line-height: 1.65;
+        }
+
+        ul {
+            margin: 10px 0 14px 20px;
+        }
+
+        li {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        li strong {
+            color: var(--text-main);
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            transition: color 0.2s;
+        }
+
+        a:hover {
+            color: var(--primary-hover);
+        }
+
+        /* Callout Boxes */
+        .callout-box {
+            padding: 16px 18px;
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            font-size: 13.5px;
+            line-height: 1.6;
+        }
+
+        .callout-info {
+            background-color: #F0FDF4;
+            border-left: 4px solid #22C55E;
+            color: #166534;
+        }
+
+        .callout-warning {
+            background-color: #FFFBEB;
+            border-left: 4px solid #F59E0B;
+            color: #92400E;
+        }
+
+        .callout-danger {
+            background-color: #FEF2F2;
+            border-left: 4px solid #EF4444;
+            color: #991B1B;
+        }
+
+        .callout-brand {
+            background-color: var(--primary-light);
+            border-left: 4px solid var(--primary);
+            color: #9A3412;
+        }
+
+        /* Third party grid */
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .service-item {
+            padding: 12px 14px;
+            background: var(--bg-page);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .service-item span {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .service-item a {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Action Buttons */
+        .btn-action-banner {
+            background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+            border: 1px solid rgba(255, 107, 0, 0.25);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .btn-action-banner h4 {
+            color: var(--text-main);
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .btn-action-banner p {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-bottom: 0;
+        }
+
+        .btn-delete-link {
+            background: #DC2626;
+            color: white !important;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 13.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+
+        .btn-delete-link:hover {
+            background: #B91C1C;
+        }
+
+        /* Footer */
+        .page-footer {
+            margin-top: 36px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 16px 12px 40px;
             }
-            h1 {
-                font-size: 24px;
+
+            .header-card, .content-card {
+                padding: 22px 18px;
             }
-            h2 {
-                font-size: 18px;
+
+            .header-card h1 {
+                font-size: 22px;
+            }
+
+            .top-nav {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .nav-actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .service-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Gizlilik Politikası</h1>
-        
-        <p>Bu gizlilik politikası, Gökay Alemdar (bundan böyle "Hizmet Sağlayıcı" olarak anılacaktır) tarafından mobil cihazlar için oluşturulan FIRSAT KOLİK uygulaması (bundan böyle "Uygulama" olarak anılacaktır) için geçerlidir. Bu hizmet "OLDUĞU GİBİ" kullanım için tasarlanmış Ücretsiz bir hizmettir.</p>
-        
-        <h2>Bilgi Toplama ve Kullanım</h2>
-        <p>Uygulama, indirdiğinizde ve kullandığınızda bilgi toplar. Bu bilgiler şunları içerebilir:</p>
-        <ul>
-            <li>Cihazınızın İnternet Protokol adresi (örn. IP adresi)</li>
-            <li>Ziyaret ettiğiniz uygulama sayfaları, ziyaret zamanı ve tarihi, bu sayfalarda geçirdiğiniz süre</li>
-            <li>Uygulamada geçirdiğiniz süre</li>
-            <li>Mobil cihazınızda kullandığınız işletim sistemi</li>
-            <li>Google veya Apple ile giriş yaptığınızda alınan e-posta adresi, profil fotoğrafı ve temel kimlik bilgileri</li>
-        </ul>
-        
-        <h2>Üçüncü Taraf Erişimi</h2>
-        <p>Hizmet Sağlayıcı'nın uygulamayı ve hizmetlerini iyileştirmesine yardımcı olmak için yalnızca toplu, anonimleştirilmiş veriler periyodik olarak harici hizmetlere iletilir. Hizmet Sağlayıcı, bilgilerinizi bu gizlilik beyanında açıklandığı şekilde üçüncü taraflarla paylaşabilir.</p>
-        
-        <p>Lütfen Uygulamanın, verileri işleme konusunda kendi Gizlilik Politikalarına sahip üçüncü taraf hizmetler kullandığını unutmayın. Aşağıda, Uygulama tarafından kullanılan üçüncü taraf hizmet sağlayıcıların Gizlilik Politikalarına bağlantılar bulunmaktadır:</p>
-        <ul>
-            <li><a href="https://www.google.com/policies/privacy/" target="_blank">Google Play Services</a></li>
-            <li><a href="https://support.google.com/admob/answer/6128543?hl=en" target="_blank">AdMob</a></li>
-            <li><a href="https://firebase.google.com/support/privacy" target="_blank">Google Analytics for Firebase</a></li>
-            <li><a href="https://firebase.google.com/support/privacy/" target="_blank">Firebase Crashlytics</a></li>
-            <li><a href="https://firebase.google.com/support/privacy/" target="_blank">Firebase Authentication</a></li>
-            <li><a href="https://firebase.google.com/support/privacy/" target="_blank">Firebase Cloud Messaging</a></li>
-            <li><a href="https://firebase.google.com/support/privacy/" target="_blank">Firebase Performance Monitoring</a></li>
-            <li><a href="https://policies.google.com/privacy" target="_blank">Google Sign-In</a></li>
-            <li><a href="https://www.apple.com/legal/privacy/tr/" target="_blank">Sign in with Apple</a></li>
-        </ul>
-        
-        <h2>Yapay Zeka Kullanımı</h2>
-        <p>Uygulama, kullanıcı deneyimini geliştirmek ve belirli özellikler sağlamak için Yapay Zeka (AI) teknolojileri kullanır. AI bileşenleri, kişiselleştirilmiş içerik, öneriler veya otomatik işlevler sunmak için kullanıcı verilerini işleyebilir. Tüm AI işleme, bu gizlilik politikası ve geçerli yasalar uyarınca gerçekleştirilir.</p>
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <a href="/" class="brand-link">
+                <span>🔥</span>
+                <span>FırsatKolik</span>
+                <span class="brand-badge">app</span>
+            </a>
+            <div class="nav-actions">
+                <a href="/" class="btn-nav btn-nav-outline">← Vitrine Dön</a>
+                <a href="delete-account.html" class="btn-nav btn-nav-primary">Hesap Silme Talebi</a>
+            </div>
+        </nav>
 
-        <h2>Hesap ve Veri Silme Hakları</h2>
-        <p>Kullanıcılar, diledikleri zaman uygulamadaki "Profilim" > "Hesabımı Sil" seçeneğini kullanarak veya web üzerinden <a href="delete-account.html">Hesap Silme Talebi Sayfası</a> aracılığıyla ya da doğrudan <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a> adresine e-posta göndererek, hesaplarının ve bağlı tüm kişisel verilerin (profil bilgileri, favoriler, tercihler) kalıcı olarak silinmesini talep edebilirler. Hesap silindiğinde verileriniz sistemlerimizden tamamen temizlenir ve bu işlem geri alınamaz.</p>
-        
-        <h2>Vazgeçme Hakları</h2>
-        <p>Uygulamayı kaldırarak uygulama tarafından tüm bilgi toplama işlemini kolayca durdurabilirsiniz. Mobil cihazınızın bir parçası olarak mevcut olan veya mobil uygulama mağazası veya ağ aracılığıyla standart kaldırma işlemlerini kullanabilirsiniz.</p>
-        
-        <h2>Veri Saklama Politikası</h2>
-        <p>Hizmet Sağlayıcı, Uygulamayı kullandığınız sürece ve makul bir süre sonrasına kadar Kullanıcı Tarafından Sağlanan verileri saklayacaktır. Uygulama aracılığıyla sağladığınız Kullanıcı Tarafından Sağlanan Verilerin silinmesini isterseniz, lütfen <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a> adresinden onlarla iletişime geçin ve makul bir süre içinde yanıt vereceklerdir.</p>
-        
-        <h2>Çocuklar</h2>
-        <p>Hizmet Sağlayıcı, Uygulamayı 13 yaşın altındaki çocuklardan bilerek veri talep etmek veya pazarlama yapmak için kullanmaz. Uygulama 13 yaşın altındaki hiç kimseye hitap etmez. Hizmet Sağlayıcı, 13 yaşın altındaki çocuklardan bilerek kişisel olarak tanımlanabilir bilgi toplamaz. Hizmet Sağlayıcı, 13 yaşın altındaki bir çocuğun kişisel bilgi sağladığını keşfederse, bunu sunucularından derhal silecektir. Eğer bir ebeveyn veya vasi iseniz ve çocuğunuzun bize kişisel bilgi sağladığını biliyorsanız, lütfen Hizmet Sağlayıcı (<a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a>) ile iletişime geçin, böylece gerekli işlemleri yapabileceklerdir.</p>
-        
-        <h2>Güvenlik</h2>
-        <p>Hizmet Sağlayıcı, bilgilerinizin gizliliğini koruma konusunda endişelidir. Hizmet Sağlayıcı, işlediği ve koruduğu bilgileri korumak için fiziksel, elektronik ve prosedürel güvenlik önlemleri sağlar.</p>
-        
-        <h2>Değişiklikler</h2>
-        <p>Bu Gizlilik Politikası, herhangi bir nedenle zaman zaman güncellenebilir. Hizmet Sağlayıcı, bu sayfayı yeni Gizlilik Politikası ile güncelleyerek Gizlilik Politikasındaki değişikliklerden sizi haberdar edecektir. Devam eden kullanım, tüm değişikliklerin onayı olarak kabul edildiğinden, herhangi bir değişiklik için bu Gizlilik Politikasını düzenli olarak kontrol etmeniz önerilir.</p>
-        
-        <p class="date">Bu gizlilik politikası 2026-07-02 tarihinden itibaren geçerlidir.</p>
-        
-        <h2>Onayınız</h2>
-        <p>Uygulamayı kullanarak, şimdi ve bizim tarafımızdan değiştirildiği şekliyle bu Gizlilik Politikasında belirtildiği gibi bilgilerinizin işlenmesine onay veriyorsunuz.</p>
-        
-        <h2>Bize Ulaşın</h2>
-        <p>Uygulamayı kullanırken gizlilik konusunda sorularınız varsa veya uygulamalar hakkında sorularınız varsa, lütfen Hizmet Sağlayıcı ile <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a> adresinden e-posta yoluyla iletişime geçin.</p>
-        
-        <div class="info-box">
-            Bu gizlilik politikası sayfası App Privacy Policy Generator kullanılarak oluşturulmuş ve mağaza politikalarına uygun olarak güncellenmiştir.
-        </div>
+        <!-- Header Card -->
+        <header class="header-card">
+            <div class="header-badge-row">
+                <span class="status-badge">Yürürlükte & Aktif</span>
+                <span class="compliance-pill">KVKK Aydınlatma Metni</span>
+                <span class="compliance-pill">Google Play & App Store Uyumlu</span>
+            </div>
+            <h1>Gizlilik Politikası & Aydınlatma Metni</h1>
+            <div class="header-meta">
+                <span>📅 Son Güncelleme: 04 Ekim 2026</span>
+                <span>🔖 Versiyon: 1.3.0</span>
+                <span>🌐 firsatkolik.app</span>
+            </div>
+        </header>
+
+        <!-- Content Card -->
+        <main class="content-card">
+            <!-- 1. Giriş ve Veri Sorumlusu -->
+            <section class="section">
+                <h2>1. Giriş ve Veri Sorumlusu Kimliği</h2>
+                <p>
+                    Bu Gizlilik Politikası ve Kişisel Verilerin Korunması Aydınlatma Metni; <strong>FırsatKolik</strong> mobil uygulamaları (iOS ve Android) ile <strong>firsatkolik.app</strong> internet sitesi (birlikte "Platform" olarak anılacaktır) üzerinden sunulan hizmetler için geçerlidir.
+                </p>
+                <p>
+                    6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") ve ilgili uluslararası mevzuat (GDPR, Google Play Geliştirici Politikaları, Apple App Store İnceleme Kılavuzları) kapsamında; platformumuzda işlenen kişisel verileriniz bakımından <strong>Veri Sorumlusu</strong>:
+                </p>
+                <div class="callout-box callout-brand">
+                    <strong>Veri Sorumlusu:</strong> Gökay Alemdar / FırsatKolik Ekibi<br>
+                    <strong>Resmi İletişim & Destek:</strong> <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a><br>
+                    <strong>Web Varlığı:</strong> <a href="https://firsatkolik.app">https://firsatkolik.app</a>
+                </div>
+                <p>
+                    FırsatKolik, kullanıcılara e-ticaret fırsatlarını, indirim kuponlarını ve market aktüel afişlerini derleyip sunan <strong>tamamen ücretsiz</strong> bir topluluk ve bilgi platformudur.
+                </p>
+            </section>
+
+            <!-- 2. Toplanan Kişisel Veriler ve İşleme Amaçları -->
+            <section class="section">
+                <h2>2. Toplanan Kişisel Veriler ve İşleme Amaçları</h2>
+                <p>Platformumuzu kullandığınızda aşağıdaki sınırlı veriler işlenebilmektedir:</p>
+                
+                <h3>A. Hesap ve Kimlik Bilgileri</h3>
+                <ul>
+                    <li><strong>Google ile Giriş:</strong> Google hesabınız üzerinden alınan ad-soyad, e-posta adresi ve profil fotoğrafı (Kimlik doğrulama, kullanıcı hesabı açma ve oturum yönetimi amacıyla).</li>
+                    <li><strong>Sign in with Apple (Apple ile Giriş):</strong> Apple ID üzerinden iletilen ad ve e-posta adresi. Apple'ın <em>"E-postamı Gizle" (Private Relay)</em> özelliği desteklenir; bu durumda Apple tarafından üretilen anonim relay adresi kullanılır.</li>
+                </ul>
+
+                <h3>B. Kullanıcı Tercihleri ve Topluluk Etkileşimi</h3>
+                <ul>
+                    <li>Fırsat paylaşımları, oylamalar (artı/eksi oy), yorumlar, kaydedilen favori fırsatlar ve kuponlar.</li>
+                    <li>Fırsat Radarı alarmları (belirlediğiniz anahtar kelimeler ve hedef fiyatlar) ve kategori tercihleri (ilgilendiğiniz kampanyalar için kişiselleştirilmiş bildirim sunulması).</li>
+                </ul>
+
+                <h3>C. Cihaz, Teknik Teşhis ve Bildirim Verileri</h3>
+                <ul>
+                    <li>Firebase Cloud Messaging (FCM) bildirim belirteci (token): Yalnızca izin verdiğiniz anlık fırsat ve alarm bildirimlerini cihazınıza ulaştırmak için kullanılır.</li>
+                    <li>İşletim sistemi sürümü, cihaz modeli, anonim çökme logları (Firebase Crashlytics) ve ağ performans metrikleri (Firebase Performance Monitoring) uygulamanın kararlılığını sağlamak için işlenir.</li>
+                </ul>
+
+                <h3>D. Reklam ve Tanımlayıcı Verileri</h3>
+                <ul>
+                    <li>Google AdMob SDK'sı aracılığıyla reklam gösterimi sağlamak amacıyla Google Advertising ID (GAID) veya Apple IDFA (kullanıcı izin verirse) işlenebilir. Kişiselleştirilmiş reklam tercihleri Google UMP ve Apple ATT rıza akışları üzerinden kullanıcının serbest iradesine bırakılır.</li>
+                </ul>
+
+                <div class="callout-box callout-info">
+                    <strong>🛡️ Hassas Finansal Veri Güvencesi:</strong> FırsatKolik hiçbir zaman kredi kartı, banka kartı, IBAN veya hassas ödeme verilerinizi talep etmez, işlemez veya sunucularında saklamaz. E-ticaret alışverişleriniz doğrudan ilgili mağazanın güvenli ödeme sayfasında gerçekleşir.
+                </div>
+            </section>
+
+            <!-- 3. Ticari Reklam Mevzuatı & Gelir Ortaklığı (Affiliate Disclosure) -->
+            <section class="section">
+                <h2>3. Ticari Reklam Mevzuatı, #Tanıtım & Gelir Ortaklığı</h2>
+                <p>
+                    FırsatKolik, bağımsız bir fırsat paylaşım platformudur. T.C. Ticaret Bakanlığı 6563 sayılı Elektronik Ticaretin Düzenlenmesi Hakkında Kanun ve ilgili mevzuat uyarınca; platformda yer alan üçüncü taraf e-ticaret sitelerine yönlendiren bağlantılarda yasal zorunluluk gereği <strong>#tanıtım</strong> etiketi kullanılır.
+                </p>
+                <div class="callout-box callout-warning">
+                    <strong>Resmi Ortaklık Açıklaması (Amazon Associates & Affiliate):</strong> FırsatKolik, Amazon.com.tr Gelir Ortaklığı Programı ve diğer e-ticaret platformlarının (Hepsiburada, Trendyol vb.) iştirak programlarına dahildir. Platformumuzdaki bağlantılar üzerinden yönlendirilerek gerçekleştirilen satın alımlardan FırsatKolik küçük bir komisyon elde edebilir. Bu durum kullanıcılara hiçbir ek maliyet veya fiyat artışı getirmez.
+                </div>
+            </section>
+
+            <!-- 4. Güvenilir Altyapı ve Üçüncü Taraf Hizmet Sağlayıcılar -->
+            <section class="section">
+                <h2>4. Güvenilir Altyapı ve Üçüncü Taraf Sağlayıcılar</h2>
+                <p>
+                    Uygulama ve web servislerimiz, küresel endüstri standardı güvenlik protokollerine sahip altyapılar üzerinde barındırılmaktadır. Bu hizmetlerin kendi gizlilik sözleşmeleri aşağıdadır:
+                </p>
+
+                <div class="service-grid">
+                    <div class="service-item">
+                        <span>Google Firebase (Auth, Firestore, FCM)</span>
+                        <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Gizlilik ↗</a>
+                    </div>
+                    <div class="service-item">
+                        <span>Google Play Services</span>
+                        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Gizlilik ↗</a>
+                    </div>
+                    <div class="service-item">
+                        <span>Apple Inc. (Sign in with Apple)</span>
+                        <a href="https://www.apple.com/legal/privacy/tr/" target="_blank" rel="noopener">Gizlilik ↗</a>
+                    </div>
+                    <div class="service-item">
+                        <span>Google AdMob (Mobil Reklam)</span>
+                        <a href="https://support.google.com/admob/answer/6128543" target="_blank" rel="noopener">Gizlilik ↗</a>
+                    </div>
+                    <div class="service-item">
+                        <span>Firebase Crashlytics & Performance</span>
+                        <a href="https://firebase.google.com/support/privacy/" target="_blank" rel="noopener">Gizlilik ↗</a>
+                    </div>
+                    <div class="service-item">
+                        <span>Google Sign-In</span>
+                        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Gizlilik ↗</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. Yapay Zeka ve Algoritmik Süreçler (Botkolik) -->
+            <section class="section">
+                <h2>5. Yapay Zeka ve Algoritmik Süreçler</h2>
+                <p>
+                    FırsatKolik; internet üzerindeki indirimleri tespit etmek, katalogları ayrıştırmak ve kullanıcılara benzer fırsat önerileri sunmak için <strong>"Botkolik"</strong> ve yapay zeka destekli algoritmik sistemler kullanır. Bu sistemler yalnızca kamuya açık ürün ve fiyat verilerini analiz eder; kullanıcıların kişisel profilleri veya özel nitelikli verileri hiçbir yapay zeka modelinin eğitimine aktarılmaz.
+                </p>
+            </section>
+
+            <!-- 6. Hesap ve Kişisel Veri Silme Hakları (Store Compliance) -->
+            <section class="section">
+                <h2>6. Hesap ve Kişisel Veri Silme Hakları</h2>
+                <p>
+                    Google Play Store ve Apple App Store kuralları ile KVKK ve GDPR ilkeleri uyarınca, kullanıcılarımız hesaplarını ve platformda tutulan tüm kişisel verilerini diledikleri zaman kalıcı olarak silme hakkına sahiptir:
+                </p>
+                <ul>
+                    <li>
+                        <strong>Uygulama İçinden Silme:</strong> Mobil uygulamaya giriş yaptıktan sonra <em>Profil &gt; Ayarlar &gt; "Hesabımı Sil"</em> adımlarını izleyerek hesabınızı anında silebilirsiniz.
+                    </li>
+                    <li>
+                        <strong>Web Sayfasından Silme (Uygulama Yüklü Olmasa Bile):</strong> Uygulamayı silmiş veya erişimi olmayan kullanıcılar, web sitemiz üzerindeki resmi talep formu aracılığıyla silme işlemini başlatabilir:
+                        <br>
+                        👉 <a href="delete-account.html"><strong>firsatkolik.app/delete-account.html</strong></a>
+                    </li>
+                    <li>
+                        <strong>E-posta ile Talep:</strong> Hesabınıza kayıtlı e-posta adresinizden <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a> adresine "Hesap Silme Talebi" konulu bir ileti gönderebilirsiniz.
+                    </li>
+                </ul>
+
+                <div class="callout-box callout-danger">
+                    <strong>Kalıcı Silme Bilgilendirmesi:</strong> Hesap silme işlemi onaylandığında; adınız, e-posta adresiniz, profil resminiz, bildirim anahtarlarınız, radar alarmlarınız ve favorileriniz sunucularımızdan tamamen yok edilir. Bu işlem geri alınamaz.
+                </div>
+
+                <div class="btn-action-banner">
+                    <div>
+                        <h4>Hesabınızı veya Kişisel Verilerinizi Silmek mi İstiyorsunuz?</h4>
+                        <p>Web üzerinden anında hesap silme talebi oluşturabilirsiniz.</p>
+                    </div>
+                    <a href="delete-account.html" class="btn-delete-link">Hesap Silme Talebi Sayfası →</a>
+                </div>
+            </section>
+
+            <!-- 7. 6698 Sayılı KVKK Kapsamında İlgili Kişi Hakları -->
+            <section class="section">
+                <h2>7. 6698 Sayılı KVKK Kapsamında İlgili Kişi Hakları</h2>
+                <p>
+                    KVKK'nın 11. maddesi uyarınca veri sahibi olarak Veri Sorumlumuza başvurarak aşağıdaki haklarınızı kullanabilirsiniz:
+                </p>
+                <ul>
+                    <li>Kişisel verilerinizin işlenip işlenmediğini öğrenme,</li>
+                    <li>Kişisel verileriniz işlenmişse buna ilişkin bilgi talep etme,</li>
+                    <li>Kişisel verilerin işlenme amacını ve bunların amacına uygun kullanılıp kullanılmadığını öğrenme,</li>
+                    <li>Yurt içinde veya yurt dışında kişisel verilerin aktarıldığı üçüncü kişileri bilme,</li>
+                    <li>Kişisel verilerin eksik veya yanlış işlenmiş olması hâlinde bunların düzeltilmesini isteme,</li>
+                    <li>KVKK 7. maddesi uyarınca şartlar oluştuğunda kişisel verilerin silinmesini veya yok edilmesini isteme,</li>
+                    <li>Düzeltme, silme ve yok edilme işlemlerinin verilerin aktarıldığı üçüncü kişilere bildirilmesini isteme,</li>
+                    <li>İşlenen verilerin münhasıran otomatik sistemler vasıtasıyla analiz edilmesi suretiyle kişinin kendisi aleyhine bir sonucun ortaya çıkmasına itiraz etme,</li>
+                    <li>Kişisel verilerin kanuna aykırı olarak işlenmesi sebebiyle zarara uğraması hâlinde zararın giderilmesini talep etme.</li>
+                </ul>
+                <p>
+                    Yukarıdaki haklarınıza ilişkin başvurularınızı <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a> e-posta adresimiz üzerinden bize iletebilirsiniz. Başvurularınız en geç 30 gün içinde yasal mevzuata uygun şekilde yanıtlanacaktır.
+                </p>
+            </section>
+
+            <!-- 8. Çocukların Gizliliği (COPPA & Families Policy) -->
+            <section class="section">
+                <h2>8. Çocukların Gizliliği</h2>
+                <p>
+                    FırsatKolik genel kullanıcı kitlesine (13 yaş ve üzeri) yönelik olarak hazırlanmıştır. Platformumuz 13 yaşın altındaki çocuklardan bilerek kişisel veri talep etmez veya toplamaz. Ebeveyn veya yasal vasi olarak, çocuğunuzun izniniz olmaksızın bize kişisel veri sağladığını tespit ederseniz, lütfen <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a> adresinden bizimle iletişime geçin. İlgili kayıtlar derhal sunucularımızdan imha edilecektir.
+                </p>
+            </section>
+
+            <!-- 9. Veri Güvenliği ve Saklama İlkeleri -->
+            <section class="section">
+                <h2>9. Veri Güvenliği ve Saklama İlkeleri</h2>
+                <p>
+                    Kişisel verilerinizin güvenliği için TLS/HTTPS şifreli aktarım, Google Cloud kurumsal güvenlik altyapısı, katı veritabanı güvenlik kuralları (Firestore Security Rules) ve App Check bütünlük doğrulaması uygulanmaktadır. Verileriniz yalnızca hizmetin gerektirdiği süre boyunca saklanır ve hesabınız silindiğinde veya saklama süresi dolduğunda otomatik olarak temizlenir.
+                </p>
+            </section>
+
+            <!-- 10. Politika Değişiklikleri -->
+            <section class="section">
+                <h2>10. Politika Değişiklikleri</h2>
+                <p>
+                    Yasal mevzuat veya uygulama özelliklerindeki yenilikler doğrultusunda bu Gizlilik Politikası zaman zaman güncellenebilir. Önemli değişiklikler yapıldığında platformumuz ve bu sayfa üzerinden duyurulacaktır.
+                </p>
+            </section>
+
+            <!-- 11. İletişim -->
+            <section class="section">
+                <h2>11. İletişim</h2>
+                <p>
+                    Gizlilik politikamız, kişisel verileriniz veya veri haklarınızla ilgili her türlü soru ve talebiniz için resmi destek adresimiz üzerinden dilediğiniz zaman bize ulaşabilirsiniz:
+                </p>
+                <p>
+                    📧 <strong>E-Posta:</strong> <a href="mailto:destek@firsatkolik.app">destek@firsatkolik.app</a><br>
+                    🌐 <strong>Web:</strong> <a href="https://firsatkolik.app">https://firsatkolik.app</a>
+                </p>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="page-footer">
+            <div class="footer-links">
+                <a href="/">Anasayfa</a>
+                <span>•</span>
+                <a href="privacy-policy.html">Gizlilik Politikası</a>
+                <span>•</span>
+                <a href="delete-account.html">Hesap Silme Talebi</a>
+                <span>•</span>
+                <a href="mailto:destek@firsatkolik.app">İletişim</a>
+            </div>
+            <div>
+                © 2026 FırsatKolik. Tüm hakları saklıdır.
+            </div>
+        </footer>
     </div>
 </body>
 </html>

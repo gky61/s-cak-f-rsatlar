@@ -9,6 +9,7 @@ import '../services/notification_service.dart';
 import '../services/app_badge_service.dart';
 import '../services/analytics_service.dart';
 import '../services/system_log_service.dart';
+import '../services/app_version_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/theme_service.dart';
 import '../services/deal_search_engine.dart';
@@ -166,6 +167,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _activeState = this;
     _currentTabIndex = widget.initialTabIndex;
     _startInitialLoadingTimeout();
+    // P0-16 (R-MOB-08): Zorunlu minimum sürüm kapısı kontrolü
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        AppVersionService.instance.checkVersion(context);
+      }
+    });
     _dealsStream = _firestoreService.getDealsStream();
     _viewMode = _themeService.viewMode;
     _checkAdminStatus();
@@ -944,23 +951,31 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      // 2. Firestore Users koleksiyonundan arama (limit 30)
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .limit(30)
-          .get();
+      // 2. P1-22 (R-SCL-03): İlk 30 doküman sınırı yerine veritabanı prefix sorgusu
+      // Oturum açılmamışsa (misafir) users koleksiyonu Firestore kuralları (P1-19) gereği okunamayacağı için sorgu atlanır
+      if (currentUserId != null) {
+        final trimmed = rawQuery.trim();
+        final lower = trimmed.toLowerCase();
+        final seenIds = <String>{};
 
-      for (final doc in snap.docs) {
-        if (doc.id == currentUserId) continue; // Kendini listede arama sonucunda gösterme
-        if (doc.id == 'botkolik' && results.any((r) => r['id'] == 'botkolik')) continue;
+        // Öncelikli olarak username üzerinde prefix araması
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .orderBy('username')
+            .startAt([trimmed])
+            .endAt(['$trimmed\uf8ff'])
+            .limit(20)
+            .get();
 
-        final data = doc.data();
-        final username = (data['username'] ?? '').toString();
-        final displayName = (data['displayName'] ?? '').toString();
-        final normUsername = DealSearchEngine.normalizeText(username);
-        final normDisplay = DealSearchEngine.normalizeText(displayName);
+        for (final doc in snap.docs) {
+          seenIds.add(doc.id);
+          if (doc.id == currentUserId) continue; // Kendini listede arama sonucunda gösterme
+          if (doc.id == 'botkolik' && results.any((r) => r['id'] == 'botkolik')) continue;
 
-        if (normUsername.contains(normalized) || normDisplay.contains(normalized)) {
+          final data = doc.data();
+          final username = (data['username'] ?? '').toString();
+          final displayName = (data['displayName'] ?? '').toString();
+
           results.add({
             'id': doc.id,
             'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
@@ -969,6 +984,39 @@ class _HomeScreenState extends State<HomeScreen> {
             'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
             'pinnedBadge': data['pinnedBadge']?.toString(),
           });
+        }
+
+        // Eğer büyük/küçük harf farkı varsa ve limit dolmadıysa küçük harfli varyantı da tara
+        if (trimmed != lower && results.length < 20) {
+          try {
+            final lowerSnap = await FirebaseFirestore.instance
+                .collection('users')
+                .orderBy('username')
+                .startAt([lower])
+                .endAt(['$lower\uf8ff'])
+                .limit(20 - results.length)
+                .get();
+
+            for (final doc in lowerSnap.docs) {
+              if (seenIds.contains(doc.id)) continue;
+              seenIds.add(doc.id);
+              if (doc.id == currentUserId) continue;
+              if (doc.id == 'botkolik' && results.any((r) => r['id'] == 'botkolik')) continue;
+
+              final data = doc.data();
+              final username = (data['username'] ?? '').toString();
+              final displayName = (data['displayName'] ?? '').toString();
+
+              results.add({
+                'id': doc.id,
+                'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
+                'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
+                'isBot': false,
+                'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
+                'pinnedBadge': data['pinnedBadge']?.toString(),
+              });
+            }
+          } catch (_) {}
         }
       }
 

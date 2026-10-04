@@ -3,15 +3,32 @@
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform, kDebugMode;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, kDebugMode, kReleaseMode;
 
 
 /// Build-time flavor constant.
 /// Pass --dart-define=FLAVOR=prod when building the production flavor.
-const String _flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+const String? _definedFlavor = bool.hasEnvironment('FLAVOR')
+    ? String.fromEnvironment('FLAVOR')
+    : null;
+
+/// P0-15 (R-MOB-07): Fail-Closed Ortam Sözleşmesi
+/// Release derlemelerinde FLAVOR tanımlanmamışsa derleme/başlatma sessizce dev'e düşmek yerine durdurulur.
+String get resolvedFlavor {
+  if (_definedFlavor != null && _definedFlavor!.isNotEmpty) {
+    return _definedFlavor!;
+  }
+  if (kReleaseMode) {
+    throw StateError(
+      'KRİTİK HATA: Release derlemelerinde --dart-define=FLAVOR=(dev|prod) argümanı zorunludur! '
+      'Ortam seçimi fail-closed olarak durduruldu.',
+    );
+  }
+  return 'dev';
+}
 
 /// Returns true when building the production flavor.
-bool get isProductionFlavor => _flavor == 'prod';
+bool get isProductionFlavor => resolvedFlavor == 'prod';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -28,18 +45,19 @@ bool get isProductionFlavor => _flavor == 'prod';
 /// );
 /// ```
 class DefaultFirebaseOptions {
-  static bool get isProductionFlavor => _flavor == 'prod';
+  static bool get isProductionFlavor => resolvedFlavor == 'prod';
 
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       // Web her zaman DEV admin panelini gösterir; değiştirmeyin.
       return web;
     }
+    final flavor = resolvedFlavor;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return _flavor == 'prod' ? androidProd : androidDev;
+        return flavor == 'prod' ? androidProd : androidDev;
       case TargetPlatform.iOS:
-        return _flavor == 'prod' ? iosProd : iosDev;
+        return flavor == 'prod' ? iosProd : iosDev;
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
@@ -116,7 +134,7 @@ class DefaultFirebaseOptions {
   /// Cloud Function URL'leri gibi proje kimliğini gerektiren yerlerde kullanın.
   /// Örnek: 'https://us-central1-${DefaultFirebaseOptions.flavorProjectId}.cloudfunctions.net/...'
   static String get flavorProjectId =>
-      _flavor == 'prod' ? 'firsatkolik-prod-e6eae' : 'sicak-firsatlar-e6eae';
+      isProductionFlavor ? 'firsatkolik-prod-e6eae' : 'sicak-firsatlar-e6eae';
 
   // ─── AdMob Reklam Birimi Kimlikleri (4 Boyutlu Matris: Dev/Prod x Android/iOS) ───
 
@@ -176,11 +194,14 @@ class DefaultFirebaseOptions {
   static String get rewardedAdUnitId {
     final isDev = kDebugMode || !isProductionFlavor;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
+      const iosProdId = String.fromEnvironment('ADMOB_REWARDED_IOS');
+      if (iosProdId.isNotEmpty && !isDev) return iosProdId;
       return 'ca-app-pub-3940256099942544/1712485313'; // Google iOS Test Rewarded ID
     }
+    const androidProdId = String.fromEnvironment('ADMOB_REWARDED_ANDROID', defaultValue: 'ca-app-pub-6853997017739651/5224354917');
     return isDev
         ? 'ca-app-pub-3940256099942544/5224354917' // Google Android Test Rewarded ID
-        : 'ca-app-pub-6853997017739651/5224354917'; // Prod Placeholder
+        : androidProdId;
   }
 
 }

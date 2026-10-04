@@ -13,8 +13,14 @@ const env = getArg('--env') || 'dev';
 const emailPrefix = getArg('--email') || `test_cli_${Math.floor(Math.random() * 10000)}`;
 const dealsCount = parseInt(getArg('--deals')) || 3;
 
-if (env !== 'dev' && env !== 'prod') {
-    console.error('❌ Hata: --env parametresi sadece "dev" veya "prod" olabilir.');
+if (env === 'prod') {
+    console.error('🚫 GÜVENLİK ENGELİ: Test verisi üretim (PROD) ortamında çalıştırılamaz!');
+    console.error('Canlı veritabanına sahte (mock) veri enjekte edilmesi engellendi.');
+    process.exit(1);
+}
+
+if (env !== 'dev') {
+    console.error('❌ Hata: --env parametresi sadece "dev" olabilir.');
     process.exit(1);
 }
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../firebase_options.dart';
 import '../theme/app_theme.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
@@ -91,7 +90,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Son Güncelleme: 2026-08-21 (v1.2.4)',
+                          'Son Güncelleme: 2026-10-04 (v1.3.0)',
                           style: TextStyle(
                             fontSize: 12,
                             color: textSub,
@@ -107,7 +106,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // 1. Genel Bilgilendirme
+            // 1. Genel Bilgilendirme ve Veri Sorumlusu
             _buildCard(
               surfaceColor: surfaceColor,
               borderColor: borderColor,
@@ -118,12 +117,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   _buildSectionTitle('1. Giriş ve Hizmet Kapsamı', textMain),
                   const SizedBox(height: 8),
                   _buildParagraph(
-                    'FırsatKolik (bundan böyle "Uygulama" olarak anılacaktır), kullanıcılara e-ticaret indirimleri, aktüel ürün katalogları ve kampanya kuponları hakkında topluluk destekli bilgi ve yönlendirme sağlayan ücretsiz bir mobil platformdur.',
+                    'FırsatKolik (bundan böyle "Uygulama" veya "Platform" olarak anılacaktır), kullanıcılara e-ticaret indirimleri, aktüel ürün katalogları ve kampanya kuponları hakkında topluluk destekli bilgi ve yönlendirme sağlayan tamamen ücretsiz bir mobil platformdur.',
                     textSub,
                   ),
                   const SizedBox(height: 8),
                   _buildParagraph(
-                    'Kişisel verilerinizin güvenliği ve gizliliği bizim için en üst önceliktir. Bu metin; hangi verilerin ne amaçla toplandığını, nasıl işlendiğini ve haklarınızı şeffaf bir şekilde açıklar.',
+                    '6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK"), Google Play Geliştirici Politikaları ve Apple App Store İnceleme Kılavuzları uyarınca kişisel verilerinizin gizliliği en üst önceliğimizdir. Platformumuzdaki veri sorumlusu Gökay Alemdar / FırsatKolik ekibidir.',
                     textSub,
                   ),
                 ],
@@ -143,31 +142,37 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   _buildSectionTitle('2. Toplanan Veriler ve Kullanım Amaçları', textMain),
                   const SizedBox(height: 8),
                   _buildParagraph(
-                    'Uygulamayı kullandığınızda aşağıdaki temel veriler işlenebilir:',
+                    'Uygulamayı kullandığınızda aşağıdaki sınırlı veriler işlenebilir:',
                     textSub,
                   ),
                   const SizedBox(height: 8),
                   _buildBullet(
-                    'Hesap Bilgileri:',
-                    'Google ile giriş yapıldığında ad, e-posta adresi ve profil fotoğrafı (Kimlik doğrulama ve kullanıcı profili için).',
+                    'Hesap ve Kimlik Bilgileri:',
+                    'Google ile giriş yapıldığında ad, e-posta adresi ve profil fotoğrafı; Apple ile giriş yapıldığında (Sign in with Apple) ad ve e-posta adresi işlenir. Apple\'ın "E-postamı Gizle" (Private Relay) gizlilik seçeneği tam olarak desteklenir.',
                     textMain,
                     textSub,
                   ),
                   _buildBullet(
-                    'Uygulama İçi Tercihler:',
-                    'Fırsat oyları, kelime radarları, favoriler ve kategori tercihleri (Kişiselleştirilmiş akış ve bildirimler için).',
+                    'Uygulama İçi Tercihler & Radar:',
+                    'Fırsat oyları, Fırsat Radarı alarmları, favoriler, kuponlar ve kategori tercihleri (Kişiselleştirilmiş akış ve ilgili bildirimleri ulaştırmak için).',
                     textMain,
                     textSub,
                   ),
                   _buildBullet(
                     'Teknik Teşhis ve FCM Token:',
-                    'Cihaz bildirim anahtarı (FCM Token), çökme logları ve performans metrikleri (Uygulama kararlılığını sağlamak için).',
+                    'Cihaz bildirim belirteci (FCM Token), çökme logları (Crashlytics) ve ağ performans metrikleri (Uygulama kararlılığını ve güvenliğini sağlamak için).',
+                    textMain,
+                    textSub,
+                  ),
+                  _buildBullet(
+                    'Reklam ve Cihaz Tanımlayıcıları:',
+                    'Google AdMob reklamlarının sunumu için Google Advertising ID (GAID) veya Apple IDFA (kullanıcı izin verirse) işlenebilir. Kişiselleştirilmiş reklam onayları Google UMP ve Apple ATT akışlarıyla yönetilir.',
                     textMain,
                     textSub,
                   ),
                   const SizedBox(height: 8),
                   _buildParagraph(
-                    '⚠️ FırsatKolik hiçbir zaman kredi kartı, banka bilgisi veya hassas ödeme verilerini talep etmez, işlemez veya saklamaz.',
+                    '🛡️ FırsatKolik hiçbir zaman kredi kartı, banka bilgisi veya hassas ödeme verilerini talep etmez, işlemez veya saklamaz.',
                     textSub,
                   ),
                 ],
@@ -184,10 +189,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('3. Ticari Reklam Mevzuatı & Şeffaflık', textMain),
+                  _buildSectionTitle('3. Ticari Reklam Mevzuatı & Gelir Ortaklığı', textMain),
                   const SizedBox(height: 8),
                   _buildParagraph(
-                    'FırsatKolik bağımsız bir fırsat paylaşım ve topluluk platformudur. Listelenen mağazalarla doğrudan bir ticari ortaklık veya sponsorluk anlaşması bulunmamaktadır. T.C. Ticaret Bakanlığı mevzuatı uyarınca üçüncü taraf e-ticaret sitelerine yönlendiren tüm bağlantılarda yasal zorunluluk gereği #tanıtım etiketi yer almaktadır.',
+                    'FırsatKolik bağımsız bir fırsat paylaşım ve topluluk platformudur. T.C. Ticaret Bakanlığı 6563 sayılı Kanun ve mevzuat uyarınca üçüncü taraf e-ticaret sitelerine yönlendiren tüm bağlantılarda yasal zorunluluk gereği #tanıtım etiketi yer almaktadır.',
+                    textSub,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildParagraph(
+                    'Amazon Associates ve mağaza gelir ortaklığı (affiliate) programları kapsamında, yönlendirilen bağlantılardan gerçekleştirilen alışverişlerden platformumuz komisyon elde edebilir. Bu yönlendirmeler kullanıcılara hiçbir ek maliyet oluşturmaz.',
                     textSub,
                   ),
                 ],
@@ -213,6 +223,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   _buildServiceLink('Google Firebase (Auth, Firestore, FCM)', 'https://firebase.google.com/support/privacy', accentBlue),
                   _buildServiceLink('Google Play Services', 'https://policies.google.com/privacy', accentBlue),
+                  _buildServiceLink('Apple Inc. (Sign in with Apple)', 'https://www.apple.com/legal/privacy/tr/', accentBlue),
+                  _buildServiceLink('Google AdMob (Mobil Reklam)', 'https://support.google.com/admob/answer/6128543', accentBlue),
                   _buildServiceLink('Firebase Crashlytics & Performance', 'https://firebase.google.com/support/privacy', accentBlue),
                 ],
               ),
@@ -220,7 +232,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // 5. Hesap ve Veri Silme Hakları
+            // 5. Yapay Zeka ve Botkolik
             _buildCard(
               surfaceColor: surfaceColor,
               borderColor: borderColor,
@@ -228,7 +240,27 @@ class PrivacyPolicyScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('5. Hesap ve Veri Silme Hakları', textMain),
+                  _buildSectionTitle('5. Yapay Zeka ve Algoritmik Süreçler', textMain),
+                  const SizedBox(height: 8),
+                  _buildParagraph(
+                    'Uygulama, indirimleri taramak ve katalogları kategorize etmek için "Botkolik" algoritmik servislerini kullanır. Bu sistemler yalnızca kamuya açık mağaza fiyatlarını analiz eder; kullanıcıların kişisel profilleri veya özel verileri hiçbir yapay zeka modelinin eğitiminde kullanılmaz.',
+                    textSub,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 6. Hesap ve Veri Silme Hakları
+            _buildCard(
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              isDark: isDark,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('6. Hesap ve Veri Silme Hakları', textMain),
                   const SizedBox(height: 8),
                   _buildParagraph(
                     'Kullanıcılar diledikleri an hesaplarını ve sistemdeki tüm kişisel verilerini kalıcı olarak silme hakkına sahiptir:',
@@ -243,7 +275,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   ),
                   _buildBullet(
                     'Web Talebi & Destek:',
-                    'Uygulama erişiminiz yoksa destek@firsatkolik.app adresine yazarak veya web sayfamızdan silme talebi gönderebilirsiniz.',
+                    'Uygulama cihazınızda yüklü olmasa dahi firsatkolik.app/delete-account.html sayfasından veya destek@firsatkolik.app adresine yazarak silme talebi gönderebilirsiniz.',
                     textMain,
                     textSub,
                   ),
@@ -252,10 +284,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        _launchUrl('https://${DefaultFirebaseOptions.flavorProjectId}.web.app/delete-account.html');
+                        _launchUrl('https://firsatkolik.app/delete-account.html');
                       },
                       icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                      label: const Text('Web Hesap Silme Talebi Formu'),
+                      label: const Text('Web Hesap Silme Talebi Sayfası'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: isDark ? accentBlue : primaryColor,
                         side: BorderSide(color: isDark ? accentBlue.withValues(alpha: 0.5) : primaryColor.withValues(alpha: 0.5)),
@@ -270,7 +302,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // 6. İletişim ve Destek
+            // 7. KVKK Kapsamında Yasal Haklar
             _buildCard(
               surfaceColor: surfaceColor,
               borderColor: borderColor,
@@ -278,7 +310,52 @@ class PrivacyPolicyScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('6. İletişim ve Destek', textMain),
+                  _buildSectionTitle('7. KVKK Kapsamındaki Yasal Haklarınız', textMain),
+                  const SizedBox(height: 8),
+                  _buildParagraph(
+                    '6698 sayılı KVKK\'nın 11. maddesi uyarınca; verilerinizin işlenip işlenmediğini öğrenme, bilgi talep etme, amacına uygun kullanılıp kullanılmadığını denetleme, eksik/yanlışsa düzeltilmesini isteme, silinmesini/yok edilmesini talep etme ve kanuna aykırı işleme nedeniyle oluşan zararın giderilmesini talep etme haklarına sahipsiniz.',
+                    textSub,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildParagraph(
+                    'Taleplerinizi resmi destek kanalımız olan destek@firsatkolik.app adresine iletebilirsiniz.',
+                    textSub,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 8. Çocukların Gizliliği
+            _buildCard(
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              isDark: isDark,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('8. Çocukların Gizliliği (13 Yaş Sınırı)', textMain),
+                  const SizedBox(height: 8),
+                  _buildParagraph(
+                    'FırsatKolik genel kullanıcı kitlesine (13 yaş ve üzeri) yöneliktir. 13 yaşın altındaki çocuklardan bilerek veri toplanmaz. Ebeveyn veya yasal vasisi olunan bir çocuğun veri paylaştığı fark edilirse destek@firsatkolik.app üzerinden bildirim yapıldığında kayıtlar derhal silinir.',
+                    textSub,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 9. İletişim ve Destek
+            _buildCard(
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              isDark: isDark,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('9. İletişim ve Destek', textMain),
                   const SizedBox(height: 8),
                   _buildParagraph(
                     'Gizlilik politikamız, kişisel verileriniz veya uygulama deneyiminizle ilgili her türlü soru, öneri ve talepleriniz için bizimle doğrudan iletişime geçebilirsiniz:',
@@ -295,6 +372,25 @@ class PrivacyPolicyScreen extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: textMain,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.language_rounded, size: 18, color: isDark ? accentBlue : primaryColor),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => _launchUrl('https://firsatkolik.app'),
+                        child: Text(
+                          'https://firsatkolik.app',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? accentBlue : primaryColor,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
                       ),
                     ],
@@ -360,7 +456,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   Widget _buildBullet(String title, String desc, Color titleColor, Color descColor) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

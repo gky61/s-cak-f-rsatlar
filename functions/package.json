@@ -8,6 +8,7 @@
     "node": "22"
   },
   "scripts": {
+    "test": "node tests/test_rules_and_security_contracts.js",
     "deploy": "firebase deploy --only functions",
     "serve": "firebase emulators:start --only functions"
   },

@@ -3,6 +3,29 @@
 # Firebase Functions Deploy Script
 # Bu script Firebase Functions'ı deploy eder
 
+# P1-08 (R-QA-06): Açık hedef proje ve ortam kontrolü
+TARGET_ENV=$1
+if [ -z "$TARGET_ENV" ]; then
+    echo "❌ HATA (P1-08 / R-QA-06): Hedef ortam belirtilmelidir!"
+    echo "   Kullanım: ./deploy_functions.sh <dev|prod>"
+    exit 1
+fi
+
+if [ "$TARGET_ENV" = "prod" ]; then
+    echo "⚠️  DİKKAT: CANLI PRODÜKSİYON ORTAMI SEÇİLDİ (firsatkolik-prod-e6eae)!"
+    read -p "Canlı ortama Firebase Functions deploy etmek istediğinizden emin misiniz? (e/H): " confirm
+    if [ "$confirm" != "e" ] && [ "$confirm" != "E" ]; then
+        echo "❌ Dağıtım kullanıcı tarafından iptal edildi."
+        exit 1
+    fi
+    PROJECT_ID="firsatkolik-prod-e6eae"
+elif [ "$TARGET_ENV" = "dev" ]; then
+    PROJECT_ID="sicak-firsatlar-e6eae"
+else
+    echo "❌ HATA: Geçersiz ortam: '$TARGET_ENV'. Yalnızca 'dev' veya 'prod' kabul edilir."
+    exit 1
+fi
+
 # NVM yüklemesi
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -51,8 +74,8 @@ fi
 cd ..
 
 echo ""
-echo "🚀 Firebase Functions deploy ediliyor..."
-firebase deploy --only functions
+echo "🚀 Firebase Functions deploy ediliyor ($TARGET_ENV -> $PROJECT_ID)..."
+firebase deploy --only functions --project "$PROJECT_ID"
 
 echo ""
 echo "✅ Deploy işlemi tamamlandı!"

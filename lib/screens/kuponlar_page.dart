@@ -1054,14 +1054,13 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                   },
                                 );
 
-                                // Fail-Safe Fallback: Reklam yüklenemezse veya doluluk yoksa kullanıcıyı bekletme
+                                // Güvenlik Kalkanı (P1-31 / R-BIZ-03): Fail-closed reklam politikası.
+                                // Reklam yüklenemezse veya ad-blocker varsa sınırsız kupon açılması engellenir.
                                 if (!adShown && mounted) {
-                                  await CouponCreditService.instance.unlockCouponForGuest(kupon.id);
-                                  _markCouponRecentlyUnlocked(kupon.id);
                                   _showToast(
-                                    message: '🎁 Hediye Kupon Açıldı! Kopyalamak için üzerine dokunabilirsin.',
-                                    icon: Icons.card_giftcard_rounded,
-                                    backgroundColor: AppTheme.primary,
+                                    message: 'Reklam şu anda yüklenemedi. Lütfen internet bağlantınızı kontrol edip biraz sonra tekrar deneyin veya günlük ücretsiz haklarınızı kullanın.',
+                                    icon: Icons.info_outline_rounded,
+                                    backgroundColor: const Color(0xFF334155),
                                     duration: const Duration(seconds: 3),
                                   );
                                   if (mounted) setState(() {});
@@ -1308,13 +1307,13 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                       },
                     );
 
-                    // Ağ gecikmesi veya reklam henüz hazır değilse kullanıcıyı asla mağdur etme
+                    // Güvenlik Kalkanı (P1-31 / R-BIZ-03): Fail-closed ödül politikası.
+                    // Reklam gösterilmeden sonsuz hediye kredi dağıtımı engellenir.
                     if (!adShown && mounted) {
-                      await CouponCreditService.instance.addRewardedCredits(1);
                       _showToast(
-                        message: '🎁 1 Hediye Kupon Hakkı Eklendi! Kalan: ${CouponCreditService.instance.remainingCredits} Hak.',
-                        icon: Icons.card_giftcard_rounded,
-                        backgroundColor: AppTheme.primary,
+                        message: 'Video reklam şu anda yüklenemedi. Lütfen internet bağlantınızı kontrol edip biraz sonra tekrar deneyin veya günlük ücretsiz haklarınızı kullanın.',
+                        icon: Icons.info_outline_rounded,
+                        backgroundColor: const Color(0xFF334155),
                         duration: const Duration(seconds: 3),
                       );
                       if (mounted) setState(() {});

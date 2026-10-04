@@ -16,12 +16,15 @@ service cloud.firestore {
       return request.auth.uid;
     }
     
-    // Kullanıcı admin mi?
+    // P1-14 (R-AUTH-10): Hibrit isAdmin Mimarisi (Firebase Custom Claims öncelikli, doküman fallback)
     function isAdmin() {
       return isAuthenticated() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isadmin == true ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == 'true'
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isadmin == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == 'true'
+        ))
       );
     }
     
@@ -35,12 +38,30 @@ service cloud.firestore {
       return isAuthenticated() && !isBlocked();
     }
     
+    // P0-04 & P0-06: Oy ve sayaç delta denetimi (Yalnızca +-1 artış veya azalışa izin verilir)
+    function isValidDelta(field) {
+      return !(field in request.resource.data) ||
+             !(field in resource.data) ||
+             (request.resource.data[field] == resource.data[field]) ||
+             (request.resource.data[field] == resource.data[field] + 1) ||
+             (request.resource.data[field] == resource.data[field] - 1);
+    }
+    
+    // Yalnızca 0 veya +1 artışa izin verilir (ör: expiredVotes)
+    function isValidIncrementOnly(field) {
+      return !(field in request.resource.data) ||
+             !(field in resource.data) ||
+             (request.resource.data[field] == resource.data[field]) ||
+             (request.resource.data[field] == resource.data[field] + 1);
+    }
+    
     // ========================================
     // USERS COLLECTION
     // ========================================
     match /users/{targetUserId} {
-      // Herkes okuyabilir (profil bilgileri ve yazar detayları için)
-      allow read: if true;
+      // P1-19 (R-PRV-02): Yalnızca oturum açmış kullanıcılar veya admin okuyabilir.
+      // Dış anonim botların kullanıcı veritabanını kazıması (scraping) engellenir.
+      allow read: if isAuthenticated();
       
       // Kendi profilini oluştururken asla isAdmin veya rol alanlarını set edemez
       allow create: if isAuthenticated() && (
@@ -53,13 +74,14 @@ service cloud.firestore {
       );
       
       // Sadece kendi profilini veya admin güncelleyebilir.
-      // Normal kullanıcı kendi profilinde isAdmin, isadmin, role, isBanned alanlarını ASLA değiştiremez.
+      // P1-11 (R-AUTH-04): Normal kullanıcı profilinde yetki alanlarının yanı sıra puan ve rozet alanlarını da ASLA değiştiremez.
       // Başka bir kullanıcı sadece followersWithNotifications alanını güncelleyebilir (takip/zil için)
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (
           userId() == targetUserId &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'isadmin', 'role', 'isBanned'])
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['isAdmin', 'isadmin', 'role', 'isBanned', 'points', 'badges', 'dealCount', 'totalLikes'])
         ) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followersWithNotifications']))
       );
@@ -92,10 +114,15 @@ service cloud.firestore {
       allow read: if true;
       
       // Giriş yapmış ve engellenmemiş kullanıcılar fırsat ekleyebilir (deal ban kontrolü ve alan doğrulama)
+      // P1-12 (R-AUTH-06): createdAt için 5 dakikalık tolerans penceresi
+      // P1-15 (R-AUTH-13): Bot/sistem kimliği gaspını (postedBy != botkolik, isUserSubmitted) engelleyen allowlist
       allow create: if canWrite() && 
                     !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) &&
                     (isAdmin() || (
                       request.resource.data.postedBy == userId() &&
+                      request.resource.data.postedBy != 'botkolik' &&
+                      (!('isUserSubmitted' in request.resource.data) || request.resource.data.isUserSubmitted == true) &&
+                      (!('isTest' in request.resource.data) || request.resource.data.isTest == false) &&
                       request.resource.data.hotVotes == 0 &&
                       request.resource.data.coldVotes == 0 &&
                       (!('commentCount' in request.resource.data) || request.resource.data.commentCount == 0) &&
@@ -103,24 +130,37 @@ service cloud.firestore {
                       (!('isExpired' in request.resource.data) || request.resource.data.isExpired == false) &&
                       (!('isEditorPick' in request.resource.data) || request.resource.data.isEditorPick == false) &&
                       (!('isApproved' in request.resource.data) || request.resource.data.isApproved == false || 
-                       (exists(/databases/$(database)/documents/settings/app) && get(/databases/$(database)/documents/settings/app).data.dealApprovalRequired == false))
+                       (exists(/databases/$(database)/documents/settings/app) && get(/databases/$(database)/documents/settings/app).data.dealApprovalRequired == false)) &&
+                      (!('createdAt' in request.resource.data) || (
+                        request.resource.data.createdAt is timestamp &&
+                        request.resource.data.createdAt >= request.time - duration.value(5, 'm') &&
+                        request.resource.data.createdAt <= request.time + duration.value(5, 'm')
+                      ))
                     ));
       
       // Sahibi sadece belirli alanları (başlık, açıklama vb.) güncelleyebilir;
-      // ancak onay durumunu (isApproved), editör seçimini (isEditorPick), yazarı (postedBy) veya oyları (hotVotes, coldVotes) ASLA değiştiremez!
+      // ancak onay durumunu (isApproved), editör seçimini (isEditorPick), yazarı (postedBy), oyları veya oluşturma tarihini ASLA değiştiremez!
       // Giriş yapmış herhangi bir kullanıcı sadece oy/yorum sayacı alanlarını güncelleyebilir (Asla negatif olamaz).
       allow update: if canWrite() && (
         isAdmin() ||
         (
           resource.data.postedBy == userId() &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isApproved', 'isEditorPick', 'postedBy', 'hotVotes', 'coldVotes']) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'isEditorPick', 'postedBy', 'hotVotes', 'coldVotes', 'createdAt', 'isUserSubmitted'
+          ]) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['title', 'description', 'dealUrl', 'imageUrl', 'price', 'originalPrice', 'store']) || request.resource.data.isApproved == false) &&
           (!('commentCount' in request.resource.data) || request.resource.data.commentCount >= 0) &&
           (!('hotVotes' in request.resource.data) || request.resource.data.hotVotes >= 0) &&
           (!('coldVotes' in request.resource.data) || request.resource.data.coldVotes >= 0)
         ) ||
         (request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['hotVotes', 'coldVotes', 'expiredVotes', 'isExpired', 'commentCount', 'updatedAt']) &&
-         (!('commentCount' in request.resource.data) || request.resource.data.commentCount >= 0) &&
+          .hasOnly(['hotVotes', 'coldVotes', 'expiredVotes', 'isExpired', 'status', 'commentCount', 'updatedAt']) &&
+         (!('commentCount' in request.resource.data) || (request.resource.data.commentCount >= 0 && isValidDelta('commentCount'))) &&
+         isValidDelta('hotVotes') &&
+         isValidDelta('coldVotes') &&
+         isValidDelta('expiredVotes') &&
+         (!('status' in request.resource.data) || request.resource.data.status in ['active', 'expired']) &&
+         (!('expiredVotes' in request.resource.data) || request.resource.data.expiredVotes >= 0) &&
          (!('hotVotes' in request.resource.data) || request.resource.data.hotVotes >= 0) &&
          (!('coldVotes' in request.resource.data) || request.resource.data.coldVotes >= 0))
       );
@@ -290,9 +330,16 @@ service cloud.firestore {
     // ========================================
     // SYSTEM ERRORS LOGS (FAZ 4)
     // ========================================
+    // P1-13 (R-AUTH-08): systemErrors koleksiyonuna canWrite ve alan kısıtlama kalkanı
     match /systemErrors/{errorId} {
       allow read, update, delete: if isAdmin();
       allow create: if isAdmin() || (
+        canWrite() &&
+        request.resource.data.keys().hasOnly([
+          'environment', 'service', 'category', 'subCategory', 'userId', 'userEmail',
+          'errorType', 'message', 'stack', 'severity', 'status', 'fingerprint',
+          'occurrenceCount', 'platform', 'metadata', 'lastOccurredAt', 'createdAt'
+        ]) &&
         request.resource.data.keys().hasAll(['errorType', 'message', 'platform']) &&
         request.resource.data.message is string &&
         request.resource.data.message.size() <= 1000 &&
@@ -325,9 +372,8 @@ service cloud.firestore {
           (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi == 0)
         )
       );
-      // Sahip oyları veya paylaşan kişi ID'sini doğrudan değiştiremez.
-      // Giriş yapmış herhangi bir kullanıcı sadece oy sayaçlarını ve durumu güncelleyebilir (Asla negatif olamaz).
-      allow update: if isAuthenticated() && (
+      // P0-06 (R-AUTH-03): Kupon oy ve durum koruması. Yalnızca engellenmemiş kullanıcılar (canWrite) ve +-1 delta ile güncelleyebilir.
+      allow update: if canWrite() && (
         isAdmin() ||
         (
           resource.data.paylasanKullaniciId == userId() &&
@@ -335,6 +381,8 @@ service cloud.firestore {
         ) ||
         (request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['sicakOySayisi', 'sogukOySayisi', 'durum']) &&
+         isValidDelta('sicakOySayisi') &&
+         isValidDelta('sogukOySayisi') &&
          (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi >= 0) &&
          (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi >= 0))
       );

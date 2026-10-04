@@ -185,8 +185,24 @@ class StoreRedirectService {
     }
   }
 
-  /// Organik linkler veya fallback için doğrudan harici açılış
-  static Future<void> _launchDirect(Uri uri) async {
+  /// Organik linkler veya fallback için güvenli harici açılış (P1-38 / R-MOB-12 / SafeLinkLauncher)
+  static Future<void> _launchDirect(Uri inputUri) async {
+    // 1. Şema Güvenliği ve Protokol Yükseltme:
+    // Android'de cleartext HTTP kapatıldığından http:// şemaları otomatik https:// protokolüne yükseltilir.
+    Uri uri = inputUri;
+    final scheme = uri.scheme.toLowerCase();
+
+    // Tehlikeli / sömürü amaçlı şemaları (XSS, yerel dosya okuma vb.) kesinlikle engelle
+    const dangerousSchemes = {'javascript', 'file', 'data', 'content', 'vbscript'};
+    if (dangerousSchemes.contains(scheme)) {
+      _log('⛔ [SafeLinkLauncher] Güvensiz URI şeması engellendi: $scheme ($inputUri)');
+      throw Exception('Güvenli olmayan bağlantı şeması: $scheme');
+    }
+
+    if (scheme == 'http') {
+      uri = uri.replace(scheme: 'https');
+    }
+
     try {
       final launched = await launchUrl(
         uri,

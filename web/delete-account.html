@@ -188,17 +188,7 @@
                 </ul>
             </div>
 
-            <!-- 
-              Ücretsiz ve sunucusuz form gönderimi için Web3Forms servisi kullanılmıştır.
-              Kendi e-postanıza yönlendirmek için:
-              1. https://web3forms.com adresinden ücretsiz bir Access Key alın.
-              2. Aşağıdaki "YOUR_ACCESS_KEY_HERE" değerini aldığınız anahtarla değiştirin.
-            -->
-            <form action="https://api.web3forms.com/submit" method="POST" id="delete-form">
-                <input type="hidden" name="access_key" value="b998149f-da81-486a-8e02-584252151089">
-                <input type="hidden" name="subject" value="Fırsatkolik - Yeni Hesap Silme Talebi">
-                <input type="hidden" name="from_name" value="Fırsatkolik Web Form">
-
+            <form id="delete-form">
                 <div class="form-group">
                     <label for="name">Ad Soyad</label>
                     <input type="text" id="name" name="name" required placeholder="Uygulamada kullandığınız adınız">
@@ -231,6 +221,9 @@
         <div id="success-container" class="success-message">
             <h3>Talebiniz Alındı! ✅</h3>
             <p>Hesap silme talebiniz başarıyla bize ulaşmıştır. Güvenlik doğrulamalarının ardından hesabınız ve verileriniz 7 iş günü içerisinde sistemimizden tamamen silinecektir.</p>
+            <p style="margin-top: 15px; font-size: 0.9em; color: #64748b;">
+                💡 <em>İpucu: Mobil uygulama içerisinden <strong>Profil &gt; Ayarlar &gt; Hesabımı Sil</strong> adımlarını takip ederek hesabınızı anında ve doğrudan da silebilirsiniz.</em>
+            </p>
             <a href="privacy-policy.html" class="btn-home">Gizlilik Politikasına Dön</a>
         </div>
 
@@ -241,7 +234,7 @@
     </div>
 
     <script>
-        // Form gönderimi sonrası sayfayı yenilemeden başarılı mesajı göstermek için küçük bir JS
+        // Form gönderimini güvenli ve yerel olarak işleyen betik (P1-32 / KVKK & GDPR Güvencesi)
         const form = document.getElementById('delete-form');
         const formContainer = document.getElementById('form-container');
         const successContainer = document.getElementById('success-container');
@@ -249,41 +242,30 @@
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(form);
-            const object = Object.fromEntries(formData);
-            const json = JSON.stringify(object);
+            const name = formData.get('name') || '';
+            const email = formData.get('email') || '';
+            const username = formData.get('username') || '-';
+            const reason = formData.get('reason') || '-';
 
-            // Eğer Access Key güncellenmemişse, kullanıcıyı mailto linkine yönlendir (failsafe fallback)
-            if (object.access_key === 'YOUR_ACCESS_KEY_HERE') {
-                const mailtoUrl = `mailto:destek@firsatkolik.app?subject=Hesap Silme Talebi - Fırsatkolik&body=Merhaba,%0D%0A%0D%0A${object.email} e-posta adresine bağlı Fırsatkolik hesabımın ve verilerimin tamamen silinmesini talep ediyorum.%0D%0A%0D%0AAd Soyad: ${object.name}%0D%0AKullanıcı Adı: ${object.username || '-'}%0D%0ASilme Nedeni: ${object.reason || '-'}`;
-                window.location.href = mailtoUrl;
-                
-                formContainer.style.display = 'none';
-                successContainer.style.display = 'block';
-                return;
-            }
+            // Güvenli yerel mailto eylemi ile resmi destek ekibine ilet (üçüncü taraf API'lere PII gönderilmez)
+            const subject = encodeURIComponent('Hesap Silme Talebi - Fırsatkolik');
+            const body = encodeURIComponent(
+                `Merhaba FırsatKolik Destek Ekibi,\n\n` +
+                `${email} e-posta adresine bağlı FırsatKolik hesabımın ve kişisel verilerimin silinmesini talep ediyorum.\n\n` +
+                `Ad Soyad: ${name}\n` +
+                `Kullanıcı Adı: ${username}\n` +
+                `Silme Gerekçesi: ${reason}\n\n` +
+                `Saygılarımla.`
+            );
 
-            // Web3Forms API'sine gönder
-            fetch('https://api.web3forms.com/submit', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: json
-            })
-            .then(async (response) => {
-                let jsonRes = await response.json();
-                if (response.status == 200) {
-                    formContainer.style.display = 'none';
-                    successContainer.style.display = 'block';
-                } else {
-                    alert(jsonRes.message);
-                }
-            })
-            .catch(error => {
-                console.log(error);
-                alert("Bir hata oluştu, lütfen daha sonra tekrar deneyin.");
-            });
+            // Başarı ekranına geçir
+            formContainer.style.display = 'none';
+            successContainer.style.display = 'block';
+
+            // E-posta istemcisini tetikle
+            try {
+                window.location.href = `mailto:destek@firsatkolik.app?subject=${subject}&body=${body}`;
+            } catch (_) {}
         });
     </script>
 </body>

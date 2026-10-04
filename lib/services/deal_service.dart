@@ -463,10 +463,9 @@ class DealService {
 
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
       
-      // Kullanıcı puanını artır ve başarımları kontrol et (UserService kullanımı)
+      // P1-11 (R-AUTH-04): İstemci doğrudan points/badges artıramaz (RBAC Kalkanı).
+      // Puan ve rozetler Cloud Functions (onDealCreated / onDealUpdated) tarafından atomik ve güvenli olarak verilir.
       final userService = UserService();
-      await userService.incrementUserPoints(userId, points: 5, dealCount: 1);
-      await userService.checkAndAwardBadges(userId);
       
       // Profil geçmişine minimalist fırsat kartı ekle
       await userService.addLastSharedDeal(

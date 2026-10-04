@@ -8,7 +8,6 @@ const { StringSession } = require('telegram/sessions');
 const { NewMessage } = require('telegram/events');
 const { Api } = require('telegram/tl');
 const admin = require('firebase-admin');
-const { spawnSync } = require('child_process');
 
 // Scraper ve Kategori servisleri
 const linkScraperService = require('./link_scraper_service');
@@ -17,8 +16,36 @@ const domainAllowlist = require('./domain_allowlist');
 const advertisingComplianceService = require('./advertising_compliance_service');
 const affiliateManager = require('./affiliate_manager');
 
+// P1-03 (R-INF-10): Fail-Closed Ortam Doğrulaması
+let PROJECT_ID = (process.env.PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT || '').trim();
+if (!PROJECT_ID) {
+  try {
+    const fs = require('fs');
+    const keyCandidates = [
+      process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      '/app/firebase_key.json',
+      './firebase_key.json',
+      './prod_firebase_key.json',
+      './dev_firebase_key.json'
+    ].filter(Boolean);
+    for (const kp of keyCandidates) {
+      if (fs.existsSync(kp)) {
+        const parsed = JSON.parse(fs.readFileSync(kp, 'utf8'));
+        if (parsed.project_id) {
+          PROJECT_ID = parsed.project_id.trim();
+          break;
+        }
+      }
+    }
+  } catch (_) {}
+}
+if (!PROJECT_ID) {
+  console.error('❌ KRİTİK HATA (P1-03 / R-INF-10): PROJECT_ID ortam değişkeni veya servis hesabı anahtarı bulunamadı! Fail-closed güvenlik kalkanı devrede, bot başlatılamaz.');
+  process.exit(1);
+}
+
 // Firebase Admin başlat
-// Cloud Run'da otomatik authentication kullanır
+// Cloud Run ve Docker container'da ortam kimlik doğrulamasını kullanır
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -43,49 +70,9 @@ const SESSION_STRING = rawSession;
 
 let CHANNELS = process.env.TELEGRAM_CHANNELS ? process.env.TELEGRAM_CHANNELS.split(',') : [];
 
-// Circular log buffer for admin console view
-const botLogs = [];
-const MAX_LOGS = 500;
+// P1-01 (R-INF-03): In-memory botLogs tamponu bellek tasarrufu için kaldırıldı.
+// Tüm loglar stdout/stderr akışına doğrudan yazılır (Cloud Logging ve Docker tarafından yakalanır).
 
-function formatLogLine(level, ...args) {
-  const message = args
-    .map(a => (typeof a === 'object' ? (a instanceof Error ? a.stack : JSON.stringify(a)) : String(a)))
-    .join(' ');
-  return {
-    timestamp: new Date().toISOString(),
-    level: level,
-    message: message
-  };
-}
-
-const originalLog = console.log;
-const originalError = console.error;
-const originalWarn = console.warn;
-const originalInfo = console.info;
-
-console.log = function (...args) {
-  originalLog.apply(console, args);
-  botLogs.push(formatLogLine('info', ...args));
-  if (botLogs.length > MAX_LOGS) botLogs.shift();
-};
-
-console.error = function (...args) {
-  originalError.apply(console, args);
-  botLogs.push(formatLogLine('error', ...args));
-  if (botLogs.length > MAX_LOGS) botLogs.shift();
-};
-
-console.warn = function (...args) {
-  originalWarn.apply(console, args);
-  botLogs.push(formatLogLine('warn', ...args));
-  if (botLogs.length > MAX_LOGS) botLogs.shift();
-};
-
-console.info = function (...args) {
-  originalInfo.apply(console, args);
-  botLogs.push(formatLogLine('info', ...args));
-  if (botLogs.length > MAX_LOGS) botLogs.shift();
-};
 
 console.log('🤖 Telegram Bot başlatılıyor...');
 console.log('🔑 Environment Variables Kontrolü:');
@@ -190,10 +177,30 @@ async function sendHeartbeat() {
     checkDateAndResetCounters();
     const statusRef = db.collection('settings').doc('telegramBot');
     const environment = (process.env.PROJECT_ID || '').includes('prod') ? 'PROD' : 'DEV';
+
+    // P1-27 (R-INF-05): Telegram MTProto istemcisinin canlılık ve oturum durumunu dürüstçe denetle
+    const isClientConnected = Boolean(client && client.connected);
+    let authStatus = 'unknown';
+    if (client) {
+      try {
+        const isAuth = await client.isUserAuthorized();
+        authStatus = isAuth ? 'authorized' : 'unauthorized';
+      } catch (_) {
+        authStatus = 'disconnected';
+      }
+    } else {
+      authStatus = 'uninitialized';
+    }
+
+    const isHealthy = isClientConnected && authStatus === 'authorized';
+    const currentStatus = botEnabled ? (isHealthy ? 'online' : 'degraded') : 'paused';
+
     await statusRef.set({
       lastHeartbeatAt: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'online',
+      status: currentStatus,
       environment: environment,
+      mtprotoConnected: isClientConnected,
+      mtprotoAuthStatus: authStatus,
       lastMessageTime: lastMessageTime ? admin.firestore.Timestamp.fromDate(lastMessageTime) : null,
       msgCount: msgCount,
       dealCount: dealCount,
@@ -203,7 +210,7 @@ async function sendHeartbeat() {
       countersDate: countersDate,
       monitoredChannels: CHANNELS
     }, { merge: true });
-    console.log('💓 Heartbeat sent successfully!');
+    console.log(`💓 Heartbeat sent successfully! Status: ${currentStatus} (MTProto: ${isClientConnected ? 'CONNECTED' : 'DISCONNECTED'}, Auth: ${authStatus})`);
   } catch (err) {
     console.error('❌ Heartbeat gönderim hatası:', err.message);
   }
@@ -974,7 +981,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
         });
 
         if (buffer && buffer.length > 0) {
-          const projectId = process.env.PROJECT_ID || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT || 'firsatkolik-prod-e6eae';
+          const projectId = PROJECT_ID;
           const bucketName = `${projectId}.firebasestorage.app`;
           const bucket = admin.storage().bucket(bucketName);
           const filename = `deals/${chatInfo.id}_${messageId}.jpg`;
@@ -1727,160 +1734,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parsedUrl.pathname === '/health' || parsedUrl.pathname === '/') {
+    // P1-01 (R-INF-03): Minimal sağlık kontrolü. CHANNELS dizisi ve iç sistem detayları gizlenmiştir.
     sendJson(200, {
       status: 'ok',
       bot_running: isRunning,
-      channels: CHANNELS,
-      uptime: process.uptime(),
+      uptime: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
     });
-  } else if (parsedUrl.pathname === '/bot-logs') {
-    const limit = parseInt(parsedUrl.searchParams.get('limit') || '100');
-    const startTime = parsedUrl.searchParams.get('startTime');
-    let logsToReturn = botLogs;
-    if (startTime) {
-      const parsedTime = new Date(startTime).getTime();
-      if (!isNaN(parsedTime)) {
-        logsToReturn = botLogs.filter(log => new Date(log.timestamp).getTime() >= parsedTime);
-      }
-    }
-    sendJson(200, { success: true, logs: logsToReturn.slice(-limit) });
-    return;
-  } else if (parsedUrl.pathname === '/test-bypass') {
-    const targetUrl = parsedUrl.searchParams.get('url') || 'https://www.hepsiburada.com/gamepower-skadi-round-240-argb-240mm-sivi-islemci-sogutucu-am5-ve-lga1700-uyumlu-p-HBCV000064LQCT';
-    const results = {};
-
-    // 1. Direct Curl
-    try {
-      const curl = spawnSync('curl', [
-        '-sL',
-        '-H', 'User-Agent: WhatsApp/2.23.4.15 A',
-        '--compressed',
-        '-w', '\n---STATUS:%{http_code}---',
-        targetUrl
-      ], { encoding: 'utf-8', timeout: 8000 });
-      const output = curl.stdout || '';
-      const statusMatch = output.match(/---STATUS:(\d+)---/);
-      const status = statusMatch ? parseInt(statusMatch[1]) : 0;
-      results.direct_curl = { status, size: output.replace(/\n---STATUS:\d+---$/, '').length };
-    } catch (e) { results.direct_curl = { error: e.message }; }
-
-    // 2. Translate Proxy
-    try {
-      const parsed = new URL(targetUrl);
-      const baseUrl = 'https://' + parsed.hostname.replace(/\./g, '-') + '.translate.goog' + parsed.pathname;
-      const ua = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
-
-      // Test 1: No params
-      const r1 = await fetch(baseUrl + '?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
-      const size1 = r1.ok ? (await r1.text()).length : 0;
-
-      // Test 2: magaza=incehesap
-      const r2 = await fetch(baseUrl + '?magaza=incehesap&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
-      const size2 = r2.ok ? (await r2.text()).length : 0;
-
-      // Test 3: magaza=İncehesap
-      const r3 = await fetch(baseUrl + '?magaza=İncehesap&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
-      const size3 = r3.ok ? (await r3.text()).length : 0;
-
-      // Test 4: magaza=%C4%B0ncehesap
-      const r4 = await fetch(baseUrl + '?magaza=%C4%B0ncehesap&_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr', { headers: ua });
-      const size4 = r4.ok ? (await r4.text()).length : 0;
-
-      results.translate_proxy = {
-        test1_no_param: { status: r1.status, size: size1 },
-        test2_incehesap: { status: r2.status, size: size2 },
-        test3_raw_incehesap: { status: r3.status, size: size3 },
-        test4_encoded_incehesap: { status: r4.status, size: size4 }
-      };
-    } catch (e) { results.translate_proxy = { error: e.message }; }
-
-    // 3. Microlink HTML
-    try {
-      const microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
-      const r = await fetch(microUrl);
-      if (r.ok) {
-        const data = await r.json();
-        const html = data.data?.html || '';
-        results.microlink = {
-          status: r.status,
-          size: html.length
-        };
-      } else {
-        results.microlink = { status: r.status };
-      }
-    } catch (e) { results.microlink = { error: e.message }; }
-
-    sendJson(200, results);
-    return;
-  } else if (parsedUrl.pathname === '/simulate') {
-    const urlToScrape = parsedUrl.searchParams.get('url');
-    const customText = parsedUrl.searchParams.get('text');
-    if (!urlToScrape) {
-      sendJson(400, { error: 'url parameter is required' });
-      return;
-    }
-
-    if (!isRunning || !client) {
-      sendJson(503, { error: 'Telegram bot is not running or client is not connected' });
-      return;
-    }
-
-    try {
-      console.log(`[SIMULATE] Simüle edilen url işleniyor: ${urlToScrape}${customText ? ` ile mesaj metni: "${customText}"` : ''}`);
-
-      // 1. Telegram'dan link önizlemesini doğrudan isteyelim
-      let previewMedia = null;
-      try {
-        console.log(`[SIMULATE] Telegram'dan web sayfası önizlemesi alınıyor...`);
-        previewMedia = await client.invoke(
-          new Api.messages.GetWebPagePreview({
-            message: urlToScrape,
-          })
-        );
-        console.log(`[SIMULATE] Telegram önizleme sonucu: ${previewMedia ? previewMedia.className : 'Yok'}`);
-      } catch (previewErr) {
-        console.warn(`[SIMULATE] Telegram önizleme alma hatası: ${previewErr.message}`);
-      }
-
-      // 2. Dummy mesaj ve chatInfo nesnesi oluşturalım
-      const mockMessageId = Math.floor(Math.random() * 1000000);
-      const dummyMessage = {
-        id: mockMessageId,
-        message: customText || urlToScrape,
-        entities: [],
-        media: previewMedia ? previewMedia.media : null
-      };
-
-      const dummyChatInfo = {
-        id: 3423704050, // Test kanalımızın temiz ID'si
-        title: 'Simulation Test Channel',
-        username: 'simulation_test',
-        broadcast: true
-      };
-
-      const docId = `telegram_${dummyChatInfo.id}_${mockMessageId}`;
-      console.log(`[SIMULATE] saveDealToFirebase çağrılıyor. Beklenen Belge ID: ${docId}`);
-
-      const success = await saveDealToFirebase(dummyMessage, dummyChatInfo, true);
-
-      if (success) {
-        // Firestore'dan belgenin güncel halini okuyalım
-        const docRef = db.collection('deals').doc(docId);
-        const docSnap = await docRef.get();
-        if (docSnap.exists) {
-          sendJson(200, { success: true, docId, data: docSnap.data() });
-          return;
-        }
-      }
-
-      sendJson(500, { success: false, error: 'Failed to process deal or save to Firestore', docId });
-
-    } catch (err) {
-      console.error('[SIMULATE] Simülasyon hatası:', err);
-      sendJson(500, { error: err.message, stack: err.stack });
-    }
   } else {
+    // P1-01 (R-INF-03) & P0-01/02: /bot-logs, /channels, /simulate ve /test-bypass kapalıdır (bilgi sızıntısı ve saldırı yüzeyi engellendi).
     sendText(404, 'Not Found');
   }
 });

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/deal.dart';
 
 /// Fırsat detayındaki DealThermometer bileşeninin modern, termal ve canlı
@@ -67,27 +66,12 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('deals')
-          .doc(widget.deal.id)
-          .snapshots(),
-      builder: (context, snapshot) {
-        int hotVotes = widget.deal.hotVotes;
-        int coldVotes = widget.deal.coldVotes;
+    final int hotVotes = widget.deal.hotVotes;
+    final int coldVotes = widget.deal.coldVotes;
+    final int totalVotes = hotVotes + coldVotes;
+    if (totalVotes == 0) return const SizedBox.shrink();
 
-        if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>?;
-          if (data != null) {
-            hotVotes = (data['hotVotes'] as num?)?.toInt() ?? widget.deal.hotVotes;
-            coldVotes = (data['coldVotes'] as num?)?.toInt() ?? widget.deal.coldVotes;
-          }
-        }
-
-        final int totalVotes = hotVotes + coldVotes;
-        if (totalVotes == 0) return const SizedBox.shrink();
-
-        final int hotPercentage = (hotVotes / totalVotes * 100).round().clamp(0, 100);
+    final int hotPercentage = (hotVotes / totalVotes * 100).round().clamp(0, 100);
 
         // ─── TERMAL SKALA & DİNAMİK TASARIM PALETİ ──────────────────────────
         final Color primaryAccent;
@@ -369,7 +353,5 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
             );
           },
         );
-      },
-    );
   }
 }

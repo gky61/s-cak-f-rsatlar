@@ -6,7 +6,7 @@ import 'package:firebase_performance/firebase_performance.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, FlutterError, defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show kDebugMode, kReleaseMode, kIsWeb, FlutterError, defaultTargetPlatform;
 import 'dart:async';
 import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -332,8 +332,23 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     _log('🔥 Firebase çekirdeği başarıyla başlatıldı');
+
+    // P0-15 (R-MOB-07): Fail-Closed Ortam Doğrulaması (Sanity Check)
+    if (kReleaseMode) {
+      final projectId = Firebase.app().options.projectId;
+      final isProdFirebase = projectId == 'firsatkolik-prod-e6eae';
+      final isProdFlavor = DefaultFirebaseOptions.isProductionFlavor;
+      if (isProdFlavor != isProdFirebase) {
+        throw StateError(
+          'KRİTİK HATA: Firebase ortamı ($projectId) ile seçili FLAVOR uyumsuz! Başlatma durduruldu.',
+        );
+      }
+    }
   } catch (e) {
     _log('❌ Firebase başlatma hatası: $e');
+    if (kReleaseMode && e is StateError) {
+      rethrow;
+    }
   }
 
   // Kritik olmayan servisleri arka planda, ilk kare çizimini (runApp) bloklamadan başlat
@@ -458,28 +473,28 @@ void _initializeBackgroundServices() {
   }
 }
 
-/// AdMob ve UMP Consent akışını asenkron başlatır
+/// AdMob ve UMP Consent akışını asenkron başlatır (P1-33 / R-PRV-07)
 void _initAdMobAndUmp() {
   bool adMobInitialized = false;
 
   Future<void> initAdMob() async {
     if (adMobInitialized) return;
-    adMobInitialized = true;
     try {
+      final canRequest = await ConsentInformation.instance.canRequestAds();
+      if (!canRequest) {
+        _log('ℹ️ [UMP] Rıza henüz tamamlanmadı veya reklam izni verilmedi (canRequestAds: false)');
+        return;
+      }
+      adMobInitialized = true;
       await AdManagerService.instance.initialize();
+      _log('✅ AdMob SDK rıza doğrulandıktan sonra başarıyla başlatıldı');
     } catch (e) {
       _log('⚠️ AdMob başlatma hatası: $e');
     }
   }
 
-  // Güvenlik zaman aşımı: UMP ağ sorgusu 2.5 saniyeyi aşarsa cold-start akışında AdMob'u doğrudan başlat
-  Timer(const Duration(milliseconds: 2500), () {
-    if (!adMobInitialized) {
-      _log('⏱️ UMP Consent zaman aşımı (2.5s), AdMob doğrudan başlatılıyor');
-      initAdMob();
-    }
-  });
-
+  // Güvenlik Kalkanı (P1-33 / App Store 5.1.2 ve Google UMP Sözleşmesi):
+  // Rıza alınmadan veya form ekrandayken AdMob'u zorla başlatan 2.5s zaman aşımı kaldırılmıştır.
   try {
     final params = ConsentRequestParameters();
     ConsentInformation.instance.requestConsentInfoUpdate(
@@ -503,7 +518,6 @@ void _initAdMobAndUmp() {
     );
   } catch (e) {
     _log('⚠️ AdMob/UMP başlatma genel hatası: $e');
-    initAdMob();
   }
 }
 

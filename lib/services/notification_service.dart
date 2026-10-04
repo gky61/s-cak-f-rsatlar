@@ -425,6 +425,13 @@ class NotificationService {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      // P0-13 (R-SCL-01): FCM Konusuna abone ol (Sınırsız ölçeklenebilir 0 maliyetli dağıtım)
+      final cleanCat = categoryId.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      try {
+        await _messaging.subscribeToTopic('cat_$cleanCat');
+      } catch (topicErr) {
+        _log('⚠️ Kategori topic abonelik uyarısı: $topicErr');
+      }
       _log('✅ Category subscription added: $categoryId');
     } catch (e) {
       _log('❌ Category subscription add error: $e');
@@ -438,6 +445,13 @@ class NotificationService {
     final subId = _getSubscriptionId(userId, 'category', categoryId);
     try {
       await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+      // P0-13 (R-SCL-01): FCM Konusu aboneliğinden çık
+      final cleanCat = categoryId.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      try {
+        await _messaging.unsubscribeFromTopic('cat_$cleanCat');
+      } catch (topicErr) {
+        _log('⚠️ Kategori topic abonelikten çıkış uyarısı: $topicErr');
+      }
       _log('✅ Category subscription deleted: $categoryId');
     } catch (e) {
       _log('❌ Category subscription delete error: $e');
@@ -463,6 +477,13 @@ class NotificationService {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      // P0-13 (R-SCL-01): FCM Alt Kategori konusuna abone ol
+      final cleanSub = key.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      try {
+        await _messaging.subscribeToTopic('cat_$cleanSub');
+      } catch (topicErr) {
+        _log('⚠️ Alt kategori topic abonelik uyarısı: $topicErr');
+      }
       _log('✅ Subcategory subscription added: $key');
     } catch (e) {
       _log('❌ Subcategory subscription add error: $e');
@@ -477,6 +498,13 @@ class NotificationService {
     final subId = _getSubscriptionId(userId, 'category', key);
     try {
       await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+      // P0-13 (R-SCL-01): FCM Alt Kategori konusundan çık
+      final cleanSub = key.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      try {
+        await _messaging.unsubscribeFromTopic('cat_$cleanSub');
+      } catch (topicErr) {
+        _log('⚠️ Alt kategori topic abonelikten çıkış uyarısı: $topicErr');
+      }
       _log('✅ Subcategory subscription deleted: $key');
     } catch (e) {
       _log('❌ Subcategory subscription delete error: $e');

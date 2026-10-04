@@ -106,6 +106,20 @@
         }
       ]
     },
+    {
+      "collectionGroup": "systemErrors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
 
     {
       "collectionGroup": "messages",

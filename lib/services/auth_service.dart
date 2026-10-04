@@ -822,11 +822,17 @@ class AuthService {
         throw AuthException('Oturum açık değil.');
       }
 
-      // 1. Kullanıcı verilerini Firestore'dan sil
-      await _firestore.collection('users').doc(user.uid).delete();
+      final uid = user.uid;
 
-      // 2. Firebase Auth'dan kullanıcıyı sil
+      // P0-12 (R-PRV-08): 1. Önce Firebase Auth'dan kullanıcıyı sil.
+      // Eğer oturum eski ise 'requires-recent-login' fırlatır; Firestore dokümanı zombileşmez!
       await user.delete();
+
+      // 2. Auth silinmesi başarılı oldu; sunucudaki onUserDeleted trigger'ı tüm verileri kaskat temizler.
+      // Güvence amaçlı istemciden de ana dokümanı temizlemeyi dene:
+      try {
+        await _firestore.collection('users').doc(uid).delete();
+      } catch (_) {}
 
       // 3. Oturumu temizle
       if (_googleSignIn != null) {
