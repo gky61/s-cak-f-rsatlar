@@ -999,25 +999,33 @@ console.log('\n--- TEST 28: P1-33 iOS ATT & UMP Rıza Kalkanı Sözleşmesi ---'
 }
 
 // ==============================================================================
-// TEST 29: P1-36 (R-MOB-09) — iOS App Attest Production Entitlement Sözleşmesi
+// TEST 29: P1-36 (R-MOB-09) — iOS App Check & DeviceCheck Fallback Güvenlik Sözleşmesi
 // ==============================================================================
-console.log('\n--- TEST 29: P1-36 iOS App Attest Entitlement Sözleşmesi ---');
+console.log('\n--- TEST 29: P1-36 iOS App Check & DeviceCheck Fallback Sözleşmesi ---');
 {
+  const mainCode = fs.readFileSync(
+    path.join(__dirname, '../../lib/main.dart'),
+    'utf8'
+  );
+
+  assert.ok(
+    mainCode.includes('AppleProvider.appAttestWithDeviceCheckFallback'),
+    'Firebase App Check DeviceCheck fallback ile güvenle başlatılmalı'
+  );
+
   const entitlements = fs.readFileSync(
     path.join(__dirname, '../../ios/Runner/Runner.entitlements'),
     'utf8'
   );
 
-  assert.ok(
+  // Apple provisioning profile'da bulunmayan ve code signing'i kıran unprovisioned capability engellenmeli
+  assert.strictEqual(
     entitlements.includes('com.apple.developer.devicecheck.appattest-environment'),
-    'Runner.entitlements içinde App Attest anahtarı tanımlı olmalı'
-  );
-  assert.ok(
-    entitlements.includes('<string>production</string>'),
-    'App Attest ortamı production olarak tanımlanmalı'
+    false,
+    'Provisioning profile ile uyuşmayan unprovisioned App Attest entitlement bulunmamalı'
   );
 
-  console.log('✅ TEST 29 BAŞARILI: P1-36 iOS App Attest production entitlement kalkanı doğrulandı.');
+  console.log('✅ TEST 29 BAŞARILI: P1-36 iOS App Check DeviceCheck fallback ve imzalama uyumluluğu doğrulandı.');
 }
 
 // ==============================================================================
