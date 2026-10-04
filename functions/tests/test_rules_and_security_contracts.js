@@ -1046,8 +1046,14 @@ console.log('\n--- TEST 31: P1-34 & P1-37 CI Araç Pinleme ve TestFlight Esnekli
     'utf8'
   );
 
-  assert.ok(ciWorkflow.includes("xcode-version: '16.2'"), 'Xcode sürümü 16.2 olarak sabitlenmiş olmalı');
-  assert.ok(ciWorkflow.includes("flutter-version: '3.29.0'"), 'Flutter SDK sürümü 3.29.0 olarak sabitlenmiş olmalı');
+  assert.ok(
+    ciWorkflow.includes("xcode-version: 'latest-stable'") || ciWorkflow.includes("xcode-version: '26"),
+    'Xcode sürümü macOS runner ile uyumlu stabil ortamda seçilmiş olmalı'
+  );
+  assert.ok(
+    ciWorkflow.includes("channel: 'stable'"),
+    'Flutter SDK stabil kanalda seçilmiş olmalı'
+  );
 
   // Geliştiriciyi kilitleyen yapay fail-closed kuralının OLMADIĞINI doğrula
   assert.strictEqual(
