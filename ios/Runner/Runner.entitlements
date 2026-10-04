@@ -25,5 +25,9 @@
 	<array>
 		<string>group.com.firsatkolik.app</string>
 	</array>
+
+	<!-- Apple DeviceCheck & App Attest Yetkisi (Firebase App Check - P1-36 / R-MOB-09) -->
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>production</string>
 </dict>
 </plist>

@@ -1018,14 +1018,13 @@ console.log('\n--- TEST 29: P1-36 iOS App Check & DeviceCheck Fallback Sözleşm
     'utf8'
   );
 
-  // Apple provisioning profile'da bulunmayan ve code signing'i kıran unprovisioned capability engellenmeli
-  assert.strictEqual(
+  // Apple provisioning profile ile senkronize resmi App Attest yetkisini doğrula
+  assert.ok(
     entitlements.includes('com.apple.developer.devicecheck.appattest-environment'),
-    false,
-    'Provisioning profile ile uyuşmayan unprovisioned App Attest entitlement bulunmamalı'
+    'App Attest entitlement Runner.entitlements içinde tanımlanmış olmalı'
   );
 
-  console.log('✅ TEST 29 BAŞARILI: P1-36 iOS App Check DeviceCheck fallback ve imzalama uyumluluğu doğrulandı.');
+  console.log('✅ TEST 29 BAŞARILI: P1-36 iOS App Check DeviceCheck fallback ve App Attest yetkisi doğrulandı.');
 }
 
 // ==============================================================================
