@@ -412,12 +412,13 @@ void _initializeBackgroundServices() {
   AffiliateService.initSettingsListener();
 
   // App Check Aktivasyonu (arka planda - Play Integrity ağ gecikmesini açılış ekranından soyutlar)
-  final bool useProductionAppCheck = isProductionFlavor && !kDebugMode;
+  // Release modda (TestFlight dev/prod veya mağaza) App Attest + DeviceCheck Fallback çalışır; Debug modda (Simülatör/USB) DebugProvider çalışır.
+  const bool useProductionAppCheck = !kDebugMode;
   FirebaseAppCheck.instance.activate(
     androidProvider: useProductionAppCheck ? AndroidProvider.playIntegrity : AndroidProvider.debug,
     appleProvider: useProductionAppCheck ? AppleProvider.appAttestWithDeviceCheckFallback : AppleProvider.debug,
   ).then((_) {
-    _log('🛡️ Firebase App Check başarıyla başlatıldı (mode: ${useProductionAppCheck ? "PROD/PlayIntegrity+AppAttest" : "DEV/Debug"})');
+    _log('🛡️ Firebase App Check başarıyla başlatıldı (mode: ${useProductionAppCheck ? "PlayIntegrity+AppAttest" : "Debug"})');
   }).catchError((e) {
     _log('⚠️ Firebase App Check başlatma hatası: $e');
   });
