@@ -47,14 +47,6 @@ service cloud.firestore {
              (request.resource.data[field] == resource.data[field] - 1);
     }
     
-    // Yalnızca 0 veya +1 artışa izin verilir (ör: expiredVotes)
-    function isValidIncrementOnly(field) {
-      return !(field in request.resource.data) ||
-             !(field in resource.data) ||
-             (request.resource.data[field] == resource.data[field]) ||
-             (request.resource.data[field] == resource.data[field] + 1);
-    }
-    
     // ========================================
     // USERS COLLECTION
     // ========================================
