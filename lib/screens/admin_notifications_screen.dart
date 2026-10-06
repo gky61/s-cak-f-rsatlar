@@ -992,7 +992,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         (it) =>
             (widget.highlightNotificationId != null && it?['id'] == widget.highlightNotificationId) ||
             (widget.highlightDealId != null && it?['dealId'] == widget.highlightDealId) ||
-            (widget.highlightKuponId != null && (it?['kuponId'] == widget.highlightKuponId || it?['kupon_id'] == widget.highlightKuponId)),
+            (widget.highlightKuponId != null && (it?['kuponId'] == widget.highlightKuponId || it?['kupon_id'] == widget.highlightKuponId || it?['targetId'] == widget.highlightKuponId)),
         orElse: () => null,
       );
       if (target != null) {
@@ -1190,7 +1190,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           }
         }
         if (type == 'submission_status') {
-          final isKupon = (item['kuponId'] as String? ?? '').trim().isNotEmpty;
+          final targetKuponId = (item['kuponId'] ?? item['kupon_id'] ?? item['couponId'] ?? item['coupon_id'] ?? (item['targetType'] == 'coupon' ? item['targetId'] : '') ?? '').toString().trim();
+          final isKupon = targetKuponId.isNotEmpty;
           if (isAppr) {
             displayBody = isKupon
                 ? 'Kuponunuz başarıyla onaylandı ve yayına alındı.'

@@ -358,7 +358,8 @@ service cloud.firestore {
     // ========================================
     match /kuponlar/{kuponId} {
       allow read: if true;
-      allow create: if canWrite() && (
+      allow create: if canWrite() && 
+                    !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) && (
         isAdmin() || (
           request.resource.data.paylasanKullaniciId == userId() &&
           (!('durum' in request.resource.data) || request.resource.data.durum == 'beklemede') &&
