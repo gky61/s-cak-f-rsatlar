@@ -37,7 +37,7 @@ graph TD
     
     %% 2. Backend İşleme
     Scraper -->|Mükerrer Kontrolü Case-Insensitive Set| CloudFunctions[⚡ Cloud Functions: Node.js 22]
-    CloudFunctions -->|kaynakTipi='web' 500'lük Batch Yazma| Firestore[(🔥 Firestore: 'kuponlar' Koleksiyonu)]
+    CloudFunctions -->|kaynakTipi='web' 400'lük Batch Yazma| Firestore[(🔥 Firestore: 'kuponlar' Koleksiyonu)]
     AdminWeb[💻 Web Admin Paneli] -->|scrapeCouponsManual / toggleCouponsEnabled| CloudFunctions
     
     %% 3. Mobil İstemci ve Oylama
@@ -51,7 +51,7 @@ graph TD
 ### Temel Mimari Prensipler:
 * **İki Sekmeli İzolasyon:** Botların web'den topladığı "Kupon Radarı" ile kullanıcıların paylaştığı "Topluluk Kuponları" tamamen izole sekmelerde sunulur.
 * **Topluluk Koruması (Fail-Safe):** Kazıma işlemi web kuponlarını yenilerken `kaynakTipi == 'topluluk'` olan kullanıcı paylaşımlarına asla dokunmaz.
-* **Akıllı Sıralama (Wilson Score & Time Decay):** Oylanan kuponlar güvenilirlik puanına göre en üste taşınır; çalışmayan kuponlar otomatik olarak listenin sonuna atılır veya silinir.
+* **Akıllı Sıralama (Wilson Score & Time Decay):** Oylanan kuponlar güvenilirlik puanına göre en üste taşınır; çalışmayan kuponlar otomatik olarak listenin sonuna atılır (web kuponlarının oyla silinmesi kurallar tarafından engellenir, bkz. §4.2).
 * **İdempotent Oylama (Vote Idempotency):** Alt koleksiyon (`kuponlar/{id}/votes/{uid}`) ve Firestore Transaction mekanizması sayesinde mükerrer oy kullanımı engellenir.
 * **Dinamik Uzaktan Şalter (Remote Feature Switch):** `settings/app` dokümanı üzerinden tek tıkla mobil uygulamadaki kuponlar sekmesi kapatılıp açılabilir.
 
@@ -59,9 +59,7 @@ graph TD
 
 ## 2. 📱 Mobil İstemci ve Kullanıcı Deneyimi (UI/UX)
 
-> 🔗 **Detaylı Referans Dokümanları:**
-> - [Kupon Modülü Ürün Yol Haritası](file:///d:/firsatkolik/documentation/kuponlar/kupon-feature.md) — Orijinal kupon gereksinimleri ve kart mimarisi.
-> - [İki Sekmeli Kupon ve Oylama Yol Haritası](file:///d:/firsatkolik/documentation/kuponlar/kupon-new-feature.md) — Topluluk vs Botkolik Radarı sekmeleri ve canlı Sıcak/Soğuk oylama UX kuralları.
+> 🔗 İlk ürün tasarımı notları (eski `kupon-feature.md`, `kupon-new-feature.md`) `_arsiv/kuponlar/` altına taşındı.
 
 Kuponlar arayüzü [KuponlarPage](file:///d:/firsatkolik/lib/screens/kuponlar_page.dart) ve [KuponFormPage](file:///d:/firsatkolik/lib/screens/kupon_form_page.dart) ekranları üzerinden sunulur.
 
@@ -140,7 +138,7 @@ graph TD
 
 ### 2.4. Çentikli Form Tasarımı ([KuponFormPage](file:///d:/firsatkolik/lib/screens/kupon_form_page.dart))
 Resmi FırsatKolik tasarım sistemine uygun çentikli kutu (Notched / Fieldset Box) mimarisiyle 3 bölümden oluşur:
-1. *Mağaza ve Kupon Bilgileri:* 20 popüler mağaza seçici dropdown, başlık metin kutusu.
+1. *Mağaza ve Kupon Bilgileri:* popüler mağaza seçici dropdown (`_populerMagazalar`, `kupon_form_page.dart:32`), başlık metin kutusu.
 2. *Kupon Kodu ve Geçerlilik:* Büyük/küçük harf duyarlılığı (case-sensitivity) korunan kupon kodu kutusu (`TextCapitalization.none`), isteğe bağlı `DatePicker` son kullanma tarihi seçicisi. Kodlar büyük harfe zorlanmaz, e-ticaret sitelerindeki orijinal yazım biçimi korunur.
 3. *Kupon Koşulları & Notlar:* Alt limit ve sepet şartlarını içeren çok satırlı metin alanı.
 4. *Sticky Alt Gönderim Çubuğu:* Yükleme animasyonlu ve çift tıklama korumalı onay butonu.
@@ -201,19 +199,20 @@ Kupon oylama sistemi ([KuponService.setKuponVote](file:///d:/firsatkolik/lib/ser
 2. Kullanıcı art arda tıklasa dahi `_couponVoteDebounceTimers` 300ms bekleyerek yalnızca son kararı Firestore'a gönderir.
 3. Kullanıcı aynı butona tekrar basarsa oyu geri alınır (Toggle Off).
 
-### 4.2. Firestore Transaction ve Atomik Oy Kaydı
-Veritabanında her kullanıcının oyu `kuponlar/{kuponId}/votes/{userId}` yolunda saklanır. Transaction akışı:
-1. Kupon dokümanı ve kullanıcının önceki oy dokümanı okunur.
-2. Önceki oy varsa sayacı 1 azaltılır; yeni oy eklenir veya oy tamamen silinir.
-3. **Otomatik Arşivleme ve Temizlik:**
-   - Eğer $\text{sogukOy} - \text{sicakOy} \ge 5$ (Net Skor $\le -5$) ise:
-     - **Web Kuponu (`kaynakTipi == 'web'`):** Kupon veritabanından **tamamen silinir** (`transaction.delete(kuponRef)`).
-     - **Topluluk Kuponu (`kaynakTipi == 'topluluk'`):** Kuponun durumu `durum = 'gecersiz'` yapılır. Arayüzde %50 opaklığa düşürülerek listenin en sonuna atılır.
-   - Eğer topluluk kuponu sonradan gelen sıcak oylarla toparlanırsa ($\text{sogukOy} - \text{sicakOy} < 5$), durumu tekrar `aktif` yapılır.
+### 4.2. Kilitsiz Atomik Pipeline ve Subcollection İzolasyonu (FS-08)
+Veritabanında her kullanıcının oyu `kuponlar/{kuponId}/votes/{userId}` alt dokümanında saklanır. Eşzamanlılık ve viral çekişmeyi (contention) önleyen mimari akış:
+1. Kullanıcının mevcut oyu izole alt dokümandan kilit olmadan okunur (`voteRef.get()`).
+2. Eski oy ve yeni oya göre `hotDelta` ve `coldDelta` (-1, 0, +1) hesaplanır.
+3. Kullanıcı oy dokümanı `WriteBatch` içinde güncellenir (`batch.set`) veya silinir (`batch.delete`).
+4. Ana kupon dokümanı (`kuponlar/{kuponId}`) kilitlenen `runTransaction` yerine doğrudan Firestore'un sunucu seviyesinde dahili kuyruklu `FieldValue.increment(delta)` atomik operatörüyle güncellenir.
+5. **Kural ve Yetki Uyumu (FS-01 & P0-06):** İstemci tarafı güvenlik kuralları ([`firestore.rules:376-381`](file:///d:/firsatkolik/firestore.rules#L376-L381)) gereğince yalnızca `sicakOySayisi` ve `sogukOySayisi` alanlarını günceller. Web kuponu silme veya durum değiştirme yetkisi istemcide değil, Admin ve Cloud Function tarafındadır.
+6. **Otomatik Sıralama ve Arşivleme:** Net skoru $\le -5$ olan veya süresi dolan kuponlar silinmez; `sortingGroup` (Grup 3) algoritmasıyla arayüzde otomatik olarak en alta taşınır ve %50 opaklığa düşürülür.
 
 ---
 
 ### 4.3. 🛡️ Doğrulanmış Testçi (Proof-of-Access) İlkesi ve Manipülasyon Koruması
+> ⚠️ **Yalnızca istemci tarafı:** Aşağıdaki kurallar `CouponCreditService` içinde SharedPreferences ve cihaz saatiyle uygulanır; sunucuda karşılığı yoktur. Kodlar herkese açık okunur (`firestore.rules:317`) ve push payload'larında gider (`functions/index.js:1421,1539,2224`); kilit kozmetiktir ve atlatılabilir → , ödüllü reklam kilidi fail-open. Rewarded reklam için sunucu doğrulaması (SSV) yoktur.
+
 Kupon oylama sisteminin dürüstlüğü ve Wilson Score kalitesini korumak için katı erişim kuralları uygulanır ([CouponCreditService.canVoteOnCoupon](file:///d:/firsatkolik/lib/services/coupon_credit_service.dart)):
 1. **Kodu Görmeden Oylama Yapılamaz:** Bir kullanıcı kodunu açmadığı ve mağazada denemediği bir kupon için Sıcak (🔥) veya Soğuk (❄️) oyu veremez. Kilitli kuponda oy butonuna basıldığında `_showUnlockToVoteBottomSheet` açılır; kullanıcıya topluluk doğrulama ilkesi açıklanarak kuponu 1 hak ile (veya video izleyerek) açma seçeneği sunulur.
 2. **Kendi Kuponunu Oylama Engeli (Self-Vote Prevention):** Topluluk sekmesinde kuponu paylaşan kullanıcı (`kupon.paylasanKullaniciId == currentUser.uid`), kendi paylaştığı kupona yapay sıcak oy veremez ("Kendi paylaştığın kuponu oylayamazsın 😊" uyarısı alır).
@@ -282,7 +281,7 @@ Kupon kayıtları Firestore'da kök düzeydeki `kuponlar` koleksiyonunda saklan�
 
 | Alan Adı | Tip | Zorunlu | Açıklama ve İş Kuralları |
 | :--- | :--- | :--- | :--- |
-| `magazaAdi` | `String` | Evet | 20 desteklenen mağazadan biri (Örn: `Trendyol`, `Amazon`, `Hepsiburada`). |
+| `magazaAdi` | `String` | Evet | `SUPPORTED_STORES` listesindeki 19 mağazadan biri (kazıyıcı için; kullanıcı formundaki liste ayrıdır) (Örn: `Trendyol`, `Amazon`, `Hepsiburada`). |
 | `baslik` | `String` | Evet | Kuponun ana vaat başlığı (Örn: "100 TL İndirim"). |
 | `aciklama` | `String` | Hayır | Kuponun kullanım koşulları ve alt limit şartları. |
 | `kuponKodu` | `String` | Evet | Kullanıcının panoya kopyalayacağı büyük harfli indirim kodu. |
@@ -303,34 +302,36 @@ Kupon kayıtları Firestore'da kök düzeydeki `kuponlar` koleksiyonunda saklan�
 Kupon verileri [firestore.rules](file:///d:/firsatkolik/firestore.rules) içerisinde aşağıdaki kurallarla korunur:
 
 ```javascript
-// ========================================
-// KUPONLAR COLLECTION
-// ========================================
+// firestore.rules:359-391
 match /kuponlar/{kuponId} {
-  // Herkes kuponları okuyabilir
-  allow read: if true;
-  
-  // Giriş yapmış ve engellenmemiş kullanıcılar topluluk kuponu ekleyebilir
-  allow create: if canWrite();
-  
-  // Sahibi veya admin tüm alanları güncelleyebilir/silebilir.
-  // Giriş yapmış herhangi bir kullanıcı sadece oy sayaçlarını ve durumu güncelleyebilir.
-  allow update: if isAuthenticated() && (
-    resource.data.paylasanKullaniciId == userId() ||
-    isAdmin() ||
-    request.resource.data.diff(resource.data).affectedKeys()
-      .hasOnly(['sicakOySayisi', 'sogukOySayisi', 'durum'])
+  allow read: if true;                       // kupon kodları dahil herkese açık
+  allow create: if canWrite() && 
+                !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) && (
+      isAdmin() || (
+        request.resource.data.paylasanKullaniciId == userId() &&
+        (!('durum' in request.resource.data) || request.resource.data.durum == 'beklemede') &&
+        (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi == 0) &&
+        (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi == 0)
+      )
   );
-  
+  // P0-06 & FS-01: Durum onayı yalnızca isAdmin()'e aittir; kullanıcı durum değiştiremez
+  allow update: if canWrite() && (
+      isAdmin() ||
+      (resource.data.paylasanKullaniciId == userId() &&
+       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['paylasanKullaniciId', 'sicakOySayisi', 'sogukOySayisi', 'durum'])) ||
+      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sicakOySayisi', 'sogukOySayisi']) &&
+       isValidDelta('sicakOySayisi') && isValidDelta('sogukOySayisi') &&
+       request.resource.data.sicakOySayisi >= 0 && request.resource.data.sogukOySayisi >= 0)
+  );
   allow delete: if isAuthenticated() && (resource.data.paylasanKullaniciId == userId() || isAdmin());
-
-  // Votes subcollection - kullanıcının kendi oy kaydı
   match /votes/{voteUserId} {
     allow read: if isAuthenticated();
     allow write: if canWrite() && userId() == voteUserId;
   }
 }
 ```
+
+* **FS-01 & FS-08 Çözümü (🟢):** İstemciden kupon silme veya durum değiştirme girişimleri tamamen kaldırılmıştır. `KuponService.setKuponVote` yalnızca `firestore.rules` tarafından izin verilen `sicakOySayisi` ve `sogukOySayisi` alanlarını `FieldValue.increment` ile kilitsiz ve çekişmesiz güncelleyecek şekilde yapılandırılmıştır. -5 net skor altındaki kuponlar silinmek yerine `sortingGroup` algoritmasıyla anında en alta taşınmakta ve arayüzde filtrelenmektedir.
 
 ---
 
@@ -342,7 +343,7 @@ Kupon kazıma ve senkronizasyon motoru iki Cloud Function ile yönetilir ([funct
 * **Tetikleyici:** Cloud Pub/Sub Cron.
 * **Çalışma Zamanı:** Her gün gece **04:00** (Europe/Istanbul: `0 4 * * *`).
 * **Kaynak Yapılandırması:** `timeoutSeconds: 540` (9 dakika), `memory: '1GB'`.
-* **İşleyiş:** 3 farklı web kaynağından kuponları çeker, mükerrerleri eler, eski web kuponlarını siler ve yenilerini yazar.
+* **İşleyiş:** 3 farklı web kaynağından kuponları çeker, mükerrerleri eler, önce yenilerini yazar, sonra eski `web` kuponlarını siler (`limit(500)` ile sınırlı). Çalışma `systemLocks/coupon_scraping` dağıtık kilidi (15 dk lease) altındadır (`index.js:4376`). Her çalışmada yeni rastgele doküman ID'leri üretilir; kısmi kaynak hatasında iyi veri silinebilir.
 
 ### 8.2. Manuel Yönetici Tetikleyicisi (`scrapeCouponsManual`)
 * **Tetikleyici:** HTTPS Callable (`functions.https.onCall`).
@@ -350,18 +351,24 @@ Kupon kazıma ve senkronizasyon motoru iki Cloud Function ile yönetilir ([funct
 * **Kaynak Yapılandırması:** `timeoutSeconds: 540`, `memory: '1GB'`.
 * **Kullanım:** Web Admin panelinde "Kupon Scrape Et" butonuna basıldığında tetiklenir.
 
-### 8.3. Topluluk Kuponları Bildirim Motoru (`onCouponCreated` & NOTIF-15)
-* **Tetikleyici:** Firestore `kuponlar/{kuponId}` (onCreate).
-* **Filtreler:**
-  - `kaynakTipi === 'topluluk'` (Web kazıma kaynaklı kuponlar için bildirim üretilmez).
-  - `durum !== 'gecersiz'` (Geçersiz durumdaki kuponlar elenir).
-  - `userId !== paylasanKullaniciId` (Kendi paylaştığı kupon için kullanıcıya bildirim gönderilmez).
-  - `containsProfanity` (Kupon başlığında veya mağazada küfür/argo tespiti durumunda bildirim iptal edilip kupon geçersizleştirilir).
-* **Dağıtım Mimarisi (Hibrit Kurşun Geçirmez Model):**
-  - **1. Anlık Global FCM Topic Yayını (`topic: 'community_coupons'`):** Tüm topluluk üyelerine Google'ın FCM CDN ağı üzerinden tek API çağrısıyla 1 ms'de anlık push gönderilir ($0 ek maliyet, 0 Cloud Function fan-out çığı).
-  - **2. Bounded Feed Yazımı (Mağaza & Yazar Takipçileri):** İlgili mağazayı veya yazarı takip eden kullanıcıların uygulama içi Bildirim Kutusu'na (`users/{userId}/notifications/coupon_{kuponId}_{userId}`) doküman yazılır (azami 300 tavanı, `isTopicDelivered: true`).
-  - **3. De-duplication Kalkanı:** Dokümanda `isTopicDelivered: true` olduğu için `onNotificationCreated` tetiklendiğinde `delivered_via_topic` ile anında kapanır; böylece hem çift bildirim önlenir hem de Cloud Function kaskat çökme riski sıfırlanır.
-  - Bildirime tıklandığında `KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)` ile doğrudan **Topluluk Kuponları** sekmesi açılır. Kullanıcı zaten kuponlar ekranındaysa (`isCouponsScreenActive == true`) ön plan afişi spam korumasıyla bastırılır.
+### 8.3. Topluluk Kuponları Moderasyon ve Bildirim Motoru (`onCouponCreated` & `onCouponUpdated` - FS-01 / FS-02 / NOTIF-15 / NOTIF-16)
+* **Kupon Oluşturma (`onCouponCreated`):**
+  - İstemciden (`KuponFormPage`) paylaşılan topluluk kuponları varsayılan olarak `durum: 'beklemede'` olarak kaydedilir.
+  - Kupon başlığı ve mağaza adı küfür/argo filtresinden (`containsProfanity`) geçirilir; uygunsuzluk durumunda `durum: 'gecersiz'` ve `moderationFlag: true` yapılır.
+  - **FS-01 Moderasyon Kalkanı:** Kupon durumu `beklemede` iken **asla genel push gönderilmez**. Kupon Admin Moderasyon Kuyruğuna alınır.
+  - **👮‍♂️ Admine Anlık Push (NOTIF-16):** Kupon `beklemede` olarak kaydedildiğinde, mobil yöneticilerin abone olduğu `admin_deals` FCM konusuna `type: 'admin_coupon'` (mor rozet `#8E24AA`, `channelId: 'admin_channel'`) anlık push gönderilir. Yöneticinin bildirimine tıklandığında doğrudan mobil [AdminScreen](file:///d:/firsatkolik/lib/screens/admin_screen.dart) Tab 2 (`🎟️ Kupon Onay`) sekmesi açılır.
+* **Admin Onay ve Dağıtım Motoru (`onCouponUpdated`):**
+  - Kupon Admin (Mobil Admin veya Web Admin) tarafından incelenip onaylandığında (`before.durum === 'beklemede' && after.durum === 'aktif'`) devreye girer:
+    1. **FCM Topic Yayını (`topic: 'community_coupons'`):** Türkiye saati 23:00 - 08:00 sessiz saat ve şalter kontrolünden sonra $0 maliyetle tüm topluluk kuponu abonelerine tek API çağrısıyla push fırlatılır. **P0-14 Kalkanı:** Ham kupon kodu push payload'ında asla plaintext iletilmez (`hasCode: true/false`).
+    2. **FS-02 Çift Katmanlı Feed (`globalAnnouncements/coupon_{kuponId}`):** Onaylanan kupon tekil küresel duyuru olarak kaydedilir (TTL: kupon bitiş tarihi veya +7 gün). İstemcideki `FirestoreService.getNotificationsStream` dual-layer feed sayesinde **tüm kullanıcıların Bildirim Merkezinde (AdminNotificationsScreen) anında listelenir**.
+    3. **Yazara Onay Bildirimi & Puan Ödülü (`submission_status`):** Kupon sahibine `"🎉 Kuponunuz Onaylandı!"` bildirimi yazılır. Sunucu otoritesiyle kullanıcıya **+10 topluluk katkı puanı** ve `couponCount` artışı atanır.
+    4. **300 Tavanlı Hedefli Abone Feed'i:** İlgili mağazayı ve yazarı takip eden kullanıcıların kişisel bildirim kutusuna doküman yazılır (`isTopicDelivered: true`, `announcementId: coupon_{kuponId}`). Bellekte `announcementId` üzerinden tekilleştirildiği için mükerrer kart görünmez.
+* **Admin Red Geçişi (`onCouponUpdated`, `beklemede -> reddedildi`):**
+  - Kupon sahibine `"ℹ️ Kuponunuz Reddedildi"` bildirimi yazılır ve yöneticinin seçtiği red gerekçesi (`moderationReason`) iliştirilir.
+  - Kuponun önceden oluşturulmuş küresel duyurusu varsa yayından kaldırılır (`active: false`).
+  - Kullanıcı Bildirim Merkezinde reddedilen kupona tıkladığında turuncu rozetli detay modalında gerekçe kutusunu görür; pasif/reddedilmiş kupon için aksiyon butonları gizlenir.
+* **Otomatik Çöp Temizliği:** Soğuk oy farkı >= 5 olduğunda topluluk kuponları otomatik `gecersiz` yapılır, web kuponları silinir. Net skor < 5'e toparlanırsa tekrar `aktif` yapılır.
+* **Tıklama Davranışı:** Bildirime tıklandığında `KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)` ile doğrudan **Topluluk Kuponları** sekmesi açılır. Hedef kart 3.6 saniye boyunca radar ışımasıyla parlar. Kullanıcı zaten kuponlar ekranındaysa (`isCouponsScreenActive == true`) ön plan afişi spam korumasıyla bastırılır.
 
 ---
 
@@ -384,8 +391,8 @@ graph TD
     S3 --> Dedup3[seenCodes Set: Yeni Olanları Ekle]
     
     Dedup3 --> Order[⏱️ Sıralama Düzeltmesi: 1'er Saniyelik Aralıklarla Timestamp Üretimi]
-    Order --> DelOld[🧹 Firestore: kaynakTipi=='web' 500'lük Batch Silme]
-    DelOld --> WriteNew[📝 Firestore: Yeni Kuponları 500'lük Batch Yazma]
+    Order --> WriteNew[📝 Firestore: Yeni Kuponları 400'lük Batch Yazma]
+    WriteNew --> DelOld[🧹 Firestore: eski kaynakTipi=='web' kayıtlar, limit 500, 400'lük Batch Silme]
 ```
 
 ### 9.1. Kaynak Detayları ve Ayrıştırma Yöntemleri:
@@ -411,61 +418,70 @@ Web Admin panelinde [couponsView](file:///d:/firsatkolik/web/admin/app.js) üzer
 * **Canlı Tablo Dinleyicisi (`loadCoupons`):** `db.collection('kuponlar').orderBy('olusturulmaTarihi', 'desc').onSnapshot` ile tüm kuponları listeler.
 * **Anlık Arama Filtresi:** Mağaza, başlık veya kupon koduna göre istemci tarafında canlı arama.
 * **Kupon Ekleme / Düzenleme Modalı (`openAddCouponModal`, `editCoupon`):** Yöneticinin panelden doğrudan yeni kupon eklemesini veya mevcut kuponları güncellemesini sağlar.
-* **Tekil Silme ve Toplu Temizleme (`deleteAllCoupons`):** 500'lük batch parçalarıyla tüm kuponları veritabanından kalıcı olarak silme.
+* **Tekil Silme ve Toplu Temizleme (`deleteAllCoupons`):** 400'lük batch parçalarıyla tüm kuponları veritabanından kalıcı olarak silme.
 * **Manuel Scrape Tetikleme (`scrapeCouponsBtn`):** `scrapeCouponsManual` fonksiyonunu çalıştırarak web kuponlarını anında yeniler.
 * **Modül Açma/Kapatma Şalteri (`toggleCouponsEnabled`):** `settings/app` üzerinden mobil kupon sekmesini kapatıp açar.
 
 ---
 
-## 10.5. 🔔 Topluluk Kuponları Bildirim Entegrasyonu (NOTIF-15)
+## 10.5. 🔔 Topluluk Kuponları Bildirim Entegrasyonu (NOTIF-15 & NOTIF-16)
 
-Topluluk üyeleri tarafından `KuponFormPage` üzerinden paylaşılan kuponlar, platform genelindeki bildirim motoruna entegre edilmiştir.
+Topluluk üyeleri tarafından `KuponFormPage` üzerinden paylaşılan kuponlar, platform genelindeki bildirim motoruna tam simetrik olarak entegre edilmiştir.
 
 ### Mimari Akış:
-```
-[Kullanıcı Kupon Paylaştı] (kuponlar/{kuponId}, kaynakTipi: 'topluluk')
-        │
-        ▼
-[Cloud Functions: onCouponCreated]
-  ├─ kaynakTipi === 'topluluk' ve durum !== 'gecersiz' filtresi
-  ├─ Paylaşan kullanıcı hariç (self-notification koruması)
-  └─ users/{userId}/notifications/coupon_{kuponId}_{userId} batch yazımı
-        │
-        ▼
-[Merkezi Push Motoru: onNotificationCreated]
-  ├─ communityNotificationsEnabled kontrolü
-  ├─ Sessiz saatler filtresi
-  └─ FCM Push: 🎟️ [Mağaza] Kuponu! (channelId: sicak_firsatlar_general_v2, renk: #8E24AA)
-        │
-        ▼
-[Mobil İstemci Yönlendirme]
-  ├─ Ön Planda: isCouponsScreenActive ise BASTIRILIR, değilse mor InAppMessageBanner
-  └─ Tıklandığında: KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)
+```mermaid
+graph TD
+    UserShare[👤 Kullanıcı Kupon Paylaştı: KuponFormPage] --> FirestoreKupon[📝 kuponlar/{id}: durum='beklemede']
+    FirestoreKupon --> OnCreated[⚡ Cloud Functions: onCouponCreated]
+    
+    OnCreated --> ProfanityCheck{Küfür/Argo Filtresi}
+    ProfanityCheck -->|Uygunsuz| Flagged[durum='gecersiz' & moderationFlag=true]
+    ProfanityCheck -->|Temiz| AdminPush[👮‍♂️ FCM Topic: admin_deals - type: 'admin_coupon']
+    
+    AdminPush --> AdminScreen[📱 AdminScreen: Tab 2 - 🎟️ Kupon Onay]
+    
+    AdminScreen --> AdminDecision{Yönetici Kararı}
+    AdminDecision -->|Onayla & Push| Approved[durum='aktif']
+    AdminDecision -->|Reddet| Rejected[durum='reddedildi' & redNedeni]
+    
+    Approved --> OnUpdated[⚡ Cloud Functions: onCouponUpdated]
+    Rejected --> OnUpdatedRej[⚡ Cloud Functions: onCouponUpdated]
+    
+    OnUpdated --> TopicPush[📢 FCM Topic: community_coupons - Ham Kodsuz P0-14]
+    OnUpdated --> GlobalDoc[🌐 globalAnnouncements/coupon_{id} - FS-02 Çift Katmanlı Feed]
+    OnUpdated --> AuthorReward[🎉 Yazara Onay Bildirimi + 10 Puan & couponCount]
+    OnUpdated --> Subscribers[👥 Takipçilere 300 Tavanlı Kişisel Doküman]
+    
+    OnUpdatedRej --> AuthorRej[ℹ️ Yazara Red Bildirimi + moderationReason]
+    
+    GlobalDoc --> NotifCenter[📋 Tüm Kullanıcıların Bildirim Merkezi]
+    TopicPush --> UserTap[📱 Kilit Ekranı Push Tıklaması]
+    UserTap --> KuponPage[🎟️ KuponlarPage: Tab 1 - 3.6s Radar Işıma Efekti]
 ```
 
 ### Bildirim Payload Yapısı:
-| Alan | Değer |
-| :--- | :--- |
-| `type` | `coupon` |
-| `reason` | `community` |
-| `kuponId` | Kupon doküman ID'si |
-| `magazaAdi` | Mağaza adı |
-| `kuponKodu` | İndirim kodu |
-| `authorName` | Paylaşan kullanıcı adı |
-| `authorId` | Paylaşan kullanıcı ID'si |
+| Alan | Değer | Açıklama |
+| :--- | :--- | :--- |
+| `type` | `coupon` / `community_coupon` / `admin_coupon` | Bildirim türü |
+| `reason` | `community` | Tetiklenme gerekçesi |
+| `kuponId` | Kupon doküman ID'si | Derin linkleme hedefi |
+| `magazaAdi` | Mağaza adı | Başlık ve rozet gösterimi |
+| `hasCode` | `'true'` / `'false'` | **P0-14 Güvenlik Kalkanı:** Açık kod push payload'ına konmaz |
+| `authorName` | Paylaşan kullanıcı adı | Başlık metni |
+| `authorId` | Paylaşan kullanıcı ID'si | Yazar referansı |
 
 ### Kullanıcı Tercih Kontrolü:
-- **`communityNotificationsEnabled: true`** → Push gönderilir
-- **`communityNotificationsEnabled: false`** → Push engellenir (`disabled_by_user_group_community`), Bildirim Merkezinde kalır
-- **`pushMasterEnabled: false`** → Tüm push'lar engellenir (`disabled_by_user_master_switch`)
+- **`communityNotificationsEnabled: true`** → Topic ve in-app kupon bildirimleri aktif
+- **`communityNotificationsEnabled: false`** → İstemci `community_coupons` topic aboneliğinden çıkar; Bildirim Merkezinde dual-layer feed ile sessizce listelenir
+- **`pushMasterEnabled: false`** → Tüm push bildirimleri cihaz düzeyinde kapatılır
 
-> 🔗 **Detaylı bildirim senaryosu:** [NOTIF-15 — Bildirim Senaryoları Rehberi](file:///d:/firsatkolik/documentation/bildirimler/notification_scenarios.md)
+> 🔗 **Detaylı bildirim senaryoları:** [NOTIF-15 & NOTIF-16 — Bildirim Senaryoları Rehberi](file:///d:/firsatkolik/documentation/bildirimler/notification_scenarios.md)
 
 ---
 
 ## 11. 🧪 Test, Doğrulama ve Operasyonel İzleme
 
-Modülün çalışabilirliği [functions/tests/](file:///d:/firsatkolik/functions/tests/) altındaki test betikleriyle doğrulanır:
+Modülün çalışabilirliği [functions/tests/](file:///d:/firsatkolik/functions/tests) altındaki test betikleriyle doğrulanır:
 
 | Test Dosyası | Test Edilen Senaryo |
 | :--- | :--- |
