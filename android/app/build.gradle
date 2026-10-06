@@ -36,7 +36,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace "com.sicakfirsatlar.sicak_firsatlar"
     compileSdkVersion 36
-    ndkVersion "28.2.13676358"
+    ndkVersion flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -128,10 +128,6 @@ android {
             // Crash raporları için debug bilgileri koru
             ndk {
                 debugSymbolLevel 'FULL'
-            }
-
-            firebaseCrashlytics {
-                mappingFileUploadEnabled false
             }
         }
         
