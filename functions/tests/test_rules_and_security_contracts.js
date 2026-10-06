@@ -1072,8 +1072,171 @@ console.log('\n--- TEST 31: P1-34 & P1-37 CI Araç Pinleme ve TestFlight Esnekli
   console.log('✅ TEST 31 BAŞARILI: P1-34 CI araç zinciri sürüm sabitleme ve P1-37 TestFlight esnekliği doğrulandı.');
 }
 
+// ==============================================================================
+// TEST 32: FS-08 — Kilitsiz Atomik Oylama ve Transaction Çekişmesi Tasfiyesi Sözleşmesi
+// ==============================================================================
+console.log('\n--- TEST 32: FS-08 Kilitsiz Atomik Oylama ve Transaction Çekişmesi Tasfiyesi Sözleşmesi ---');
+{
+  const dealServiceCode = fs.readFileSync(
+    path.join(__dirname, '../../lib/services/deal_service.dart'),
+    'utf8'
+  );
+  const kuponServiceCode = fs.readFileSync(
+    path.join(__dirname, '../../lib/services/kupon_service.dart'),
+    'utf8'
+  );
+
+  // 1. deal_service.dart oylama fonksiyonlarında runTransaction kullanılmadığını doğrula
+  const updateVoteBlock = dealServiceCode.substring(
+    dealServiceCode.indexOf('Future<bool> _updateVoteInternal'),
+    dealServiceCode.indexOf('Future<bool> addHotVote')
+  );
+  assert.strictEqual(
+    updateVoteBlock.includes('runTransaction'),
+    false,
+    '_updateVoteInternal içinde runTransaction OLMAMALIDIR (FS-08 Kilitsiz Pipeline)'
+  );
+  assert.ok(
+    updateVoteBlock.includes('FieldValue.increment'),
+    '_updateVoteInternal sayaçları FieldValue.increment ile güncellemeli'
+  );
+  assert.ok(
+    updateVoteBlock.includes('batch.commit()'),
+    '_updateVoteInternal atomik WriteBatch kullanmalı'
+  );
+
+  // 2. addExpiredVote ve removeExpiredVote fonksiyonlarında runTransaction kullanılmadığını doğrula
+  const expiredVoteBlock = dealServiceCode.substring(
+    dealServiceCode.indexOf('Future<bool> addExpiredVote'),
+    dealServiceCode.indexOf('Future<bool> hasUserVotedExpired')
+  );
+  assert.strictEqual(
+    expiredVoteBlock.includes('runTransaction'),
+    false,
+    'addExpiredVote/removeExpiredVote içinde runTransaction OLMAMALIDIR (FS-08 Kilitsiz Pipeline)'
+  );
+  assert.ok(
+    expiredVoteBlock.includes('FieldValue.increment'),
+    'expiredVotes sayaçları FieldValue.increment ile güncellemeli'
+  );
+
+  // 3. kupon_service.dart setKuponVote ve voteKupon metodlarında runTransaction kullanılmadığını doğrula
+  const kuponVoteBlock = kuponServiceCode.substring(
+    kuponServiceCode.indexOf('Future<bool> setKuponVote'),
+    kuponServiceCode.indexOf('Future<String?> getUserKuponVote')
+  );
+  assert.strictEqual(
+    kuponVoteBlock.includes('runTransaction'),
+    false,
+    'setKuponVote/voteKupon içinde runTransaction OLMAMALIDIR (FS-08 Kilitsiz Pipeline)'
+  );
+  assert.ok(
+    kuponVoteBlock.includes('FieldValue.increment'),
+    'Kupon oy sayaçları FieldValue.increment ile güncellemeli'
+  );
+  assert.ok(
+    kuponVoteBlock.includes('batch.commit()'),
+    'setKuponVote atomik WriteBatch kullanmalı'
+  );
+
+  // 4. Kupon ana doküman güncellemesinde firestore.rules sınırlarına sadık kalındığını (updatedAt eklenmediğini) doğrula
+  assert.strictEqual(
+    kuponVoteBlock.includes("kuponUpdates['updatedAt']"),
+    false,
+    "kuponUpdates içinde updatedAt bulunmamalıdır (firestore.rules hasOnly(['sicakOySayisi', 'sogukOySayisi']) kalkanı)"
+  );
+
+  console.log('✅ TEST 32 BAŞARILI: FS-08 kilitsiz atomik oylama, FieldValue.increment ve alt doküman izolasyon sözleşmesi doğrulandı.');
+}
+
+// ==============================================================================
+// TEST 33: FS-09 — Anasayfa SWR + Cache-First, Infinite Scroll & Floating Pill Sözleşmesi
+// ==============================================================================
+console.log('\n--- TEST 33: FS-09 SWR, Sayfalama ve Floating Pill Sözleşmesi ---');
+{
+  const dealServiceCode = fs.readFileSync(path.join(__dirname, '../../lib/services/deal_service.dart'), 'utf8');
+  const firestoreServiceCode = fs.readFileSync(path.join(__dirname, '../../lib/services/firestore_service.dart'), 'utf8');
+  const homeScreenCode = fs.readFileSync(path.join(__dirname, '../../lib/screens/home_screen.dart'), 'utf8');
+  const indexesJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../../firestore.indexes.json'), 'utf8'));
+
+  // 1. deal_service.dart içinde getDealsPaginated ve getLatestDealStream sözleşmesi
+  assert.ok(
+    dealServiceCode.includes('class DealsPageResult'),
+    'DealsPageResult modeli deal_service.dart içinde tanımlı olmalıdır'
+  );
+  assert.ok(
+    dealServiceCode.includes('Future<DealsPageResult> getDealsPaginated'),
+    'getDealsPaginated metodu deal_service.dart içinde tanımlı olmalıdır'
+  );
+  assert.ok(
+    dealServiceCode.includes('Stream<Deal?> getLatestDealStream'),
+    'getLatestDealStream metodu limit(1) dinleyici olarak tanımlı olmalıdır'
+  );
+  assert.ok(
+    dealServiceCode.includes('limit(1)'),
+    'getLatestDealStream tam olarak limit(1) kullanmalıdır'
+  );
+
+  // 2. firestore_service.dart delegasyon sözleşmesi
+  assert.ok(
+    firestoreServiceCode.includes('Future<DealsPageResult> getDealsPaginated'),
+    'firestore_service.dart getDealsPaginated metodunu dışa açmalıdır'
+  );
+  assert.ok(
+    firestoreServiceCode.includes('Stream<Deal?> getLatestDealStream'),
+    'firestore_service.dart getLatestDealStream metodunu dışa açmalıdır'
+  );
+
+  // 3. home_screen.dart içinde sürekli açık 100-item WebSocket stream akışının kaldırıldığını doğrula
+  assert.strictEqual(
+    homeScreenCode.includes('StreamBuilder<DealsSnapshot>'),
+    false,
+    'home_screen.dart içinde anasayfa akışında StreamBuilder<DealsSnapshot> OLMAMALIDIR (FS-09)'
+  );
+  assert.ok(
+    homeScreenCode.includes('_fetchInitialDeals'),
+    'home_screen.dart _fetchInitialDeals metodunu barındırmalıdır'
+  );
+  assert.ok(
+    homeScreenCode.includes('Source.cache') && homeScreenCode.includes('Source.server'),
+    'home_screen.dart SWR mimarisi gereği önce Source.cache sonra Source.server çalıştırmalıdır'
+  );
+  assert.ok(
+    homeScreenCode.includes('_loadMoreDeals'),
+    'home_screen.dart sonsuz kaydırma için _loadMoreDeals metodunu barındırmalıdır'
+  );
+  assert.ok(
+    homeScreenCode.includes('_buildNewDealsFloatingPill'),
+    'home_screen.dart Glassmorphic yüzen hap butonu (_buildNewDealsFloatingPill) barındırmalıdır'
+  );
+  assert.ok(
+    homeScreenCode.includes('_listenToLatestDeal'),
+    'home_screen.dart limit(1) dinleyicisi için _listenToLatestDeal metodunu çalıştırmalıdır'
+  );
+
+  // 4. firestore.indexes.json içinde bileşik indekslerin varlığını doğrula
+  const indexes = indexesJson.indexes || [];
+  const hasApprovedCreatedIndex = indexes.some(idx =>
+    idx.collectionGroup === 'deals' &&
+    idx.fields.some(f => f.fieldPath === 'isApproved') &&
+    idx.fields.some(f => f.fieldPath === 'createdAt') &&
+    !idx.fields.some(f => f.fieldPath === 'category')
+  );
+  const hasCategoryIndex = indexes.some(idx =>
+    idx.collectionGroup === 'deals' &&
+    idx.fields.some(f => f.fieldPath === 'isApproved') &&
+    idx.fields.some(f => f.fieldPath === 'category') &&
+    idx.fields.some(f => f.fieldPath === 'createdAt')
+  );
+
+  assert.ok(hasApprovedCreatedIndex, 'deals koleksiyonunda isApproved + createdAt indeksi mevcut olmalıdır');
+  assert.ok(hasCategoryIndex, 'deals koleksiyonunda isApproved + category + createdAt indeksi mevcut olmalıdır');
+
+  console.log('✅ TEST 33 BAŞARILI: FS-09 SWR, pagination, floating pill ve Firestore indeks sözleşmesi doğrulandı.');
+}
+
 console.log('\n======================================================');
-console.log('🎉 FAZ 1, FAZ 2, FAZ 3 VE FAZ 4 TÜM SÖZLEŞME TESTLERİ (31/31) %100 GEÇTİ!');
+console.log('🎉 FAZ 1, FAZ 2, FAZ 3 VE FAZ 4 TÜM SÖZLEŞME TESTLERİ (33/33) %100 GEÇTİ!');
 console.log('======================================================');
 
 

@@ -167,7 +167,8 @@ class DomainAllowlistService {
     'onelink.me',
     'paylaskazan.teknosa.com',
     'rdr.btrck.com',
-    'incehesap.com/u/'
+    'incehesap.com/u/',
+    'fenom.io'
   ];
 
   /// Verilen URL'nin domain'inin (hostname) allowlist'te olup olmadığını kontrol eder.
@@ -225,6 +226,9 @@ class DomainAllowlistService {
       resolved = linkPreviewService.extractAdjustFallback(normalized);
       if (resolved.toLowerCase().contains('sl.n11.com/n/') || resolved.toLowerCase().contains('n11.com/n/')) {
         resolved = await linkPreviewService.resolveN11ShortLink(resolved);
+      }
+      if (resolved.toLowerCase().contains('fenom.io')) {
+        resolved = await linkPreviewService.resolveFenomShortLink(resolved);
       }
       
       final lowerResolved = resolved.toLowerCase();

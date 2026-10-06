@@ -47,6 +47,7 @@ class Deal {
   final String? telegramChatTitle; // Botun yakaladığı Telegram kanalının/sayfasının başlığı (ör. DH Sıcak Fırsatlar)
   final String? telegramChatUsername; // Botun yakaladığı Telegram kullanıcı adı (ör. @dhsicakfirsatlar)
   final String? botSource; // Bot kaynak kodu (ör. telegram_dhsicakfirsatlar)
+  final List<String>? searchKeywords; // Aranabilir kök kelimeler (FS-20 hibrit arama)
 
   Deal({
     required this.id,
@@ -85,6 +86,7 @@ class Deal {
     this.telegramChatTitle,
     this.telegramChatUsername,
     this.botSource,
+    this.searchKeywords,
   });
 
   /// Bir fırsatın Botkolik (otonom bot) tarafından paylaşılıp paylaşılmadığını döner
@@ -436,6 +438,9 @@ class Deal {
       telegramChatTitle: data['telegramChatTitle']?.toString(),
       telegramChatUsername: data['telegramChatUsername']?.toString(),
       botSource: data['botSource']?.toString(),
+      searchKeywords: (data['searchKeywords'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
     );
   }
 
@@ -478,6 +483,7 @@ class Deal {
       if (telegramChatTitle != null) 'telegramChatTitle': telegramChatTitle,
       if (telegramChatUsername != null) 'telegramChatUsername': telegramChatUsername,
       if (botSource != null) 'botSource': botSource,
+      if (searchKeywords != null && searchKeywords!.isNotEmpty) 'searchKeywords': searchKeywords,
     };
   }
 

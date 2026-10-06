@@ -11,8 +11,27 @@ void _log(String message) {
   if (kDebugMode) print(message);
 }
 
+class _CachedUserProfile {
+  final String name;
+  final String imageUrl;
+  final List<String> blockedUsers;
+  final DateTime cachedAt;
+
+  _CachedUserProfile({
+    required this.name,
+    required this.imageUrl,
+    this.blockedUsers = const [],
+    required this.cachedAt,
+  });
+
+  bool get isExpired => DateTime.now().difference(cachedAt) > const Duration(minutes: 10);
+}
+
 class MessageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // FS-21: Mesajlaşma sırasında her mesajda N+1 Firestore user okumasını önleyen in-memory profil önbelleği
+  static final Map<String, _CachedUserProfile> _profileCache = {};
 
   static String getConversationId(String u1, String u2) {
     final list = [u1, u2]..sort();
@@ -47,11 +66,27 @@ class MessageService {
         senderName = 'Zeynep Kaya (Test)';
         senderImageUrl = 'assets/avatars/avatar_duck.webp';
       } else {
-        final senderDoc = await _firestore.collection('users').doc(senderId).get();
-        if (!senderDoc.exists) return null;
-        final sData = senderDoc.data();
-        senderName = sData?['username'] ?? sData?['displayName'] ?? sData?['nickname'] ?? 'Kullanıcı';
-        senderImageUrl = migrateAssetPath((sData?['profileImageUrl'] ?? sData?['photoURL'] ?? '').toString());
+        // FS-21: Gönderen mevcut oturum kullanıcısı ise profil FirebaseAuth bellek önbelleğinden doğrudan alınır (0 okuma)
+        final fbUser = FirebaseAuth.instance.currentUser;
+        if (fbUser != null && fbUser.uid == senderId && fbUser.displayName != null && fbUser.displayName!.trim().isNotEmpty) {
+          senderName = fbUser.displayName!.trim();
+          senderImageUrl = migrateAssetPath(fbUser.photoURL ?? '');
+        } else if (_profileCache.containsKey(senderId) && !_profileCache[senderId]!.isExpired) {
+          final cached = _profileCache[senderId]!;
+          senderName = cached.name;
+          senderImageUrl = cached.imageUrl;
+        } else {
+          final senderDoc = await _firestore.collection('users').doc(senderId).get();
+          if (!senderDoc.exists) return null;
+          final sData = senderDoc.data();
+          senderName = sData?['username'] ?? sData?['displayName'] ?? sData?['nickname'] ?? 'Kullanıcı';
+          senderImageUrl = migrateAssetPath((sData?['profileImageUrl'] ?? sData?['photoURL'] ?? '').toString());
+          _profileCache[senderId] = _CachedUserProfile(
+            name: senderName,
+            imageUrl: senderImageUrl,
+            cachedAt: DateTime.now(),
+          );
+        }
       }
 
       String receiverName = 'Kullanıcı';
@@ -68,23 +103,40 @@ class MessageService {
         receiverName = 'Zeynep Kaya (Test)';
         receiverImageUrl = 'assets/avatars/avatar_duck.webp';
       } else {
-        final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
-        if (!receiverDoc.exists) return null;
-        final rData = receiverDoc.data();
-        // Engellenmişlik kontrolü: Alıcı göndereni engellediyse mesaj gitmez
-        final receiverBlockedList = List<String>.from(rData?['blockedUsers'] ?? []);
-        if (receiverBlockedList.contains(senderId)) {
-          _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
-          return null;
+        // FS-21: Alıcı profili ve engelleme listesi 10 dakikalık in-memory önbellekle korunur
+        if (_profileCache.containsKey(receiverId) && !_profileCache[receiverId]!.isExpired) {
+          final cached = _profileCache[receiverId]!;
+          if (cached.blockedUsers.contains(senderId)) {
+            _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
+            return null;
+          }
+          receiverName = cached.name;
+          receiverImageUrl = cached.imageUrl;
+        } else {
+          final receiverDoc = await _firestore.collection('users').doc(receiverId).get();
+          if (!receiverDoc.exists) return null;
+          final rData = receiverDoc.data();
+          final receiverBlockedList = List<String>.from(rData?['blockedUsers'] ?? []);
+          if (receiverBlockedList.contains(senderId)) {
+            _log('🚫 Alıcı bu kullanıcıyı engellediği için mesaj iletilmedi.');
+            return null;
+          }
+          receiverName = rData?['username'] ?? rData?['displayName'] ?? rData?['nickname'] ?? 'Kullanıcı';
+          receiverImageUrl = migrateAssetPath((rData?['profileImageUrl'] ?? rData?['photoURL'] ?? '').toString());
+          _profileCache[receiverId] = _CachedUserProfile(
+            name: receiverName,
+            imageUrl: receiverImageUrl,
+            blockedUsers: receiverBlockedList,
+            cachedAt: DateTime.now(),
+          );
         }
-        receiverName = rData?['username'] ?? rData?['displayName'] ?? rData?['nickname'] ?? 'Kullanıcı';
-        receiverImageUrl = migrateAssetPath((rData?['profileImageUrl'] ?? rData?['photoURL'] ?? '').toString());
       }
 
       final convId = getConversationId(senderId, receiverId);
       final message = Message(
         id: '',
         conversationId: convId,
+        participants: [senderId, receiverId],
         senderId: senderId,
         senderName: senderName,
         senderImageUrl: senderImageUrl,
@@ -123,96 +175,117 @@ class MessageService {
 
   Stream<List<Message>> getConversationStream(String userId1, String userId2, {int limit = 60}) {
     // userId1 = mevcut kullanıcı (giriş yapmış), userId2 = konuştuğu kişi
+    final effectiveLimit = limit.clamp(10, 100);
+    final convId = getConversationId(userId1, userId2);
+
     late StreamController<List<Message>> controller;
+    StreamSubscription? singleSub;
     StreamSubscription? sentSub;
     StreamSubscription? receivedSub;
+    bool fallbackActive = false;
 
     controller = StreamController<List<Message>>(
       onListen: () {
-        List<Message> sentMessages = [];
-        List<Message> receivedMessages = [];
+        void startDualStreamFallback() {
+          if (fallbackActive || controller.isClosed) return;
+          fallbackActive = true;
+          singleSub?.cancel();
 
-        void emit() {
-          if (!controller.isClosed) {
-            final Map<String, Message> messageMap = {};
-            for (var m in sentMessages) {
-              if (!m.deletedBy.contains(userId1)) {
-                messageMap[m.id] = m;
-              }
-            }
-            for (var m in receivedMessages) {
-              if (!m.deletedBy.contains(userId1)) {
-                messageMap[m.id] = m;
-              }
-            }
-            final all = messageMap.values.toList()
-              ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          List<Message> sentMessages = [];
+          List<Message> receivedMessages = [];
 
-            // En yeni `limit` kadar mesajı al
-            final result = all.length > limit ? all.sublist(all.length - limit) : all;
-            controller.add(result);
+          void emitDual() {
+            if (!controller.isClosed) {
+              final Map<String, Message> messageMap = {};
+              for (var m in sentMessages) {
+                if (!m.deletedBy.contains(userId1)) {
+                  messageMap[m.id] = m;
+                }
+              }
+              for (var m in receivedMessages) {
+                if (!m.deletedBy.contains(userId1)) {
+                  messageMap[m.id] = m;
+                }
+              }
+              final all = messageMap.values.toList()
+                ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+              final result = all.length > limit ? all.sublist(all.length - limit) : all;
+              controller.add(result);
+            }
           }
+
+          sentSub = _firestore
+              .collection('messages')
+              .where('senderId', isEqualTo: userId1)
+              .where('receiverId', isEqualTo: userId2)
+              .orderBy('createdAt', descending: true)
+              .limit(effectiveLimit)
+              .snapshots()
+              .listen(
+            (snap) {
+              sentMessages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+              emitDual();
+            },
+            onError: (error) {
+              final isPerm = error.toString().contains('permission-denied');
+              if (isPerm && FirebaseAuth.instance.currentUser == null) {
+                return;
+              }
+              _log('⚠️ sentSub error: $error');
+            },
+          );
+
+          receivedSub = _firestore
+              .collection('messages')
+              .where('senderId', isEqualTo: userId2)
+              .where('receiverId', isEqualTo: userId1)
+              .orderBy('createdAt', descending: true)
+              .limit(effectiveLimit)
+              .snapshots()
+              .listen(
+            (snap) {
+              receivedMessages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+              emitDual();
+            },
+            onError: (error) {
+              final isPerm = error.toString().contains('permission-denied');
+              if (isPerm && FirebaseAuth.instance.currentUser == null) {
+                return;
+              }
+              _log('⚠️ receivedSub error: $error');
+            },
+          );
         }
 
-        final effectiveLimit = limit.clamp(10, 100);
-
-        // Gönderilen mesajlar (userId1 -> userId2) - İndeks destekli ve limitli sorgu
-        sentSub = _firestore
+        // FS-21: Öncelikle tekil conversationId + participants akışını başlat (50% listener ve soket tasarrufu)
+        singleSub = _firestore
             .collection('messages')
-            .where('senderId', isEqualTo: userId1)
-            .where('receiverId', isEqualTo: userId2)
+            .where('conversationId', isEqualTo: convId)
+            .where('participants', arrayContains: userId1)
             .orderBy('createdAt', descending: true)
             .limit(effectiveLimit)
             .snapshots()
             .listen(
           (snap) {
-            sentMessages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
-            emit();
+            if (!controller.isClosed) {
+              final messages = snap.docs
+                  .map((d) => Message.fromFirestore(d))
+                  .where((m) => !m.deletedBy.contains(userId1))
+                  .toList();
+              messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+              final result = messages.length > limit ? messages.sublist(messages.length - limit) : messages;
+              controller.add(result);
+            }
           },
           onError: (error) {
-            final isPerm = error.toString().contains('permission-denied');
-            if (isPerm && FirebaseAuth.instance.currentUser == null) {
-              return; // Oturum kapalıyken beklenen kapanış
-            }
-            _log('⚠️ sentConversationStream error: $error');
-            SystemLogService.instance.logError(
-              category: 'stream_listener',
-              errorType: 'SentConversationStreamException',
-              message: error.toString(),
-              severity: SystemErrorSeverity.error,
-            );
-          },
-        );
-
-        // Alınan mesajlar (userId2 -> userId1) - İndeks destekli ve limitli sorgu
-        receivedSub = _firestore
-            .collection('messages')
-            .where('senderId', isEqualTo: userId2)
-            .where('receiverId', isEqualTo: userId1)
-            .orderBy('createdAt', descending: true)
-            .limit(effectiveLimit)
-            .snapshots()
-            .listen(
-          (snap) {
-            receivedMessages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
-            emit();
-          },
-          onError: (error) {
-            final isPerm = error.toString().contains('permission-denied');
-            if (isPerm && FirebaseAuth.instance.currentUser == null) {
-              return; // Oturum kapalıyken beklenen kapanış
-            }
-            _log('⚠️ receivedConversationStream error: $error');
-            SystemLogService.instance.logError(
-              category: 'stream_listener',
-              errorType: 'ReceivedConversationStreamException',
-              message: error.toString(),
-              severity: SystemErrorSeverity.error,
-            );
+            _log('⚠️ Single conversation stream fallback tetiklendi: $error');
+            startDualStreamFallback();
           },
         );
       },
       onCancel: () {
+        singleSub?.cancel();
         sentSub?.cancel();
         receivedSub?.cancel();
       },
@@ -389,6 +462,8 @@ class MessageService {
           'userId': currentUserId,
           'conversationId': conversationId,
           'updatedAt': FieldValue.serverTimestamp(),
+          // FS-26: Hayalet belge birikimini sıfır maliyetle temizleyen Firestore Native TTL alanı (10 dk)
+          'expireAt': Timestamp.fromDate(DateTime.now().add(const Duration(minutes: 10))),
         });
       } else {
         await docRef.delete();

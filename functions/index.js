@@ -380,6 +380,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   }
 
   // C. Anahtar Kelime Abonelikleri (Sıkı Kelime Sınırı Doğrulamalı / Strict Word Boundary Check - Limit 150)
+  const matchedKeywordsMap = new Map();
   if (uniqueKeywords.length > 0) {
     const chunks = [];
     for (let i = 0; i < uniqueKeywords.length; i += 30) {
@@ -432,6 +433,7 @@ async function matchAndCreateDealNotifications(deal, dealId) {
 
             if (isNativeMatched && (strictRegex.test(normalizedText) || isMultiWordMatch)) {
               const displayVal = sub.displayValue || subKey;
+              matchedKeywordsMap.set(normalizedSubKey, displayVal);
               if (matchedUsers.has(sub.uid)) {
                 const u = matchedUsers.get(sub.uid);
                 // Anahtar kelime en yüksek önceliklidir!
@@ -547,11 +549,81 @@ async function matchAndCreateDealNotifications(deal, dealId) {
           functions.logger.info(`📢 Ana kategori FCM konusuna (topic: ${parentTopic}) push gönderildi.`);
         }
       }
+
+      // FS-25: Anahtar Kelime Radarı FCM Topic Dağıtımı (Sıfır Maliyetli, Sınırsız Ölçekli)
+      // Firestore 150 limit tavanına takılmaksızın bu kelimeyi takip eden tüm kullanıcılara anında ulaşır
+      if (matchedKeywordsMap.size > 0) {
+        const kwEntries = Array.from(matchedKeywordsMap.entries()).slice(0, 10);
+        for (const [normKw, dispKw] of kwEntries) {
+          const cleanKw = normKw
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '');
+          if (!cleanKw) continue;
+          const kwTopic = `kw_${cleanKw}`;
+          const kwPayload = {
+            topic: kwTopic,
+            notification: {
+              title: `🎯 Radar: ${dispKw}`,
+              body: `${deal.title}\n💰 ${formattedPrice}`
+            },
+            data: {
+              type: 'deal',
+              reason: 'keyword',
+              keyword: String(dispKw),
+              dealId: String(dealId),
+              title: String(deal.title || ''),
+              imageUrl: String(deal.imageUrl || ''),
+              price: String(deal.price !== undefined ? deal.price : ''),
+              click_action: 'FLUTTER_NOTIFICATION_CLICK'
+            },
+            android: {
+              priority: 'high',
+              notification: {
+                channelId: 'keyword_alerts_channel',
+                sound: 'default',
+                color: '#FF6D00',
+                icon: '@mipmap/ic_launcher',
+                tag: `deal_${dealId}`,
+                defaultSound: true,
+                defaultVibrateTimings: true
+              }
+            },
+            apns: {
+              headers: {
+                'apns-push-type': 'alert',
+                'apns-priority': '10'
+              },
+              payload: {
+                aps: {
+                  alert: {
+                    title: `🎯 Radar: ${dispKw}`,
+                    body: `${deal.title}\n💰 ${formattedPrice}`
+                  },
+                  sound: 'default',
+                  badge: 1,
+                  'content-available': 1,
+                  'interruption-level': 'active',
+                  category: 'KEYWORD_NOTIFICATION'
+                }
+              }
+            }
+          };
+
+          try {
+            await admin.messaging().send(kwPayload);
+            functions.logger.info(`📢 Kelime Radarı FCM konusuna (topic: ${kwTopic}) push gönderildi.`);
+          } catch (kwErr) {
+            functions.logger.warn(`⚠️ Kelime Radarı topic push (${kwTopic}) uyarısı:`, kwErr.message);
+          }
+        }
+      }
     } else {
-      functions.logger.info(`ℹ️ Kategori FCM topic push atlandı: enabled=${notificationsEnabled}, sessiz=${isQuiet} (${currentHm})`);
+      functions.logger.info(`ℹ️ Kategori/Kelime FCM topic push atlandı: enabled=${notificationsEnabled}, sessiz=${isQuiet} (${currentHm})`);
     }
   } catch (catTopicErr) {
-    functions.logger.warn('⚠️ Kategori FCM topic push gönderim uyarısı:', catTopicErr.message);
+    functions.logger.warn('⚠️ Kategori/Kelime FCM topic push gönderim uyarısı:', catTopicErr.message);
   }
 
   // 2. Kota ve Bounded Fan-Out Koruması (Max 300 bildirim dokümanı tavanı)
@@ -667,6 +739,38 @@ exports.onDealCreated = functions.firestore
     }
 
     functions.logger.info('📦 Yeni fırsat eklendi:', dealId, deal.title, 'isApproved:', deal.isApproved);
+
+    // FS-20: Dokümanda searchKeywords eksikse otomatik üret ve mühürle
+    if (!Array.isArray(deal.searchKeywords) || deal.searchKeywords.length === 0) {
+      try {
+        const normalizeKw = (str) => {
+          if (!str || typeof str !== 'string') return '';
+          return str.toLowerCase()
+            .replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i')
+            .replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u')
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ').trim();
+        };
+        const kwSet = new Set();
+        [deal.title, deal.brand, deal.store, deal.category, deal.subCategory].forEach(f => {
+          const norm = normalizeKw(f);
+          if (norm) {
+            norm.split(' ').forEach(t => {
+              if (t.length >= 2 || /^\d+$/.test(t)) kwSet.add(t);
+            });
+          }
+        });
+        const keywords = Array.from(kwSet).slice(0, 50);
+        if (keywords.length > 0) {
+          await admin.firestore().collection('deals').doc(dealId).set({
+            searchKeywords: keywords
+          }, { merge: true });
+          functions.logger.info(`🔍 [FS-20] searchKeywords otomatik mühürlendi (${dealId}): ${keywords.length} anahtar`);
+        }
+      } catch (kwErr) {
+        functions.logger.warn(`⚠️ searchKeywords mühürleme uyarısı (${dealId}):`, kwErr.message);
+      }
+    }
 
     // Deal paylaşım durumu kontrolü (sadece normal kullanıcılar için, bot ve admin hariç)
     const isUserSubmitted = Boolean(deal.isUserSubmitted);
@@ -1625,145 +1729,191 @@ exports.onCouponCreated = functions
       return null;
     }
 
-    functions.logger.info(`🎟️ Yeni topluluk kuponu bildirimi oluşturuluyor: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
+    functions.logger.info(`🎟️ Yeni topluluk kuponu kaydedildi: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
 
+    // FS-01: Eğer kupon 'beklemede' durumundaysa genel push GÖNDERİLMEZ.
+    // Kupon onay bekleyen moderasyon kuyruğuna alınır ve admin onaylayana kadar bekletilir.
+    if (kupon.durum === 'beklemede') {
+      functions.logger.info(`⏳ Topluluk kuponu moderasyon kuyruğuna alındı (durum: beklemede): ${kuponId} (${magazaAdi} - ${baslik})`);
+      return null;
+    }
+
+    // Kupon doğrudan 'aktif' ise (admin oluşturması vb.) bildirimleri dağıt
+    if (kupon.durum === 'aktif') {
+      await dispatchApprovedCouponNotifications(kupon, kuponId);
+    }
+
+    return null;
+  }));
+
+/**
+ * Kupon onaylandığında çalışan merkezi bildirim publisher'ı
+ * 1. FCM topic 'community_coupons' push fırlatır (sessiz saat & acil durum şalteri korumalı)
+ * 2. Yazara 'submission_status' onay bildirimi yazar
+ * 3. Mağaza & Yazar abonelerine in-app bildirimleri yazar (300 bounded fan-out)
+ */
+async function dispatchApprovedCouponNotifications(kupon, kuponId) {
+  const paylasanId = typeof kupon.paylasanKullaniciId === 'string' ? kupon.paylasanKullaniciId.trim() : '';
+  const paylasanAdi = typeof kupon.paylasanKullaniciAdi === 'string' ? kupon.paylasanKullaniciAdi.trim() : 'Bir avcı';
+  const magazaAdi = typeof kupon.magazaAdi === 'string' ? kupon.magazaAdi.trim() : 'Mağaza';
+  const baslik = typeof kupon.baslik === 'string' ? kupon.baslik.trim() : 'Yeni İndirim Kuponu';
+  const kuponKodu = typeof kupon.kuponKodu === 'string' ? kupon.kuponKodu.trim() : '';
+
+  functions.logger.info(`🎟️ Onaylanan kupon için bildirimler dağıtılıyor: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
+
+  try {
+    // 1. ANLIK TOPLULUK KUPONU FCM TOPIC PUSH (P0-08 / R-AUTH-11 & P0-14 / R-BIZ-01 Kalkanları)
     try {
-      // 1. ANLIK TOPLULUK KUPONU FCM TOPIC PUSH (P0-08 / R-AUTH-11 & P0-14 / R-BIZ-01 Kalkanları)
+      let notificationsEnabled = true;
       try {
-        // A. Acil durum şalteri kontrolü (settings/app.notificationsEnabled)
-        let notificationsEnabled = true;
-        try {
-          const appConfigDoc = await admin.firestore().collection('settings').doc('app').get();
-          if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
-            notificationsEnabled = false;
-          }
-        } catch (cfgErr) {
-          functions.logger.warn('⚠️ Ayarlar okunurken hata, varsayılan açık:', cfgErr.message);
+        const appConfigDoc = await admin.firestore().collection('settings').doc('app').get();
+        if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
+          notificationsEnabled = false;
         }
+      } catch (cfgErr) {
+        functions.logger.warn('⚠️ Ayarlar okunurken hata, varsayılan açık:', cfgErr.message);
+      }
 
-        // B. Sessiz Saatler kontrolü (23:00 - 08:00 Türkiye Saati)
-        const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
-        const currentHm = turkeyTime.substring(0, 5);
-        const isQuiet = (currentHm >= '23:00' || currentHm < '08:00');
+      const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
+      const currentHm = turkeyTime.substring(0, 5);
+      const isQuiet = (currentHm >= '23:00' || currentHm < '08:00');
 
-        // C. Moderasyon Durumu: Kupon 'aktif' değilse (beklemede/taslak ise) genel push gönderilmez
-        const isEligibleForTopic = notificationsEnabled && !isQuiet && (kupon.durum === 'aktif');
+      const isEligibleForTopic = notificationsEnabled && !isQuiet;
 
-        if (!isEligibleForTopic) {
-          functions.logger.info(`ℹ️ Topluluk kuponu topic push atlandı: durum='${kupon.durum}', enabled=${notificationsEnabled}, sessiz=${isQuiet} (${currentHm})`);
-        } else {
-          const topicPayload = {
-            topic: 'community_coupons',
+      if (!isEligibleForTopic) {
+        functions.logger.info(`ℹ️ Topluluk kuponu topic push atlandı: enabled=${notificationsEnabled}, sessiz=${isQuiet} (${currentHm})`);
+      } else {
+        const topicPayload = {
+          topic: 'community_coupons',
+          notification: {
+            title: `🎟️ ${magazaAdi} Kuponu!`,
+            body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
+          },
+          data: {
+            type: 'coupon',
+            reason: 'community',
+            kuponId: String(kuponId),
+            magazaAdi: String(magazaAdi),
+            hasCode: kuponKodu ? 'true' : 'false', // P0-14 (R-BIZ-01): kuponKodu plaintext olarak push payload'a konmaz
+            authorName: String(paylasanAdi),
+            authorId: String(paylasanId),
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+          },
+          android: {
+            priority: 'high',
             notification: {
-              title: `🎟️ ${magazaAdi} Kuponu!`,
-              body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
+              channelId: 'sicak_firsatlar_general_v2',
+              sound: 'default',
+              color: '#8E24AA',
+              icon: '@mipmap/ic_launcher',
+              tag: `coupon_${kuponId}`,
+              defaultSound: true,
+              defaultVibrateTimings: true
+            }
+          },
+          apns: {
+            headers: {
+              'apns-push-type': 'alert',
+              'apns-priority': '10'
             },
-            data: {
-              type: 'coupon',
-              reason: 'community',
-              kuponId: String(kuponId),
-              magazaAdi: String(magazaAdi),
-              hasCode: kuponKodu ? 'true' : 'false', // P0-14 (R-BIZ-01): kuponKodu plaintext olarak push payload'a konmaz
-              authorName: String(paylasanAdi),
-              authorId: String(paylasanId),
-              click_action: 'FLUTTER_NOTIFICATION_CLICK'
-            },
-            android: {
-              priority: 'high',
-              notification: {
-                channelId: 'sicak_firsatlar_general_v2',
+            payload: {
+              aps: {
+                alert: {
+                  title: `🎟️ ${magazaAdi} Kuponu!`,
+                  body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
+                },
                 sound: 'default',
-                color: '#8E24AA',
-                icon: '@mipmap/ic_launcher',
-                tag: `coupon_${kuponId}`,
-                defaultSound: true,
-                defaultVibrateTimings: true
-              }
-            },
-            apns: {
-              headers: {
-                'apns-push-type': 'alert',
-                'apns-priority': '10'
-              },
-              payload: {
-                aps: {
-                  alert: {
-                    title: `🎟️ ${magazaAdi} Kuponu!`,
-                    body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
-                  },
-                  sound: 'default',
-                  badge: 1,
-                  'content-available': 1,
-                  'interruption-level': 'active',
-                  category: 'COUPON_NOTIFICATION'
-                }
+                badge: 1,
+                'content-available': 1,
+                'interruption-level': 'active',
+                category: 'COUPON_NOTIFICATION'
               }
             }
-          };
+          }
+        };
 
-          const topicResponse = await admin.messaging().send(topicPayload);
-          functions.logger.info(`📢 Topluluk kuponu FCM konusuna (topic: community_coupons) gönderildi: ${topicResponse}`);
-        }
-      } catch (topicErr) {
-        functions.logger.warn('⚠️ Topluluk kuponu FCM topic gönderim uyarısı:', topicErr.message);
+        const topicResponse = await admin.messaging().send(topicPayload);
+        functions.logger.info(`📢 Topluluk kuponu FCM konusuna (topic: community_coupons) gönderildi: ${topicResponse}`);
       }
+    } catch (topicErr) {
+      functions.logger.warn('⚠️ Topluluk kuponu FCM topic gönderim uyarısı:', topicErr.message);
+    }
 
-      const targetUserIds = new Set();
-
-      // 2. Hedefli Mağaza ve Yazar Abonelikleri (In-App Bildirim Merkezi Doküman Yazımı)
-      const storeKeyword = normalize(magazaAdi).trim();
-      const queries = [];
-
-      if (storeKeyword) {
-        queries.push(
-          admin.firestore().collection('notificationSubscriptions')
-            .where('type', '==', 'keyword')
-            .where('key', '==', storeKeyword)
-            .where('enabled', '==', true)
-            .limit(150)
-            .get()
-        );
+    // 2. YAZARA ONAY BİLDİRİMİ (submission_status)
+    if (paylasanId && paylasanId !== 'admin') {
+      try {
+        const authorNotifId = `coupon_status_approved_${kuponId}`;
+        await admin.firestore()
+          .collection('users')
+          .doc(paylasanId)
+          .collection('notifications')
+          .doc(authorNotifId)
+          .set({
+            type: 'submission_status',
+            kuponId: kuponId,
+            magazaAdi: magazaAdi,
+            title: '🎉 Kuponunuz Onaylandı!',
+            body: `Paylaştığınız "${magazaAdi} - ${baslik}" kuponu onaylandı ve yayına alındı.`,
+            status: 'approved',
+            isTopicDelivered: true,
+            pushStatus: 'delivered_via_topic',
+            read: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        functions.logger.info(`✅ Kupon yazarına onay bildirimi yazıldı: ${paylasanId}`);
+      } catch (authErr) {
+        functions.logger.warn('⚠️ Yazara kupon onay bildirimi yazılırken hata:', authErr.message);
       }
+    }
 
-      if (paylasanId) {
-        queries.push(
-          admin.firestore().collection('notificationSubscriptions')
-            .where('type', '==', 'author')
-            .where('key', '==', paylasanId)
-            .where('enabled', '==', true)
-            .limit(150)
-            .get()
-        );
+    // 3. Hedefli Mağaza ve Yazar Abonelikleri (In-App Bildirim Merkezi Doküman Yazımı)
+    const targetUserIds = new Set();
+    const storeKeyword = normalize(magazaAdi).trim();
+    const queries = [];
+
+    if (storeKeyword) {
+      queries.push(
+        admin.firestore().collection('notificationSubscriptions')
+          .where('type', '==', 'keyword')
+          .where('key', '==', storeKeyword)
+          .where('enabled', '==', true)
+          .limit(150)
+          .get()
+      );
+    }
+
+    if (paylasanId) {
+      queries.push(
+        admin.firestore().collection('notificationSubscriptions')
+          .where('type', '==', 'author')
+          .where('key', '==', paylasanId)
+          .where('enabled', '==', true)
+          .limit(150)
+          .get()
+      );
+    }
+
+    if (queries.length > 0) {
+      const subSnaps = await Promise.all(queries);
+      for (const subSnap of subSnaps) {
+        subSnap.forEach(d => {
+          const uid = d.data().uid || d.data().userId;
+          if (uid && uid !== paylasanId) {
+            targetUserIds.add(uid);
+          }
+        });
       }
+    }
 
-      if (queries.length > 0) {
-        const subSnaps = await Promise.all(queries);
-        for (const subSnap of subSnaps) {
-          subSnap.forEach(d => {
-            const uid = d.data().uid || d.data().userId;
-            if (uid && uid !== paylasanId) {
-              targetUserIds.add(uid);
-            }
-          });
-        }
-      }
+    const MAX_COUPON_NOTIF_TARGETS = 300;
+    let finalTargetUserIds = Array.from(targetUserIds);
 
-      // 3. Kota ve Bounded Fan-out Koruması:
-      // Yalnızca mağaza anahtar kelimesini veya yazarı takip eden abonelere gönderilir.
-      // Eşleşen abone sayısı 300'ü aşarsa azami 300 ile sınırlandırılır.
-      const MAX_COUPON_NOTIF_TARGETS = 300;
-      let finalTargetUserIds = Array.from(targetUserIds);
+    if (finalTargetUserIds.length > MAX_COUPON_NOTIF_TARGETS) {
+      finalTargetUserIds = finalTargetUserIds.slice(0, MAX_COUPON_NOTIF_TARGETS);
+      functions.logger.info(`🛡️ Kupon bildirim tavanı uygulandı: ${targetUserIds.size} aboneden ilk ${MAX_COUPON_NOTIF_TARGETS} kullanıcı seçildi.`);
+    }
 
-      if (finalTargetUserIds.length > MAX_COUPON_NOTIF_TARGETS) {
-        finalTargetUserIds = finalTargetUserIds.slice(0, MAX_COUPON_NOTIF_TARGETS);
-        functions.logger.info(`🛡️ Kupon bildirim tavanı uygulandı: ${targetUserIds.size} aboneden ilk ${MAX_COUPON_NOTIF_TARGETS} kullanıcı seçildi.`);
-      }
-
-      if (finalTargetUserIds.length === 0) {
-        functions.logger.info(`ℹ️ Kupon (${kuponId}) için aktif abone bulunamadı (${magazaAdi} / ${paylasanAdi}), in-app bildirim dokümanı oluşturulmadı.`);
-        return null;
-      }
-
+    if (finalTargetUserIds.length > 0) {
       let batch = admin.firestore().batch();
       let opCount = 0;
 
@@ -1802,10 +1952,118 @@ exports.onCouponCreated = functions
       if (opCount > 0) {
         await batch.commit();
       }
+      functions.logger.info(`✅ ${finalTargetUserIds.length} kullanıcı için topluluk kuponu bildirimleri oluşturuldu.`);
+    }
+  } catch (err) {
+    functions.logger.error('❌ Topluluk kuponu bildirimleri oluşturulurken hata:', err);
+  }
+}
 
-      functions.logger.info(`✅ ${targetUserIds.size} kullanıcı için topluluk kuponu bildirimleri oluşturuldu.`);
-    } catch (err) {
-      functions.logger.error('❌ Topluluk kuponu bildirimleri oluşturulurken hata:', err);
+/**
+ * kuponlar/{kuponId} koleksiyonunda belge güncellendiğinde tetiklenir.
+ * Kupon durumu 'beklemede' -> 'aktif' olduğunda onay bildirimlerini ve FCM topic push yayını fırlatır.
+ * Kupon durumu 'beklemede' -> 'reddedildi' olduğunda yazara red gerekçesi bildirimi gönderir.
+ */
+exports.onCouponUpdated = functions
+  .runWith({ timeoutSeconds: 120, memory: '512MB' })
+  .firestore
+  .document('kuponlar/{kuponId}')
+  .onUpdate(wrapTrigger('onCouponUpdated', async (change, context) => {
+    const beforeData = change.before.data();
+    const afterData = change.after.data();
+    const kuponId = context.params.kuponId;
+
+    if (!beforeData || !afterData) {
+      functions.logger.warn(`⚠️ onCouponUpdated tetiklendi fakat doküman verisi eksik: ${kuponId}`);
+      return null;
+    }
+
+    const wasPending = beforeData.durum === 'beklemede';
+    const isNowActive = afterData.durum === 'aktif';
+    const isNowRejected = afterData.durum === 'reddedildi';
+
+    // 1. ONAY GEÇİŞİ: 'beklemede' -> 'aktif'
+    if (wasPending && isNowActive) {
+      functions.logger.info(`🎉 Kupon admin tarafından onaylandı! Dağıtım başlatılıyor: ${kuponId}`);
+      await dispatchApprovedCouponNotifications(afterData, kuponId);
+    }
+
+    // 2. RED GEÇİŞİ: 'beklemede' -> 'reddedildi'
+    if (wasPending && isNowRejected) {
+      const paylasanId = afterData.paylasanKullaniciId;
+      if (paylasanId) {
+        const notifId = `coupon_status_rejected_${kuponId}`;
+        const reason = afterData.redNedeni || 'Kriterlere uygun bulunmadı.';
+        try {
+          await admin.firestore()
+            .collection('users')
+            .doc(paylasanId)
+            .collection('notifications')
+            .doc(notifId)
+            .set({
+              type: 'submission_status',
+              kuponId: kuponId,
+              magazaAdi: afterData.magazaAdi || '',
+              title: '❌ Kuponunuz Onaylanmadı',
+              body: `Paylaştığınız "${afterData.magazaAdi || ''} - ${afterData.baslik || ''}" kuponu onaylanmadı. Gerekçe: ${reason}`,
+              status: 'rejected',
+              isTopicDelivered: true,
+              pushStatus: 'delivered_via_topic',
+              read: false,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          functions.logger.info(`ℹ️ Kupon red bildirimi yazara iletildi: ${paylasanId}`);
+        } catch (rejErr) {
+          functions.logger.warn('⚠️ Kupon red bildirimi yazılırken hata:', rejErr.message);
+        }
+      }
+    }
+
+    // 3. İÇERİK MODERASYONU (Güncelleme sırasında küfür/uygunsuz metin kontrolü)
+    const baslik = typeof afterData.baslik === 'string' ? afterData.baslik.trim() : '';
+    const magazaAdi = typeof afterData.magazaAdi === 'string' ? afterData.magazaAdi.trim() : '';
+    if (containsProfanity(`${baslik} ${magazaAdi}`)) {
+      if (afterData.durum !== 'gecersiz' || !afterData.moderationFlag) {
+        functions.logger.warn(`🚫 Uygunsuz içerik tespit edildi (Kupon güncellemesi): ${kuponId}`);
+        await admin.firestore().collection('kuponlar').doc(kuponId).update({
+          durum: 'gecersiz',
+          moderationFlag: true,
+          moderationReason: 'Güncellemede uygunsuz içerik tespit edildi',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return null;
+      }
+    }
+
+    // 4. TOPLULUK OYLAMA EŞİĞİ & ÇÖP KUPON YÖNETİMİ
+    // Soğuk oylar ile sıcak oylar arasındaki fark >= 5 ise:
+    // - Web kaynaklı kupon ise Firestore'dan kalıcı olarak silinir.
+    // - Topluluk kaynaklı aktif kupon ise 'gecersiz' durumuna çekilir.
+    // Net skor < 5'e toparlandığında ve moderasyon engeli yoksa tekrar 'aktif' yapılır.
+    const sicakOylar = Number(afterData.sicakOySayisi) || 0;
+    const sogukOylar = Number(afterData.sogukOySayisi) || 0;
+    const netSoguk = sogukOylar - sicakOylar;
+
+    if (afterData.durum === 'aktif' && netSoguk >= 5) {
+      if (afterData.kaynakTipi === 'web') {
+        functions.logger.info(`🗑️ Web kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), siliniyor: ${kuponId}`);
+        await admin.firestore().collection('kuponlar').doc(kuponId).delete();
+        return null;
+      } else {
+        functions.logger.info(`❄️ Topluluk kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), 'gecersiz' yapılıyor: ${kuponId}`);
+        await admin.firestore().collection('kuponlar').doc(kuponId).update({
+          durum: 'gecersiz',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return null;
+      }
+    } else if (afterData.durum === 'gecersiz' && netSoguk < 5 && !afterData.moderationFlag && !beforeData.moderationFlag) {
+      functions.logger.info(`🔥 Kupon oylarla kurtarıldı (fark: ${netSoguk}), tekrar 'aktif' yapılıyor: ${kuponId}`);
+      await admin.firestore().collection('kuponlar').doc(kuponId).update({
+        durum: 'aktif',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return null;
     }
 
     return null;
@@ -3031,7 +3289,7 @@ exports.sendManualNotification = functions
     throw new functions.https.HttpsError('permission-denied', 'Bu işlem için yetkiniz yok.');
   }
 
-  const { title, body, imageUrl, targetType, targetValue, dealId, notificationCategory } = (data || {});
+  const { title, body, imageUrl, targetType, targetValue, dealId, notificationCategory, type } = (data || {});
   const cleanTitle = (title || '').toString().trim();
   const cleanBody = (body || '').toString().trim();
 
@@ -3039,8 +3297,9 @@ exports.sendManualNotification = functions
     throw new functions.https.HttpsError('invalid-argument', 'Başlık ve mesaj içeriği zorunludur.');
   }
 
-  const notifType = notificationCategory === 'marketing' ? 'marketing' : 'admin_message';
-  const notifReason = notificationCategory === 'marketing' ? 'marketing' : 'admin_message';
+  const rawCat = (notificationCategory || type || '').toString().trim().toLowerCase();
+  const notifType = rawCat === 'marketing' ? 'marketing' : 'admin_message';
+  const notifReason = rawCat === 'marketing' ? 'marketing' : 'admin_message';
   const cleanDealId = dealId ? String(dealId).trim() : '';
   const cleanImageUrl = imageUrl ? String(imageUrl).trim() : '';
 
@@ -3102,18 +3361,44 @@ exports.sendManualNotification = functions
 
     if (targetType === 'all') {
       // 1. ANLIK GLOBAL FCM PUSH: Tüm cihazlara tek seferde anında ilet
+      // FS-02: Pazarlama duyuruları için 'firsatkolik_marketing_v1', yönetici duyuruları için 'sicak_firsatlar_general_v2'
+      const broadcastTopic = (rawCat === 'marketing') ? 'firsatkolik_marketing_v1' : 'sicak_firsatlar_general_v2';
       try {
-        const topicMessage = { ...message, topic: 'sicak_firsatlar_general_v2' };
+        const topicMessage = { ...message, topic: broadcastTopic };
         responseId = await admin.messaging().send(topicMessage);
-        functions.logger.info(`📢 Global push FCM genel konusuna (topic: sicak_firsatlar_general_v2) gönderildi: ${responseId}`);
+        functions.logger.info(`📢 Global push FCM konusuna (topic: ${broadcastTopic}) gönderildi: ${responseId}`);
       } catch (topicErr) {
-        functions.logger.warn('⚠️ FCM genel topic gönderim uyarısı:', topicErr.message);
+        functions.logger.warn(`⚠️ FCM topic (${broadcastTopic}) gönderim uyarısı:`, topicErr.message);
       }
 
-      // 2. KULLANICI BİLDİRİM MERKEZİ (In-App Feed) İÇİN KOTA VE ZAMAN AŞIMI GÜVENCESİ:
-      // Canlı ortamda 50.000+ kullanıcıya tek seferde doküman yazıp fonksiyonun timeout'a düşmesini
-      // ve on binlerce onNotificationCreated tetiklenmesini önlemek için azami 500 kullanıcıya yazılır.
-      const MAX_INAPP_TARGETS = 500;
+      // 2. KÜRESEL DUYURU KAYDI (Global Announcements - Tek Doküman ile Tüm Kullanıcılara Bildirim Kutusu Feed'i)
+      // 100.000 kullanıcıya tek tek yazmak yerine FS-02 Çift Katmanlı Feed mimarisi uygulanır.
+      try {
+        const announcementRef = admin.firestore().collection('globalAnnouncements').doc(logRef.id);
+        await announcementRef.set({
+          id: logRef.id,
+          title: cleanTitle,
+          body: cleanBody,
+          imageUrl: cleanImageUrl || null,
+          dealId: cleanDealId || null,
+          type: notifType,
+          reason: notifReason,
+          active: true,
+          isTopicDelivered: true,
+          pushStatus: 'delivered_via_topic',
+          createdAt: sentAt,
+          expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 86400 * 1000) // 15 gün geçerli
+        });
+        functions.logger.info(`📢 Global duyuru dokümanı (globalAnnouncements/${logRef.id}) oluşturuldu.`);
+      } catch (annErr) {
+        functions.logger.warn('⚠️ globalAnnouncements dokümanı oluşturulurken hata:', annErr.message);
+      }
+
+      // 3. KULLANICI BİLDİRİM MERKEZİ (In-App Feed) Geriye Dönük Uyumluluk:
+      // Eski sürüm istemcilerin de kişisel kutularında görebilmesi için azami 300 aktif kullanıcıya
+      // isTopicDelivered: true ve pushStatus: 'delivered_via_topic' bayraklarıyla güvenle yazılır.
+      // Bu bayraklar sayesinde onNotificationCreated tetikleyicisi ASLA mükerrer push fırlatmaz.
+      const MAX_INAPP_TARGETS = 300;
       const usersSnap = await admin.firestore().collection('users')
         .select()
         .limit(MAX_INAPP_TARGETS)
@@ -3121,7 +3406,7 @@ exports.sendManualNotification = functions
 
       let batch = admin.firestore().batch();
       let opCount = 0;
-      const notificationId = `manual_${logRef.id}`;
+      const notificationId = logRef.id;
 
       for (const uDoc of usersSnap.docs) {
         const userId = uDoc.id;
@@ -3132,6 +3417,8 @@ exports.sendManualNotification = functions
           .doc(notificationId);
 
         batch.set(notificationRef, {
+          id: notificationId,
+          announcementId: logRef.id,
           type: notifType,
           reason: notifReason,
           title: cleanTitle,
@@ -3139,8 +3426,10 @@ exports.sendManualNotification = functions
           imageUrl: cleanImageUrl || null,
           dealId: cleanDealId || null,
           read: false,
+          isTopicDelivered: true,
+          pushStatus: 'delivered_via_topic',
           createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
 
         opCount++;
         if (opCount >= 400) {
@@ -3152,7 +3441,7 @@ exports.sendManualNotification = functions
       if (opCount > 0) {
         await batch.commit();
       }
-      responseId = `broadcast_topic_and_${usersSnap.size}_inapp_notifications`;
+      responseId = `broadcast_topic_${broadcastTopic}_and_global_announcement_${logRef.id}`;
 
     } else if (targetType === 'token') {
       if (!targetValue || typeof targetValue !== 'string' || !targetValue.trim()) {

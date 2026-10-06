@@ -526,9 +526,12 @@
                     <span class="material-symbols-outlined icon-filled">local_offer</span>
                     <p class="text-sm font-medium">Fırsatlar</p>
                 </a>
-                <a id="couponsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
-                    <span class="material-symbols-outlined">confirmation_number</span>
-                    <p class="text-sm font-medium">Kuponlar</p>
+                <a id="couponsMenuBtn" class="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined">confirmation_number</span>
+                        <p class="text-sm font-medium">Kuponlar</p>
+                    </div>
+                    <span id="couponsPendingBadge" class="hidden px-2 py-0.5 text-[10px] font-black bg-amber-500 text-slate-950 rounded-full animate-pulse">0</span>
                 </a>
                 <a id="catalogsMenuBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer" href="#">
                     <span class="material-symbols-outlined">menu_book</span>
@@ -1439,10 +1442,16 @@
                     </div>
 
                     <!-- 1. Quick Stats Row -->
-                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <div class="bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Toplam Kupon</span>
                             <div class="text-2xl font-black text-slate-900 dark:text-white mt-1" id="couponStatTotal">0</div>
+                        </div>
+                        <div class="bg-white dark:bg-surface-dark p-4 rounded-xl border border-amber-500/30 dark:border-amber-500/20 shadow-xs bg-amber-500/5">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">pending_actions</span> Onay Bekleyen
+                            </span>
+                            <div class="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1" id="couponStatPending">0</div>
                         </div>
                         <div class="bg-white dark:bg-surface-dark p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-500 flex items-center gap-1">
@@ -1467,11 +1476,16 @@
                     </div>
 
                     <!-- 2. Source Tabs Navigation (Topluluk vs Botkolik Radarı Ayrımı) -->
-                    <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-1">
+                    <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-1 flex-wrap">
                         <button type="button" id="couponTabAll" onclick="window.switchCouponSourceTab('all')" class="coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-primary text-white shadow-xs">
                             <span class="material-symbols-outlined text-[18px]">view_list</span>
                             <span>Tüm Kuponlar</span>
                             <span id="couponTabAllBadge" class="px-2 py-0.5 rounded-full text-[10px] bg-white/20">0</span>
+                        </button>
+                        <button type="button" id="couponTabPending" onclick="window.switchCouponSourceTab('beklemede')" class="coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all text-amber-600 dark:text-amber-400 hover:text-slate-900 dark:hover:text-white hover:bg-amber-500/10">
+                            <span class="material-symbols-outlined text-[18px]">pending_actions</span>
+                            <span>Onay Bekleyenler</span>
+                            <span id="couponTabPendingBadge" class="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">0</span>
                         </button>
                         <button type="button" id="couponTabCommunity" onclick="window.switchCouponSourceTab('topluluk')" class="coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-surface-darker">
                             <span class="material-symbols-outlined text-[18px]">group</span>
@@ -1515,9 +1529,11 @@
                             <!-- Status Filter -->
                             <select id="couponStatusFilter" class="form-select text-xs font-semibold py-2 px-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-surface-darker text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary">
                                 <option value="all">Tüm Durumlar</option>
-                                <option value="active">Sadece Aktifler</option>
-                                <option value="invalid">Geçersiz Olanlar</option>
-                                <option value="expired">Süresi Dolanlar</option>
+                                <option value="pending">⏳ Onay Bekleyenler</option>
+                                <option value="active">✅ Sadece Aktifler</option>
+                                <option value="rejected">❌ Reddedilenler</option>
+                                <option value="invalid">🚫 Geçersiz Olanlar</option>
+                                <option value="expired">⌛ Süresi Dolanlar</option>
                             </select>
 
                             <!-- Sort Filter -->

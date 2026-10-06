@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../models/user.dart';
 import '../models/deal.dart';
 import '../utils/badge_helper.dart';
+import 'deal_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -117,16 +118,30 @@ class UserService {
     } catch (e) { return false; }
   }
 
-  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link, String? imageUrl}) async {
+  Future<bool> addToFavorites(
+    String userId,
+    String dealId, {
+    String? title,
+    double? price,
+    String? store,
+    String? link,
+    String? imageUrl,
+    String? category,
+    bool? isExpired,
+    int? hotVotes,
+    int? coldVotes,
+  }) async {
     try {
       String finalTitle = title?.trim() ?? '';
       double finalPrice = price ?? 0.0;
       String finalStore = store?.trim() ?? '';
       String finalLink = link?.trim() ?? '';
       String finalImageUrl = imageUrl?.trim() ?? '';
+      String finalCategory = category?.trim() ?? 'tumu';
+      bool finalIsExpired = isExpired ?? false;
 
       // Eğer parametrelerden herhangi biri eksikse, ana deals dokümanından çekip eksiksiz snapshot oluştur
-      if (finalTitle.isEmpty || finalLink.isEmpty || finalImageUrl.isEmpty || finalStore.isEmpty || finalPrice == 0.0) {
+      if (finalTitle.isEmpty || finalLink.isEmpty || finalImageUrl.isEmpty || finalStore.isEmpty || price == null) {
         final doc = await _firestore.collection('deals').doc(dealId).get();
         if (doc.exists) {
           final data = doc.data();
@@ -136,6 +151,8 @@ class UserService {
             if (finalStore.isEmpty) finalStore = (data['store'] ?? data['magazaAdi'] ?? '').toString();
             if (finalLink.isEmpty) finalLink = (data['link'] ?? data['url'] ?? '').toString();
             if (finalImageUrl.isEmpty) finalImageUrl = (data['imageUrl'] ?? data['image_url'] ?? data['gorselUrl'] ?? '').toString();
+            if (finalCategory == 'tumu') finalCategory = (data['category'] ?? 'tumu').toString();
+            finalIsExpired = data['isExpired'] == true;
           }
         }
       }
@@ -148,6 +165,8 @@ class UserService {
         'link': finalLink,
         'magazaAdi': finalStore,
         'imageUrl': finalImageUrl,
+        'category': finalCategory,
+        'isExpired': finalIsExpired,
         'savedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       return true;
@@ -163,6 +182,9 @@ class UserService {
     } catch (e) { return false; }
   }
 
+  // FS-17: Gömülü Snapshot (Embedded Data) Mimarisi
+  // 100k kullanıcıda 100 tekil deals/{dealId}.get() N+1 query patlamasını ve
+  // snapshot içi döngüsel set() yazmalarını tamamen ortadan kaldırır.
   Stream<List<Deal>> getFavoriteDeals(String userId) {
     return _firestore
         .collection('users')
@@ -170,7 +192,7 @@ class UserService {
         .collection('favorites')
         .limit(100)
         .snapshots()
-        .asyncMap((snapshot) async {
+        .map((snapshot) {
       final now = DateTime.now();
       final docs = snapshot.docs.toList();
       
@@ -182,59 +204,124 @@ class UserService {
         return bTime.compareTo(aTime);
       });
 
-      final deals = await Future.wait(docs.map((doc) async {
+      return docs.map((doc) {
         final data = doc.data();
         final dealId = doc.id;
-        final dealDoc = await _firestore.collection('deals').doc(dealId).get();
-        final savedImageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'])?.toString() ?? '';
+        final baslik = (data['baslik'] ?? data['title'] ?? 'Kaydedilen Fırsat').toString();
+        final fiyatStr = (data['fiyat'] ?? data['price'])?.toString() ?? '0';
+        final fiyat = double.tryParse(fiyatStr) ?? 0.0;
+        final store = (data['magazaAdi'] ?? data['store'] ?? 'Mağaza').toString();
+        final link = (data['link'] ?? data['url'] ?? '').toString();
+        final imageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'] ?? '').toString();
         final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi']) as Timestamp?;
         final addedAt = addedAtTimestamp?.toDate() ?? now;
-        
-        if (dealDoc.exists) {
-          final deal = Deal.fromFirestore(dealDoc);
-          // Favoriler alt dokümanında imageUrl eksikse arka planda doldur (snapshot tamamlama)
-          if (savedImageUrl.isEmpty && deal.imageUrl.isNotEmpty) {
-            _firestore.collection('users').doc(userId).collection('favorites').doc(dealId).set({
-              'imageUrl': deal.imageUrl,
-            }, SetOptions(merge: true)).catchError((_) {});
-          }
-          return deal;
-        } else {
-          // İlan 30 günden eski ve veritabanından kalıcı silinmişse + görseli de yoksa yetim kaydı arka planda temizle
-          if (savedImageUrl.isEmpty && now.difference(addedAt).inDays >= 30) {
-            _firestore.collection('users').doc(userId).collection('favorites').doc(dealId).delete().catchError((_) {});
-          }
+        final isExpired = data['isExpired'] == true;
+        final category = (data['category'] ?? 'tumu').toString();
 
-          // İlan silinmişse yedek süresi doldu verisi oluştur
-          final baslik = data['baslik'] ?? data['title'] ?? 'Süresi Dolan Fırsat';
-          final fiyatStr = data['fiyat']?.toString() ?? '0';
-          final fiyat = double.tryParse(fiyatStr) ?? 0.0;
-          final store = data['magazaAdi'] ?? data['store'] ?? 'Mağaza';
-          final link = data['link'] ?? '';
-          
-          return Deal(
-            id: dealId,
-            title: baslik,
-            description: 'Bu fırsatın süresi dolmuştur.',
-            price: fiyat,
-            store: store,
-            category: 'tumu',
-            link: link,
-            imageUrl: savedImageUrl,
-            hotVotes: 0,
-            coldVotes: 0,
-            commentCount: 0,
-            postedBy: '',
-            createdAt: addedAt,
-            isEditorPick: false,
-            isApproved: true,
-            isExpired: true,
-            isUserSubmitted: false,
-          );
-        }
-      }));
-      return deals;
+        return Deal(
+          id: dealId,
+          title: baslik,
+          description: data['description']?.toString() ?? 'Kaydedilen Fırsat Detayı',
+          price: fiyat,
+          store: store,
+          category: category,
+          link: link,
+          imageUrl: imageUrl,
+          hotVotes: (data['hotVotes'] as num?)?.toInt() ?? 0,
+          coldVotes: (data['coldVotes'] as num?)?.toInt() ?? 0,
+          commentCount: (data['commentCount'] as num?)?.toInt() ?? 0,
+          postedBy: (data['postedBy'] ?? '').toString(),
+          createdAt: addedAt,
+          isEditorPick: false,
+          isApproved: true,
+          isExpired: isExpired,
+          isUserSubmitted: false,
+        );
+      }).toList();
     });
+  }
+
+  // FS-17: Sayfalı ve SWR / Cache-First Destekli Favori Getirme
+  Future<DealsPageResult> getFavoriteDealsPaginated({
+    required String userId,
+    int limit = 20,
+    DocumentSnapshot? lastDocument,
+    Source source = Source.serverAndCache,
+  }) async {
+    try {
+      Query query = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('favorites')
+          .orderBy('savedAt', descending: true)
+          .limit(limit);
+
+      if (lastDocument != null) {
+        query = query.startAfterDocument(lastDocument);
+      }
+
+      final snapshot = await query.get(GetOptions(source: source));
+      final now = DateTime.now();
+      final List<Deal> parsedDeals = [];
+      DocumentSnapshot? newLastDoc;
+
+      if (snapshot.docs.isNotEmpty) {
+        newLastDoc = snapshot.docs.last;
+      }
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        final dealId = doc.id;
+        final baslik = (data['baslik'] ?? data['title'] ?? 'Kaydedilen Fırsat').toString();
+        final fiyatStr = (data['fiyat'] ?? data['price'])?.toString() ?? '0';
+        final fiyat = double.tryParse(fiyatStr) ?? 0.0;
+        final store = (data['magazaAdi'] ?? data['store'] ?? 'Mağaza').toString();
+        final link = (data['link'] ?? data['url'] ?? '').toString();
+        final imageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'] ?? '').toString();
+        final addedAtTimestamp = (data['savedAt'] ?? data['eklenmeTarihi']) as Timestamp?;
+        final addedAt = addedAtTimestamp?.toDate() ?? now;
+        final isExpired = data['isExpired'] == true;
+        final category = (data['category'] ?? 'tumu').toString();
+
+        parsedDeals.add(Deal(
+          id: dealId,
+          title: baslik,
+          description: data['description']?.toString() ?? 'Kaydedilen Fırsat Detayı',
+          price: fiyat,
+          store: store,
+          category: category,
+          link: link,
+          imageUrl: imageUrl,
+          hotVotes: (data['hotVotes'] as num?)?.toInt() ?? 0,
+          coldVotes: (data['coldVotes'] as num?)?.toInt() ?? 0,
+          commentCount: (data['commentCount'] as num?)?.toInt() ?? 0,
+          postedBy: (data['postedBy'] ?? '').toString(),
+          createdAt: addedAt,
+          isEditorPick: false,
+          isApproved: true,
+          isExpired: isExpired,
+          isUserSubmitted: false,
+        ));
+      }
+
+      final bool hasMore = snapshot.docs.length >= limit;
+      final bool isFromCache = snapshot.metadata.isFromCache;
+
+      return DealsPageResult(
+        deals: parsedDeals,
+        lastDocument: newLastDoc,
+        hasMore: hasMore,
+        isFromCache: isFromCache,
+      );
+    } catch (e) {
+      _log('getFavoriteDealsPaginated hatası: $e');
+      return const DealsPageResult(
+        deals: [],
+        lastDocument: null,
+        hasMore: false,
+        isFromCache: false,
+      );
+    }
   }
 
   // Takip İşlemleri
@@ -337,17 +424,79 @@ class UserService {
     } catch (e) { rethrow; }
   }
 
+  // FS-24: 30'lu Chunk WhereIn Mimarisi (N+1 Query Patlamasını ve Sonsuz Tetiklenmeyi Önler)
   Stream<List<AppUser>> getFollowingUsersStream(String userId) {
+    List<String>? cachedFollowingIds;
+    List<AppUser> cachedUsers = [];
+
     return _firestore.collection('users').doc(userId).snapshots().asyncMap((userDoc) async {
       if (!userDoc.exists) return [];
-      final followingIds = List<String>.from(userDoc.data()?['following'] ?? []);
-      if (followingIds.isEmpty) return [];
-      
-      final snapshots = await Future.wait(followingIds.map((id) => _firestore.collection('users').doc(id).get()));
-      return snapshots
-          .where((s) => s.exists)
-          .map((s) => AppUser.fromFirestore(s))
+      final followingIds = List<String>.from(userDoc.data()?['following'] ?? [])
+          .where((id) => id.isNotEmpty)
+          .toSet()
           .toList();
+      if (followingIds.isEmpty) {
+        cachedFollowingIds = [];
+        cachedUsers = [];
+        return [];
+      }
+
+      // Takip listesi değişmemişse (örn: kullanıcının puan, rozet veya diğer alanları güncellendiğinde)
+      // N+1 yeniden çekme döngüsünü engelleyerek önbellekten anında dön
+      if (cachedFollowingIds != null &&
+          cachedFollowingIds!.length == followingIds.length &&
+          cachedFollowingIds!.every((id) => followingIds.contains(id))) {
+        return cachedUsers;
+      }
+
+      // Firestore whereIn sınırı maksimum 30'dur. 30'lu parçalara bölerek tek seferde çek
+      final chunks = <List<String>>[];
+      for (var i = 0; i < followingIds.length; i += 30) {
+        chunks.add(followingIds.sublist(
+          i,
+          (i + 30 > followingIds.length) ? followingIds.length : i + 30,
+        ));
+      }
+
+      final List<AppUser> allUsers = [];
+      final chunkFutures = chunks.map((chunk) async {
+        try {
+          final querySnap = await _firestore
+              .collection('users')
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
+          return querySnap.docs.map((doc) => AppUser.fromFirestore(doc)).toList();
+        } catch (e) {
+          _log('⚠️ Following users chunk query hatası: $e');
+          return <AppUser>[];
+        }
+      });
+      final results = await Future.wait(chunkFutures);
+      for (final list in results) {
+        allUsers.addAll(list);
+      }
+
+      // Eğer sanal Botkolik avcısı takip ediliyorsa ve veritabanında tekil doc yoksa sentetik kullanıcı ekle
+      if (followingIds.contains('botkolik') && !allUsers.any((u) => u.uid == 'botkolik')) {
+        allUsers.add(AppUser(
+          uid: 'botkolik',
+          username: 'botkolik',
+          nickname: 'Botkolik',
+          profileImageUrl: 'assets/botkolik.webp',
+          isBot: true,
+        ));
+      }
+
+      // Orijinal takip sırasını koru
+      allUsers.sort((a, b) {
+        final indexA = followingIds.indexOf(a.uid);
+        final indexB = followingIds.indexOf(b.uid);
+        return indexA.compareTo(indexB);
+      });
+
+      cachedFollowingIds = List<String>.from(followingIds);
+      cachedUsers = allUsers;
+      return allUsers;
     });
   }
 

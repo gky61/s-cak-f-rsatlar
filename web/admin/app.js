@@ -13095,7 +13095,8 @@ function loadCoupons() {
                         kaynakTipi: kaynakTipi,
                         sicakOySayisi: parseInt(data.sicakOySayisi, 10) || 0,
                         sogukOySayisi: parseInt(data.sogukOySayisi, 10) || 0,
-                        durum: data.durum || 'aktif'
+                        durum: data.durum || 'aktif',
+                        redNedeni: data.redNedeni || ''
                     };
                 });
 
@@ -13128,13 +13129,17 @@ function loadCoupons() {
 function updateCouponsSummaryStats() {
     const now = new Date();
     const total = coupons.length;
+    const pendingCount = coupons.filter(c => c.durum === 'beklemede').length;
     const communityCount = coupons.filter(c => c.kaynakTipi === 'topluluk').length;
     const radarCount = coupons.filter(c => c.kaynakTipi === 'web').length;
-    const activeCount = coupons.filter(c => c.durum !== 'gecersiz' && (!c.bitisTarihi || c.bitisTarihi >= now)).length;
-    const invalidCount = coupons.filter(c => c.durum === 'gecersiz' || (c.bitisTarihi && c.bitisTarihi < now)).length;
+    const activeCount = coupons.filter(c => c.durum === 'aktif' && (!c.bitisTarihi || c.bitisTarihi >= now)).length;
+    const invalidCount = coupons.filter(c => c.durum === 'gecersiz' || c.durum === 'reddedildi' || (c.bitisTarihi && c.bitisTarihi < now)).length;
 
     const elTotal = document.getElementById('couponStatTotal');
     if (elTotal) elTotal.textContent = total;
+
+    const elPending = document.getElementById('couponStatPending');
+    if (elPending) elPending.textContent = pendingCount;
 
     const elCommunity = document.getElementById('couponStatCommunity');
     if (elCommunity) elCommunity.textContent = communityCount;
@@ -13148,9 +13153,22 @@ function updateCouponsSummaryStats() {
     const elInvalid = document.getElementById('couponStatInvalid');
     if (elInvalid) elInvalid.textContent = invalidCount;
 
-    // Tab Badges
+    // Sidebar & Tab Badges
+    const sideBadge = document.getElementById('couponsPendingBadge');
+    if (sideBadge) {
+        if (pendingCount > 0) {
+            sideBadge.textContent = pendingCount > 99 ? '99+' : pendingCount;
+            sideBadge.classList.remove('hidden');
+        } else {
+            sideBadge.classList.add('hidden');
+        }
+    }
+
     const badgeAll = document.getElementById('couponTabAllBadge');
     if (badgeAll) badgeAll.textContent = total;
+
+    const badgePending = document.getElementById('couponTabPendingBadge');
+    if (badgePending) badgePending.textContent = pendingCount;
 
     const badgeCommunity = document.getElementById('couponTabCommunityBadge');
     if (badgeCommunity) badgeCommunity.textContent = communityCount;
@@ -13186,7 +13204,7 @@ function populateCouponStoreFilter() {
     }
 }
 
-// Switch between 'all', 'topluluk', and 'web'
+// Switch between 'all', 'beklemede', 'topluluk', and 'web'
 window.switchCouponSourceTab = function(tab) {
     currentCouponSourceTab = tab;
 
@@ -13196,12 +13214,17 @@ window.switchCouponSourceTab = function(tab) {
     });
 
     let activeBtnId = 'couponTabAll';
-    if (tab === 'topluluk') activeBtnId = 'couponTabCommunity';
+    if (tab === 'beklemede') activeBtnId = 'couponTabPending';
+    else if (tab === 'topluluk') activeBtnId = 'couponTabCommunity';
     else if (tab === 'web') activeBtnId = 'couponTabRadar';
 
     const activeBtn = document.getElementById(activeBtnId);
     if (activeBtn) {
-        activeBtn.className = 'coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-primary text-white shadow-xs';
+        if (tab === 'beklemede') {
+            activeBtn.className = 'coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-amber-500 text-slate-950 font-black shadow-xs';
+        } else {
+            activeBtn.className = 'coupon-source-tab px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all bg-primary text-white shadow-xs';
+        }
     }
 
     renderCoupons();
@@ -13225,16 +13248,21 @@ function renderCoupons() {
         // 1. Source Tab Filter
         if (currentCouponSourceTab === 'topluluk' && c.kaynakTipi !== 'topluluk') return false;
         if (currentCouponSourceTab === 'web' && c.kaynakTipi !== 'web') return false;
+        if (currentCouponSourceTab === 'beklemede' && c.durum !== 'beklemede') return false;
 
         // 2. Store Filter
         if (currentCouponStoreFilter !== 'all' && c.magazaAdi.toLowerCase() !== currentCouponStoreFilter.toLowerCase()) return false;
 
         // 3. Status Filter
-        const isExpired = (c.bitisTarihi && c.bitisTarihi < now);
+        const isPending = (c.durum === 'beklemede');
+        const isRejected = (c.durum === 'reddedildi');
         const isInvalid = (c.durum === 'gecersiz');
-        const isActive = (!isInvalid && !isExpired);
+        const isExpired = (c.bitisTarihi && c.bitisTarihi < now);
+        const isActive = (c.durum === 'aktif' && !isExpired);
 
+        if (currentCouponStatusFilter === 'pending' && !isPending) return false;
         if (currentCouponStatusFilter === 'active' && !isActive) return false;
+        if (currentCouponStatusFilter === 'rejected' && !isRejected) return false;
         if (currentCouponStatusFilter === 'invalid' && !isInvalid) return false;
         if (currentCouponStatusFilter === 'expired' && !isExpired) return false;
 
@@ -13284,10 +13312,12 @@ function renderCoupons() {
 
     filtered.forEach(kupon => {
         const tr = document.createElement('tr');
+        const isPending = (kupon.durum === 'beklemede');
+        const isRejected = (kupon.durum === 'reddedildi');
         const isInvalid = (kupon.durum === 'gecersiz');
         const isExpired = (kupon.bitisTarihi && kupon.bitisTarihi < now);
         
-        tr.className = `hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800/80 ${isInvalid ? 'opacity-60 bg-rose-500/5' : ''}`;
+        tr.className = `hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800/80 ${isPending ? 'bg-amber-500/5 border-amber-500/20' : (isInvalid || isRejected ? 'opacity-60 bg-rose-500/5' : '')}`;
 
         // Store badge color
         const storeBadgeClass = getStoreColorClass(kupon.magazaAdi);
@@ -13328,12 +13358,47 @@ function renderCoupons() {
 
         // Status badge
         let statusBadgeHtml = '';
-        if (isInvalid) {
+        if (isPending) {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">⏳ Onay Bekliyor</span>`;
+        } else if (isRejected) {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20" title="${escapeHtml(kupon.redNedeni || 'Reddedildi')}">❌ Reddedildi</span>`;
+        } else if (isInvalid) {
             statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-400">Geçersiz</span>`;
         } else if (isExpired) {
             statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">Süresi Doldu</span>`;
         } else {
             statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">Aktif</span>`;
+        }
+
+        // Action buttons
+        let actionButtonsHtml = '';
+        if (isPending) {
+            actionButtonsHtml = `
+                <button type="button" onclick="window.approveCouponAndPush('${kupon.id}')" class="px-2 py-1 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors font-bold flex items-center gap-1 text-[11px]" title="Kuponu Onayla, Yayına Al ve Bildirim Gönder">
+                    <span class="material-symbols-outlined text-[15px]">check_circle</span> Onayla & Push
+                </button>
+                <button type="button" onclick="window.rejectCouponPrompt('${kupon.id}')" class="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-colors" title="Gerekçe ile Reddet">
+                    <span class="material-symbols-outlined text-[16px]">cancel</span>
+                </button>
+                <button type="button" onclick="editCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary transition-colors" title="Düzenle">
+                    <span class="material-symbols-outlined text-[16px]">edit</span>
+                </button>
+                <button type="button" onclick="deleteCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-600 hover:bg-red-100 transition-colors" title="Sil">
+                    <span class="material-symbols-outlined text-[16px]">delete</span>
+                </button>
+            `;
+        } else {
+            actionButtonsHtml = `
+                <button type="button" onclick="window.toggleCouponStatus('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark text-slate-500 hover:text-amber-600 transition-colors" title="${isInvalid ? 'Kuponu Aktif Yap' : 'Kuponu Geçersiz / Çöp Yap'}">
+                    <span class="material-symbols-outlined text-[16px]">${isInvalid ? 'check_circle' : 'block'}</span>
+                </button>
+                <button type="button" onclick="editCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary transition-colors" title="Düzenle">
+                    <span class="material-symbols-outlined text-[16px]">edit</span>
+                </button>
+                <button type="button" onclick="deleteCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-600 hover:bg-red-100 transition-colors" title="Sil">
+                    <span class="material-symbols-outlined text-[16px]">delete</span>
+                </button>
+            `;
         }
 
         tr.innerHTML = `
@@ -13375,15 +13440,7 @@ function renderCoupons() {
             </td>
             <td class="p-3.5 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-1.5">
-                    <button type="button" onclick="window.toggleCouponStatus('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark text-slate-500 hover:text-amber-600 transition-colors" title="${isInvalid ? 'Kuponu Aktif Yap' : 'Kuponu Geçersiz / Çöp Yap'}">
-                        <span class="material-symbols-outlined text-[16px]">${isInvalid ? 'check_circle' : 'block'}</span>
-                    </button>
-                    <button type="button" onclick="editCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark hover:text-primary transition-colors" title="Düzenle">
-                        <span class="material-symbols-outlined text-[16px]">edit</span>
-                    </button>
-                    <button type="button" onclick="deleteCoupon('${kupon.id}')" class="p-1.5 rounded-lg border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-600 hover:bg-red-100 transition-colors" title="Sil">
-                        <span class="material-symbols-outlined text-[16px]">delete</span>
-                    </button>
+                    ${actionButtonsHtml}
                 </div>
             </td>
         `;
@@ -13415,6 +13472,56 @@ window.copyCouponCode = function(code) {
         });
     } else {
         prompt('Kupon Kodu:', code);
+    }
+};
+
+window.approveCouponAndPush = async function(id) {
+    const kupon = coupons.find(c => c.id === id);
+    if (!kupon) return;
+
+    if (!confirm(`"${kupon.magazaAdi} - ${kupon.kuponKodu}" kuponunu onaylayıp yayına almak ve kullanıcılara anlık bildirim göndermek istiyor musunuz?`)) {
+        return;
+    }
+
+    try {
+        await db.collection('kuponlar').doc(id).update({
+            durum: 'aktif',
+            approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            approvedBy: (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.uid : 'web_admin',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showSuccess(`"${kupon.magazaAdi}" kuponu başarıyla onaylandı ve yayınlandı! Bildirimler tetiklendi. 🎉`);
+    } catch (err) {
+        console.error("Kupon onaylama hatası:", err);
+        showError("Kupon onaylanırken hata oluştu: " + err.message);
+    }
+};
+
+window.rejectCouponPrompt = async function(id) {
+    const kupon = coupons.find(c => c.id === id);
+    if (!kupon) return;
+
+    const reason = prompt(
+        `"${kupon.magazaAdi} - ${kupon.kuponKodu}" kuponunu reddetmek için kullanıcıya iletilecek gerekçeyi girin:`,
+        "Kupon kodu geçersiz veya kampanya süresi dolmuş."
+    );
+
+    if (reason === null) return; // İptal
+
+    const cleanReason = reason.trim() || "Topluluk kurallarına uygun bulunmadı.";
+
+    try {
+        await db.collection('kuponlar').doc(id).update({
+            durum: 'reddedildi',
+            redNedeni: cleanReason,
+            rejectedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            rejectedBy: (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.uid : 'web_admin',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showSuccess(`"${kupon.magazaAdi}" kuponu reddedildi ve kullanıcıya bildirim gönderildi.`);
+    } catch (err) {
+        console.error("Kupon reddetme hatası:", err);
+        showError("Kupon reddedilirken hata oluştu: " + err.message);
     }
 };
 

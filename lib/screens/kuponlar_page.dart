@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/kupon.dart';
 import '../services/kupon_service.dart';
 import '../services/auth_service.dart';
@@ -53,7 +54,13 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   bool _isAdmin = false;
   bool _hideRadarBanner = false;
   bool _hideHeroBanner = false;
-  late Stream<List<Kupon>> _kuponlarStream;
+  // FS-19: SWR, Pagination & Cache-First State for Kuponlar
+  List<Kupon> _kuponlarList = [];
+  DocumentSnapshot? _lastKuponDocument;
+  bool _isLoadingKuponlar = false;
+  bool _isFirstLoadKuponlar = true;
+  bool _hasMoreKuponlar = true;
+  String? _kuponlarErrorMessage;
   late TabController _tabController;
   final ScrollController _radarScrollController = ScrollController();
   final ScrollController _toplulukScrollController = ScrollController();
@@ -105,7 +112,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     });
     _radarScrollController.addListener(_onRadarScroll);
     _toplulukScrollController.addListener(_onToplulukScroll);
-    _kuponlarStream = _kuponService.getKuponlarStream();
+    _loadKuponlarFirstPage();
     _checkAdminStatus();
     _loadHiddenCoupons();
     CouponCreditService.instance.initialize();
@@ -163,6 +170,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (show != _showRadarScrollToTop && mounted) {
       setState(() => _showRadarScrollToTop = show);
     }
+    if (_radarScrollController.offset >= _radarScrollController.position.maxScrollExtent - 350) {
+      _loadMoreKuponlar();
+    }
   }
 
   void _onToplulukScroll() {
@@ -170,6 +180,97 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final show = _toplulukScrollController.offset > ScrollToTopButton.defaultThreshold;
     if (show != _showToplulukScrollToTop && mounted) {
       setState(() => _showToplulukScrollToTop = show);
+    }
+    if (_toplulukScrollController.offset >= _toplulukScrollController.position.maxScrollExtent - 350) {
+      _loadMoreKuponlar();
+    }
+  }
+
+  /// FS-19: SWR + Cache-First ilk yükleme
+  Future<void> _loadKuponlarFirstPage() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingKuponlar = true;
+      _kuponlarErrorMessage = null;
+    });
+
+    try {
+      // 1. Aşama: Cache-First (0ms yerel önbellek açılışı)
+      try {
+        final cacheResult = await _kuponService.getKuponlarPaginated(
+          limit: 40,
+          source: Source.cache,
+        );
+        if (mounted && cacheResult.kuponlar.isNotEmpty) {
+          setState(() {
+            _kuponlarList = cacheResult.kuponlar;
+            _lastKuponDocument = cacheResult.lastDocument;
+            _hasMoreKuponlar = cacheResult.hasMore;
+            _isFirstLoadKuponlar = false;
+          });
+        }
+      } catch (_) {}
+
+      // 2. Aşama: SWR Server Revalidation
+      final serverResult = await _kuponService.getKuponlarPaginated(
+        limit: 40,
+        source: Source.server,
+      );
+
+      if (mounted) {
+        setState(() {
+          _kuponlarList = serverResult.kuponlar;
+          _lastKuponDocument = serverResult.lastDocument;
+          _hasMoreKuponlar = serverResult.hasMore;
+          _isLoadingKuponlar = false;
+          _isFirstLoadKuponlar = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingKuponlar = false;
+          _isFirstLoadKuponlar = false;
+          if (_kuponlarList.isEmpty) {
+            _kuponlarErrorMessage = 'Kuponlar yüklenemedi';
+          }
+        });
+      }
+    }
+  }
+
+  /// FS-19: Sonsuz kaydırma - Sonraki kupon sayfasını getir
+  Future<void> _loadMoreKuponlar() async {
+    if (_isLoadingKuponlar || !_hasMoreKuponlar || _lastKuponDocument == null || !mounted) return;
+
+    setState(() {
+      _isLoadingKuponlar = true;
+    });
+
+    try {
+      final result = await _kuponService.getKuponlarPaginated(
+        limit: 30,
+        lastDocument: _lastKuponDocument,
+        source: Source.serverAndCache,
+      );
+
+      if (mounted) {
+        final existingIds = _kuponlarList.map((k) => k.id).toSet();
+        final newKuponlar = result.kuponlar.where((k) => !existingIds.contains(k.id)).toList();
+
+        setState(() {
+          _kuponlarList.addAll(newKuponlar);
+          _lastKuponDocument = result.lastDocument;
+          _hasMoreKuponlar = result.hasMore && newKuponlar.isNotEmpty;
+          _isLoadingKuponlar = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingKuponlar = false;
+        });
+      }
     }
   }
 
@@ -2638,7 +2739,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                   kupon: kupon,
                                 ),
                               ),
-                            );
+                            ).then((_) {
+                              if (mounted) _loadKuponlarFirstPage();
+                            });
                           },
                           borderRadius: BorderRadius.circular(8),
                           child: Container(
@@ -2817,64 +2920,77 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final hasHidden = tabHiddenIds.isNotEmpty;
 
     if (list.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
+      return RefreshIndicator(
+        onRefresh: () async {
+          HapticFeedback.lightImpact();
+          await _loadKuponlarFirstPage();
+        },
+        color: AppTheme.primary,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           children: [
-            if (showBanner) _buildRadarInfoBanner(isDark),
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.search_off_rounded,
-                        size: 34,
-                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  if (showBanner) _buildRadarInfoBanner(isDark),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.5,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 68,
+                            height: 68,
+                            decoration: BoxDecoration(
+                              color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.search_off_rounded,
+                              size: 34,
+                              color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            hasHidden ? 'Gizlenen Kuponlar Mevcut' : 'Kupon Bulunamadı',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            hasHidden
+                                ? 'Gizlediğiniz kuponlar nedeniyle bu sekmede görünür kupon bulunmuyor.'
+                                : emptyMsg,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                          if (hasHidden) ...[
+                            const SizedBox(height: 12),
+                            TextButton.icon(
+                              onPressed: () => _unhideCoupons(tabHiddenIds, tabName: tabName),
+                              icon: const Icon(Icons.visibility_rounded, size: 16),
+                              label: Text('Bu Sekmedeki Gizlenenleri Göster (${tabHiddenIds.length})'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppTheme.primary,
+                                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      hasHidden ? 'Gizlenen Kuponlar Mevcut' : 'Kupon Bulunamadı',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      hasHidden
-                          ? 'Gizlediğiniz kuponlar nedeniyle bu sekmede görünür kupon bulunmuyor.'
-                          : emptyMsg,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                        fontSize: 12,
-                        height: 1.4,
-                      ),
-                    ),
-                    if (hasHidden) ...[
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: () => _unhideCoupons(tabHiddenIds, tabName: tabName),
-                        icon: const Icon(Icons.visibility_rounded, size: 16),
-                        label: Text('Bu Sekmedeki Gizlenenleri Göster (${tabHiddenIds.length})'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppTheme.primary,
-                          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -2886,28 +3002,44 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (showBanner) headerCount++;
     if (hasHidden) headerCount++;
 
-    return ListenableBuilder(
-      listenable: AdManagerService.instance,
-      builder: (context, _) {
-        final adManager = AdManagerService.instance;
-        final bool showAds = adManager.isAdsEnabled &&
-            adManager.nativeEnabled &&
-            adManager.nativeCouponsEnabled;
-        final int interval = (adManager.nativeCouponsInterval >= 3 &&
-                adManager.nativeCouponsInterval <= 15)
-            ? adManager.nativeCouponsInterval
-            : 5;
-        final int couponsPerAd = interval - 1; // Standart: 5 - 1 = 4 kupon
-        final int adCount =
-            (showAds && couponsPerAd > 0) ? (list.length ~/ couponsPerAd) : 0;
-        final int totalItemCount = list.length + headerCount + adCount;
+    return RefreshIndicator(
+      onRefresh: () async {
+        HapticFeedback.lightImpact();
+        await _loadKuponlarFirstPage();
+      },
+      color: AppTheme.primary,
+      child: ListenableBuilder(
+        listenable: AdManagerService.instance,
+        builder: (context, _) {
+          final adManager = AdManagerService.instance;
+          final bool showAds = adManager.isAdsEnabled &&
+              adManager.nativeEnabled &&
+              adManager.nativeCouponsEnabled;
+          final int interval = (adManager.nativeCouponsInterval >= 3 &&
+                  adManager.nativeCouponsInterval <= 15)
+              ? adManager.nativeCouponsInterval
+              : 5;
+          final int couponsPerAd = interval - 1; // Standart: 5 - 1 = 4 kupon
+          final int adCount =
+              (showAds && couponsPerAd > 0) ? (list.length ~/ couponsPerAd) : 0;
+          final bool showBottomSpinner = _isLoadingKuponlar && !_isFirstLoadKuponlar;
+          final int totalItemCount = list.length + headerCount + adCount + (showBottomSpinner ? 1 : 0);
 
         return ListView.builder(
           controller: scrollController,
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 75),
           itemCount: totalItemCount,
           itemBuilder: (context, index) {
+            if (showBottomSpinner && index == totalItemCount - 1) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: CircularProgressIndicator.adaptive(),
+                ),
+              );
+            }
+
             int currentIndex = 0;
 
             if (showBanner) {
@@ -2971,8 +3103,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           },
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -3196,17 +3329,45 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       ),
       body: Stack(
         children: [
-          StreamBuilder<List<Kupon>>(
-            stream: _kuponlarStream,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return _buildCouponSkeleton(isDark);
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Bir hata oluştu: ${snapshot.error}'));
-              }
-
-              final kuponlar = snapshot.data ?? [];
+          // FS-19: SWR Kuponlar Akışı
+          if (_isFirstLoadKuponlar && _isLoadingKuponlar && _kuponlarList.isEmpty)
+            _buildCouponSkeleton(isDark)
+          else if (_kuponlarErrorMessage != null && _kuponlarList.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline_rounded, size: 52, color: Colors.grey[500]),
+                    const SizedBox(height: 14),
+                    Text(
+                      _kuponlarErrorMessage!,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _loadKuponlarFirstPage,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Tekrar Dene'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Builder(
+              builder: (context) {
+                final kuponlar = _kuponlarList;
 
               final hiddenToplulukIds = kuponlar
                   .where((k) => k.kaynakTipi == 'topluluk' && _hiddenKuponIds.contains(k.id))
@@ -3232,7 +3393,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
               final visibleKuponlar = filteredKuponlar.where((k) => !_hiddenKuponIds.contains(k.id)).toList();
 
-              final toplulukKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'topluluk').toList();
+              final toplulukKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'topluluk' && k.durum == 'aktif').toList();
               toplulukKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: true));
 
               final radarKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'web' && k.durum == 'aktif').toList();
@@ -3540,7 +3701,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                         MaterialPageRoute(
                           builder: (_) => KuponFormPage(userId: currentUser.uid),
                         ),
-                      );
+                      ).then((_) {
+                        if (mounted) _loadKuponlarFirstPage();
+                      });
                     },
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,

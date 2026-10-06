@@ -72,26 +72,32 @@ console.log('\n--- TEST 2: cleanupOldImagesManual Güvenlik Eşiği Sözleşmesi
 }
 
 // ==========================================
-// TEST 3: sendManualNotification All Hedefinde Topic ve Feed Tavanı
+// TEST 3: sendManualNotification All Hedefinde Dual-Topic ve GlobalAnnouncements Sözleşmesi
 // ==========================================
-console.log('\n--- TEST 3: sendManualNotification All ve Feed Tavanı Sözleşmesi ---');
+console.log('\n--- TEST 3: sendManualNotification Dual-Topic ve GlobalAnnouncements Sözleşmesi ---');
 {
-  const MAX_INAPP_TARGETS = 500;
-  const resolveTargetStrategy = (targetType) => {
+  const MAX_INAPP_FALLBACK_TARGETS = 300;
+  const resolveTargetStrategy = (targetType, notificationType) => {
     if (targetType === 'all') {
+      const topic = notificationType === 'marketing' ? 'firsatkolik_marketing_v1' : 'sicak_firsatlar_general_v2';
       return {
-        broadcastTopic: 'sicak_firsatlar_general_v2',
-        maxInAppTargets: MAX_INAPP_TARGETS
+        broadcastTopic: topic,
+        useGlobalAnnouncement: true,
+        maxFallbackInAppTargets: MAX_INAPP_FALLBACK_TARGETS,
       };
     }
     return null;
   };
 
-  const strategy = resolveTargetStrategy('all');
-  assert.strictEqual(strategy.broadcastTopic, 'sicak_firsatlar_general_v2', 'All hedefinde genel FCM konusuna yayın yapılmalı');
-  assert.strictEqual(strategy.maxInAppTargets, 500, 'In-app feed yazımı 500 ile sınırlandırılmalı');
+  const marketingStrategy = resolveTargetStrategy('all', 'marketing');
+  assert.strictEqual(marketingStrategy.broadcastTopic, 'firsatkolik_marketing_v1', 'Pazarlama bildirimlerinde firsatkolik_marketing_v1 topic kullanılmalı');
+  assert.strictEqual(marketingStrategy.useGlobalAnnouncement, true, 'Global yayınlarda globalAnnouncements tekil doküman yazılmalı');
+  assert.strictEqual(marketingStrategy.maxFallbackInAppTargets, 300, 'Geriye dönük in-app feed fallback tavanı 300 olmalı');
 
-  console.log('✅ TEST 3 BAŞARILI: sendManualNotification topic yayın ve feed tavanı doğrulandı.');
+  const generalStrategy = resolveTargetStrategy('all', 'admin_message');
+  assert.strictEqual(generalStrategy.broadcastTopic, 'sicak_firsatlar_general_v2', 'Genel yönetici duyurularında sicak_firsatlar_general_v2 kullanılmalı');
+
+  console.log('✅ TEST 3 BAŞARILI: sendManualNotification dual-topic yayın ve globalAnnouncements sözleşmesi doğrulandı.');
 }
 
 // ==========================================

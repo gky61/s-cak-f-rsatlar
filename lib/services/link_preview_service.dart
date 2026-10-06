@@ -227,6 +227,9 @@ class LinkPreviewService {
       if (targetUrl.toLowerCase().contains('paylaskazan.teknosa.com') || targetUrl.toLowerCase().contains('rdr.btrck.com')) {
         targetUrl = await resolveTeknosaPaylasKazan(targetUrl);
       }
+      if (targetUrl.toLowerCase().contains('fenom.io')) {
+        targetUrl = await resolveFenomShortLink(targetUrl);
+      }
       final lowerUrl = targetUrl.toLowerCase();
       final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
                                lowerUrl.contains('amzn.to') || 
@@ -241,7 +244,8 @@ class LinkPreviewService {
                                lowerUrl.contains('onelink.me') ||
                                lowerUrl.contains('paylaskazan.teknosa.com') ||
                                lowerUrl.contains('incehesap.com/u/') ||
-                               lowerUrl.contains('ty.gl');
+                               lowerUrl.contains('ty.gl') ||
+                               lowerUrl.contains('fenom.io');
 
       if (isShortOrRedirect) {
         final resolved = await resolveUrlRedirects(targetUrl);
@@ -556,6 +560,9 @@ class LinkPreviewService {
       if (currentUrl.toLowerCase().contains('paylaskazan.teknosa.com') || currentUrl.toLowerCase().contains('rdr.btrck.com')) {
         currentUrl = await resolveTeknosaPaylasKazan(currentUrl);
       }
+      if (currentUrl.toLowerCase().contains('fenom.io')) {
+        currentUrl = await resolveFenomShortLink(currentUrl);
+      }
       if (currentUrl != cleanInput) {
         _log('🎯 Adjust yönlendirmesi hemen çözüldü: $currentUrl');
         if (_redirectCache.length >= _maxRedirectCacheSize) {
@@ -737,6 +744,59 @@ class LinkPreviewService {
     } catch (_) {
       return rawUrl;
     }
+  }
+
+  /// Fenom.io kısa linklerini (fenom.io/amzn-...) Amazon ürün linkine çözer.
+  /// fenom.io sunucuları 301/302 yönlendirmesi dönmeyip 200 OK ile JavaScript tabanlı
+  /// appLink ve fallbackLink değişkenleri döndürür.
+  Future<String> resolveFenomShortLink(String url) async {
+    try {
+      _log('🔗 Fenom.io kısa linki çözülüyor: $url');
+      final client = http.Client();
+      final response = await client.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8',
+        },
+      ).timeout(const Duration(seconds: 8));
+      client.close();
+
+      if (response.statusCode == 200) {
+        final html = response.body;
+
+        // 1. var fallbackLink = "https://www.amazon.com.tr/..."
+        final fallbackMatch = RegExp(r'''var\s+fallbackLink\s*=\s*["']([^"']+)["']''', caseSensitive: false).firstMatch(html);
+        if (fallbackMatch != null && fallbackMatch.group(1) != null) {
+          final target = fallbackMatch.group(1)!;
+          _log('✅ Fenom.io fallbackLink yakalandı: $target');
+          return target;
+        }
+
+        // 2. var appLink = "com.amazon.mobile.shopping.web://www.amazon.com.tr/..."
+        final appLinkMatch = RegExp(r'''var\s+appLink\s*=\s*["'](?:com\.amazon\.mobile\.shopping\.web:\/\/|https?:\/\/)?([^"']+)["']''', caseSensitive: false).firstMatch(html);
+        if (appLinkMatch != null && appLinkMatch.group(1) != null) {
+          var target = appLinkMatch.group(1)!;
+          if (!target.startsWith('http')) {
+            target = 'https://$target';
+          }
+          _log('✅ Fenom.io appLink yakalandı: $target');
+          return target;
+        }
+
+        // 3. Genel regex: HTML içindeki ilk amazon URL'si
+        final generalMatch = RegExp(r'''(https?:\/\/(?:www\.)?amazon\.com(?:\.tr)?\/[^\s"'<>]+)''', caseSensitive: false).firstMatch(html);
+        if (generalMatch != null && generalMatch.group(1) != null) {
+          final target = generalMatch.group(1)!;
+          _log('✅ Fenom.io genel amazon linki yakalandı: $target');
+          return target;
+        }
+      }
+    } catch (e) {
+      _log('⚠️ Fenom.io link çözme hatası: $e');
+    }
+    return url;
   }
 
   // Amazon kısa linkini (amzn.eu) uzun linke (amazon.com.tr/dp/...) çevir

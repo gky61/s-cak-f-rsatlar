@@ -46,6 +46,7 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('amzn.') ||
     lowerUrl.includes('link.amazon') ||
     lowerUrl.includes('amzlinks.') ||
+    lowerUrl.includes('fenom.io') ||
     lowerUrl.includes('hepsiburada.com') ||
     lowerUrl.includes('mavi.com') ||
     lowerUrl.includes('defacto.com.tr') ||
@@ -127,6 +128,54 @@ async function resolveN11ShortLink(url) {
     }
   } catch (err) {
     console.warn(`[RESOLVE-REDIRECT] ⚠️ N11 short link resolution error: ${err.message}`);
+  }
+  return url;
+}
+
+/** Fenom.io kısa linklerini (fenom.io/amzn-...) Amazon ürün linkine çözer */
+async function resolveFenomShortLink(url) {
+  try {
+    console.log(`[RESOLVE-REDIRECT] 🔗 fenom.io kısa linki çözülüyor: ${url}`);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (res.ok) {
+      const html = await res.text();
+
+      // 1. var fallbackLink = "https://www.amazon.com.tr/..."
+      const fallbackMatch = html.match(/var\s+fallbackLink\s*=\s*["']([^"']+)["']/i);
+      if (fallbackMatch && fallbackMatch[1]) {
+        console.log(`[RESOLVE-REDIRECT] ✅ fenom.io fallbackLink yakalandı: ${fallbackMatch[1]}`);
+        return fallbackMatch[1];
+      }
+
+      // 2. var appLink = "com.amazon.mobile.shopping.web://www.amazon.com.tr/..."
+      const appLinkMatch = html.match(/var\s+appLink\s*=\s*["'](?:com\.amazon\.mobile\.shopping\.web:\/\/|https?:\/\/)?([^"']+)["']/i);
+      if (appLinkMatch && appLinkMatch[1]) {
+        let resolved = appLinkMatch[1];
+        if (!resolved.startsWith('http')) {
+          resolved = 'https://' + resolved;
+        }
+        console.log(`[RESOLVE-REDIRECT] ✅ fenom.io appLink yakalandı: ${resolved}`);
+        return resolved;
+      }
+
+      // 3. Genel regex: HTML içindeki ilk amazon URL'si
+      const generalMatch = html.match(/(https?:\/\/(?:www\.)?amazon\.com(?:\.tr)?\/[^\s"'<>]+)/i);
+      if (generalMatch && generalMatch[1]) {
+        console.log(`[RESOLVE-REDIRECT] ✅ fenom.io genel amazon linki yakalandı: ${generalMatch[1]}`);
+        return generalMatch[1];
+      }
+    }
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ fenom.io short link resolution hatası: ${err.message}`);
   }
   return url;
 }
@@ -228,6 +277,9 @@ async function resolveUrlRedirects(url) {
 
   if (targetUrl.toLowerCase().includes('sl.n11.com/n/') || targetUrl.toLowerCase().includes('n11.com/n/')) {
     targetUrl = await resolveN11ShortLink(targetUrl);
+  }
+  if (targetUrl.toLowerCase().includes('fenom.io')) {
+    targetUrl = await resolveFenomShortLink(targetUrl);
   }
   const lowerUrl = targetUrl.toLowerCase();
 
@@ -429,7 +481,7 @@ async function resolveUrlRedirects(url) {
       'hb.biz', 'app.hb.biz', 'publicis.link',
       'bit.ly', 'tinyurl.com', 't.co', 'rebrand.ly',
       'rdrtr.com', 'onelink.me', 'paylaskazan.teknosa.com',
-      'rdr.btrck.com', 'sl.n11.com'
+      'rdr.btrck.com', 'sl.n11.com', 'fenom.io'
     ];
     isShortOrRedirect = shortDomains.some(d => targetHost === d || targetHost.endsWith('.' + d));
   } catch (err) {
@@ -1047,7 +1099,7 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       isPttavm = true;
       console.log(`[FETCH-HTML] 🔄 Pttavm linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
-    } else if (parsed.hostname.includes('amazon.') || parsed.hostname.includes('link.amazon') || parsed.hostname.includes('amzlinks.') || parsed.hostname.includes('amzn.')) {
+    } else if (parsed.hostname.includes('amazon.') || parsed.hostname.includes('link.amazon') || parsed.hostname.includes('amzlinks.') || parsed.hostname.includes('amzn.') || parsed.hostname.includes('fenom.io')) {
       // Amazon linklerinde satıcı (smid) ve varyant (th, psc, m, isIsap) parametrelerini koru.
       // Aksi takdirde varsayılan farklı bir satıcının indirimsiz yüksek fiyatı çekilmektedir.
       const keepParams = ['smid', 'th', 'psc', 'm', 'isIsap', 'tag'];

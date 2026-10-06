@@ -57,7 +57,26 @@ abstract class BaseProductScraper {
         .trim();
         
     if (cleaned.isEmpty) return null;
-    
+
+    // 1. Dublike fiyat savunması: Ardışık tekrarlanan aynı fiyat kalıbı (örn: 269,91269,91 veya 3816038160)
+    final dupMatch = RegExp(r'^(\d+(?:[.,]\d{1,2})?)\1+$').firstMatch(cleaned);
+    if (dupMatch != null && dupMatch.group(1) != null) {
+      cleaned = dupMatch.group(1)!;
+    }
+
+    // 2. Metin içinde harf kalmışsa (örn: "Yüzde 10 tasarruf ile 269,91"):
+    // Metin içerisindeki son geçerli fiyat kalıbını ayıkla
+    if (RegExp(r'[^\d.,]').hasMatch(cleaned)) {
+      final pricePattern = RegExp(r'(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})*|\d+)(?:[.,]\d{2}))(?:\s*(?:TL|₺))?', caseSensitive: false);
+      final matches = pricePattern.allMatches(priceText).toList();
+      if (matches.isNotEmpty) {
+        final lastCandidate = matches.last.group(1);
+        if (lastCandidate != null && lastCandidate.isNotEmpty) {
+          return parsePriceText(lastCandidate);
+        }
+      }
+    }
+
     final hasDot = cleaned.contains('.');
     final hasComma = cleaned.contains(',');
 

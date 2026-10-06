@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../services/firestore_service.dart';
@@ -28,19 +29,26 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final ThemeService _themeService = ThemeService();
   late CardViewMode _viewMode;
-  late Stream<List<Deal>> _popularDealsStream;
   late ScrollController _scrollController;
   final ScrollController _categoryScrollController = ScrollController();
   bool _showScrollToTop = false;
   String _selectedCategory = 'tumu';
+
+  // FS-18: SWR, Pagination & Cache-First State
+  List<Deal> _dealsList = [];
+  DocumentSnapshot? _lastDocument;
+  bool _isLoading = false;
+  bool _isFirstLoad = true;
+  bool _hasMore = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _viewMode = _themeService.viewMode;
     _themeService.addListener(_onThemeChanged);
-    _popularDealsStream = _firestoreService.getPopularDeals();
     _scrollController = ScrollController()..addListener(_scrollListener);
+    _loadFirstPage();
   }
 
   @override
@@ -52,6 +60,96 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     super.dispose();
   }
 
+  /// SWR + Cache-First ilk yükleme
+  Future<void> _loadFirstPage() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // 1. Aşama: Cache-First (0 milisaniye yerel önbellekten anında açılış)
+      try {
+        final cacheResult = await _firestoreService.getPopularDealsPaginated(
+          limit: 45,
+          source: Source.cache,
+        );
+        if (mounted && cacheResult.deals.isNotEmpty) {
+          setState(() {
+            _dealsList = cacheResult.deals;
+            _lastDocument = cacheResult.lastDocument;
+            _hasMore = cacheResult.hasMore;
+            _isFirstLoad = false;
+          });
+        }
+      } catch (_) {
+        // Önbellek boşsa sessizce sunucu aşamasına geç
+      }
+
+      // 2. Aşama: Stale-While-Revalidate (Sunucudan taze doğrula)
+      final serverResult = await _firestoreService.getPopularDealsPaginated(
+        limit: 45,
+        source: Source.server,
+      );
+
+      if (mounted) {
+        setState(() {
+          _dealsList = serverResult.deals;
+          _lastDocument = serverResult.lastDocument;
+          _hasMore = serverResult.hasMore;
+          _isLoading = false;
+          _isFirstLoad = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isFirstLoad = false;
+          if (_dealsList.isEmpty) {
+            _errorMessage = 'Popüler fırsatlar yüklenemedi';
+          }
+        });
+      }
+    }
+  }
+
+  /// Sonsuz kaydırma: Bir sonraki sayfayı getir
+  Future<void> _loadMore() async {
+    if (_isLoading || !_hasMore || _lastDocument == null || !mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await _firestoreService.getPopularDealsPaginated(
+        limit: 30,
+        lastDocument: _lastDocument,
+        source: Source.serverAndCache,
+      );
+
+      if (mounted) {
+        final existingIds = _dealsList.map((d) => d.id).toSet();
+        final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+        setState(() {
+          _dealsList.addAll(newDeals);
+          _lastDocument = result.lastDocument;
+          _hasMore = result.hasMore;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   void _scrollListener() {
     if (!_scrollController.hasClients) return;
     final offset = _scrollController.offset;
@@ -60,6 +158,11 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       setState(() {
         _showScrollToTop = shouldShow;
       });
+    }
+
+    // Ekran sonuna 350px kala sonraki sayfayı tetikle
+    if (offset >= _scrollController.position.maxScrollExtent - 350) {
+      _loadMore();
     }
   }
 
@@ -405,224 +508,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
 
           // ─── Fırsatlar Akışı ────
           Expanded(
-            child: StreamBuilder<List<Deal>>(
-              stream: _popularDealsStream,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return _buildLoadingGrid(isDark);
-                }
-
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: 56,
-                          color: isDark ? Colors.grey[600] : Colors.grey[400],
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Popüler fırsatlar yüklenemedi',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final rawDeals = List<Deal>.from(snapshot.data ?? []);
-                final deals = _filterDealsByCategory(rawDeals);
-
-                if (deals.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFF6B35).withValues(alpha: isDark ? 0.15 : 0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.whatshot_rounded,
-                              size: 48,
-                              color: Color(0xFFFF6B35),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _selectedCategory == 'tumu'
-                                ? 'Henüz popüler fırsat yok'
-                                : 'Bu kategoride son 48 saatte popüler fırsat bulunamadı',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Topluluk tarafından sıcak oylanan (AL!) ve canlı olan fırsatlar otomatik olarak burada listelenir.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    HapticFeedback.lightImpact();
-                    setState(() {
-                      _popularDealsStream = _firestoreService.getPopularDeals();
-                    });
-                  },
-                  color: primaryColor,
-                  child: ListenableBuilder(
-                    listenable: AdManagerService.instance,
-                    builder: (context, _) {
-                      final adManager = AdManagerService.instance;
-                      final bool showAds = adManager.isAdsEnabled &&
-                          adManager.nativeEnabled &&
-                          adManager.nativePopularEnabled;
-                      final int chunkSize = (adManager.nativePopularInterval >= 4 &&
-                              adManager.nativePopularInterval <= 20)
-                          ? adManager.nativePopularInterval
-                          : 6;
-
-                      if (_viewMode == CardViewMode.vertical) {
-                        if (!showAds || deals.length < chunkSize) {
-                          // Reklamlar kapalıysa veya yeterli ürün yoksa standart GridView
-                          return GridView.builder(
-                            controller: _scrollController,
-                            physics: const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics(),
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 11,
-                              childAspectRatio: 0.635,
-                            ),
-                            itemCount: deals.length,
-                            itemBuilder: (context, index) {
-                              final deal = deals[index];
-                              return DealCard(
-                                key: ValueKey('pop_deal_${deal.id}_v'),
-                                deal: deal,
-                                viewMode: CardViewMode.vertical,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => DealDetailScreen(dealId: deal.id),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          );
-                        } else {
-                          // Reklamlar aktif: 2 sütunlu SliverGrid aralarında tam genişlikte yatay Native Ad
-                          return CustomScrollView(
-                            controller: _scrollController,
-                            physics: const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics(),
-                            ),
-                            slivers: _buildGridWithHorizontalAdsSlivers(
-                              context: context,
-                              dealsToShow: deals,
-                              isDark: isDark,
-                              showAds: showAds,
-                              chunkSize: chunkSize,
-                            ),
-                          );
-                        }
-                      } else {
-                        // Liste Modu (5-6-5-6 pattern)
-                        final List<int> adPositions = showAds ? _calculateAdPositions(deals.length) : const [];
-                        final int adCount = adPositions.length;
-                        final int totalItemCount = deals.length + adCount;
-
-                        return ListView.builder(
-                          controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(
-                            parent: BouncingScrollPhysics(),
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          cacheExtent: 500,
-                          addAutomaticKeepAlives: true,
-                          addRepaintBoundaries: true,
-                          addSemanticIndexes: false,
-                          itemCount: totalItemCount,
-                          itemBuilder: (context, index) {
-                            int passedAds = 0;
-                            for (int i = 0; i < adPositions.length; i++) {
-                              final adPosition = adPositions[i];
-                              if (index == adPosition) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: AdDealCard(
-                                    key: ValueKey('ad_card_popular_horizontal_$i'),
-                                    viewMode: CardViewMode.horizontal,
-                                    placement: 'popular',
-                                  ),
-                                );
-                              }
-                              if (index > adPosition) {
-                                passedAds++;
-                              }
-                            }
-
-                            final actualIndex = index - passedAds;
-                            if (actualIndex >= deals.length || actualIndex < 0) {
-                              return const SizedBox.shrink();
-                            }
-                            final deal = deals[actualIndex];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: RepaintBoundary(
-                                key: ValueKey('pop_deal_list_boundary_${deal.id}'),
-                                child: DealCard(
-                                  key: ValueKey('pop_deal_${deal.id}_h'),
-                                  deal: deal,
-                                  viewMode: CardViewMode.horizontal,
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => DealDetailScreen(dealId: deal.id),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      }
-                    },
-                  ),
-                );
-              },
-            ),
+            child: _buildDealsContent(context, isDark, primaryColor),
           ),
         ],
       ),
@@ -631,6 +517,286 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         scrollController: _scrollController,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildDealsContent(BuildContext context, bool isDark, Color primaryColor) {
+    if (_isFirstLoad && _isLoading && _dealsList.isEmpty) {
+      return _buildLoadingGrid(isDark);
+    }
+
+    if (_errorMessage != null && _dealsList.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                size: 56,
+                color: isDark ? Colors.grey[600] : Colors.grey[400],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _errorMessage!,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadFirstPage,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Tekrar Dene'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final deals = _filterDealsByCategory(_dealsList);
+
+    if (deals.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          HapticFeedback.lightImpact();
+          await _loadFirstPage();
+        },
+        color: primaryColor,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.5,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF6B35).withValues(alpha: isDark ? 0.15 : 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.whatshot_rounded,
+                          size: 48,
+                          color: Color(0xFFFF6B35),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _selectedCategory == 'tumu'
+                            ? 'Henüz popüler fırsat yok'
+                            : 'Bu kategoride son 48 saatte popüler fırsat bulunamadı',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Topluluk tarafından sıcak oylanan (AL!) ve canlı olan fırsatlar otomatik olarak burada listelenir.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        HapticFeedback.lightImpact();
+        await _loadFirstPage();
+      },
+      color: primaryColor,
+      child: ListenableBuilder(
+        listenable: AdManagerService.instance,
+        builder: (context, _) {
+          final adManager = AdManagerService.instance;
+          final bool showAds = adManager.isAdsEnabled &&
+              adManager.nativeEnabled &&
+              adManager.nativePopularEnabled;
+          final int chunkSize = (adManager.nativePopularInterval >= 4 &&
+                  adManager.nativePopularInterval <= 20)
+              ? adManager.nativePopularInterval
+              : 6;
+
+          if (_viewMode == CardViewMode.vertical) {
+            if (!showAds || deals.length < chunkSize) {
+              return CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.all(12),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 11,
+                        childAspectRatio: 0.635,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final deal = deals[index];
+                          return RepaintBoundary(
+                            key: ValueKey('pop_deal_grid_boundary_${deal.id}'),
+                            child: DealCard(
+                              key: ValueKey('pop_deal_${deal.id}_v'),
+                              deal: deal,
+                              viewMode: CardViewMode.vertical,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => DealDetailScreen(dealId: deal.id),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                        childCount: deals.length,
+                        addRepaintBoundaries: true,
+                      ),
+                    ),
+                  ),
+                  if (_isLoading && !_isFirstLoad)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: CircularProgressIndicator.adaptive(),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            } else {
+              final slivers = _buildGridWithHorizontalAdsSlivers(
+                context: context,
+                dealsToShow: deals,
+                isDark: isDark,
+                showAds: showAds,
+                chunkSize: chunkSize,
+              );
+              if (_isLoading && !_isFirstLoad) {
+                slivers.add(
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: slivers,
+              );
+            }
+          } else {
+            // Liste Modu (5-6-5-6 pattern)
+            final List<int> adPositions = showAds ? _calculateAdPositions(deals.length) : const [];
+            final int adCount = adPositions.length;
+            final bool showBottomSpinner = _isLoading && !_isFirstLoad;
+            final int totalItemCount = deals.length + adCount + (showBottomSpinner ? 1 : 0);
+
+            return ListView.builder(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              padding: const EdgeInsets.all(16),
+              addAutomaticKeepAlives: true,
+              addRepaintBoundaries: true,
+              addSemanticIndexes: false,
+              itemCount: totalItemCount,
+              itemBuilder: (context, index) {
+                if (showBottomSpinner && index == totalItemCount - 1) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: CircularProgressIndicator.adaptive(),
+                    ),
+                  );
+                }
+
+                int passedAds = 0;
+                for (int i = 0; i < adPositions.length; i++) {
+                  final adPosition = adPositions[i];
+                  if (index == adPosition) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: AdDealCard(
+                        key: ValueKey('ad_card_popular_horizontal_$i'),
+                        viewMode: CardViewMode.horizontal,
+                        placement: 'popular',
+                      ),
+                    );
+                  }
+                  if (index > adPosition) {
+                    passedAds++;
+                  }
+                }
+
+                final actualIndex = index - passedAds;
+                if (actualIndex >= deals.length || actualIndex < 0) {
+                  return const SizedBox.shrink();
+                }
+                final deal = deals[actualIndex];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: RepaintBoundary(
+                    key: ValueKey('pop_deal_list_boundary_${deal.id}'),
+                    child: DealCard(
+                      key: ValueKey('pop_deal_${deal.id}_h'),
+                      deal: deal,
+                      viewMode: CardViewMode.horizontal,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DealDetailScreen(dealId: deal.id),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+        },
+      ),
     );
   }
 

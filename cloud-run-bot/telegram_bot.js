@@ -1061,6 +1061,25 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       console.warn('⚠️ [AFFILIATE] Link dönüştürme hatası, orijinal link korundu:', affErr.message);
     }
 
+    // FS-20: Hibrit Arama için küçük harfli kök kelimeler (searchKeywords) üretimi
+    const normalizeKw = (str) => {
+      if (!str || typeof str !== 'string') return '';
+      return str.toLowerCase()
+        .replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i')
+        .replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+    };
+    const kwSet = new Set();
+    [cleanedTitle, scrapeResult.brand, storeFromLink, finalCategory].forEach(field => {
+      const norm = normalizeKw(field);
+      if (norm) {
+        norm.split(' ').forEach(t => {
+          if (t.length >= 2 || /^\d+$/.test(t)) kwSet.add(t);
+        });
+      }
+    });
+
     // Deal objesi
     const deal = {
       title: cleanedTitle,
@@ -1105,6 +1124,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       ratingCount: scrapeResult.ratingCount || null,
       brand: scrapeResult.brand || null,
       isAmazonWarehouse: Boolean(scrapeResult.isAmazonWarehouse || linkScraperService.checkIsAmazonWarehouse(mainLink) || linkScraperService.checkIsAmazonWarehouse(scrapeResult.url)),
+      searchKeywords: Array.from(kwSet).slice(0, 50),
     };
 
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);

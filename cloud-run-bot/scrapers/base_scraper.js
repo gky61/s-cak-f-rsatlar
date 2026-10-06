@@ -54,6 +54,25 @@ class BaseProductScraper {
 
     if (!cleaned) return null;
 
+    // 1. Dublike fiyat savunması: Ardışık tekrarlanan aynı fiyat kalıbı (örn: 269,91269,91 veya 3816038160)
+    const dupMatch = cleaned.match(/^(\d+(?:[.,]\d{1,2})?)\1+$/);
+    if (dupMatch && dupMatch[1]) {
+      cleaned = dupMatch[1];
+    }
+
+    // 2. Metin içinde harf kalmışsa (örn: "Yüzde 10 tasarruf ile 269,91"):
+    // Metin içerisindeki son geçerli fiyat kalıbını ayıkla
+    if (/[^\d.,]/.test(cleaned)) {
+      const pricePattern = /(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})*|\d+)(?:[.,]\d{2}))(?:\s*(?:TL|₺))?/gi;
+      const matches = [...priceText.matchAll(pricePattern)];
+      if (matches.length > 0) {
+        const lastCandidate = matches[matches.length - 1][1];
+        if (lastCandidate) {
+          return this.parsePriceText(lastCandidate);
+        }
+      }
+    }
+
     const hasDot = cleaned.includes('.');
     const hasComma = cleaned.includes(',');
 

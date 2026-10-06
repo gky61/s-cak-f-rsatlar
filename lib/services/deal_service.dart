@@ -9,6 +9,7 @@ import 'advertising_compliance_service.dart';
 import 'affiliate/affiliate_service.dart';
 import '../utils/asset_path_migration.dart';
 import 'system_log_service.dart';
+import 'deal_search_engine.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -18,6 +19,21 @@ class DealsSnapshot {
   final List<Deal> deals;
   final bool isFromCache;
   DealsSnapshot({required this.deals, required this.isFromCache});
+}
+
+/// FS-09: Sayfalı ve önbellek (SWR) destekli fırsat akış modeli.
+class DealsPageResult {
+  final List<Deal> deals;
+  final DocumentSnapshot? lastDocument;
+  final bool hasMore;
+  final bool isFromCache;
+
+  const DealsPageResult({
+    required this.deals,
+    this.lastDocument,
+    this.hasMore = false,
+    this.isFromCache = false,
+  });
 }
 
 /// Fırsat paylaşımı tamamlandığında dönen sonuç modeli.
@@ -54,6 +70,7 @@ class DealService {
   }
 
   // Deals koleksiyonunu dinleme (En son 100 onaylı fırsat ile sınırlandırılmış güvenli akış)
+  // Geriye dönük uyumluluk için korunmuştur. Anasayfa FS-09 gereğince getDealsPaginated ve getLatestDealStream kullanır.
   Stream<DealsSnapshot> getDealsStream() {
     return _firestore
         .collection('deals')
@@ -82,12 +99,15 @@ class DealService {
     });
   }
 
-  // Pagination ile deal'leri getir
-  Future<List<Deal>> getDealsPaginated({
+  // FS-09: Sayfalı ve SWR / Cache-First Destekli Fırsat Getirme
+  // Tek seferlik sorgu (One-shot .get()), lastDocument ile gerçek imleçli sayfalama
+  // ve isteğe bağlı Source (cache / server) kontrolü ile devasa kota tasarrufu sağlar.
+  Future<DealsPageResult> getDealsPaginated({
     int limit = 20,
     DocumentSnapshot? lastDocument,
     String? category,
     String? subCategory,
+    Source source = Source.serverAndCache,
   }) async {
     try {
       Query query = _firestore
@@ -104,23 +124,303 @@ class DealService {
         query = query.startAfterDocument(lastDocument);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.get(GetOptions(source: source));
       final now = DateTime.now();
       final cutoffTime = now.subtract(const Duration(hours: 48));
-      
-      final deals = snapshot.docs
-          .map((doc) => Deal.fromFirestore(doc))
-          .where((deal) {
-            if (deal.isTest == true) return false;
-            if (deal.createdAt.isBefore(cutoffTime)) return false;
-            return true;
-          })
-          .toList();
 
-      deals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
-      return deals;
-    } catch (e) {
+      final List<Deal> parsedDeals = [];
+      DocumentSnapshot? newLastDoc;
+
+      if (snapshot.docs.isNotEmpty) {
+        newLastDoc = snapshot.docs.last;
+      }
+
+      for (final doc in snapshot.docs) {
+        final deal = _safeParseDeal(doc);
+        if (deal == null) continue;
+        if (deal.isTest == true) continue;
+        if (deal.createdAt.isBefore(cutoffTime)) continue;
+        if (subCategory != null && subCategory.isNotEmpty && deal.subCategory != subCategory) {
+          continue;
+        }
+        parsedDeals.add(deal);
+      }
+
+      // Sadece ilk sayfa yüklemesinde (lastDocument == null) feed skoruyla sırala;
+      // Sayfalandıkça gelen sayfalarda liste zıplamasını engellemek için kronolojik/skor akışını koru
+      if (lastDocument == null) {
+        parsedDeals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
+      }
+
+      final bool hasMore = snapshot.docs.length >= limit;
+      final bool isFromCache = snapshot.metadata.isFromCache;
+
+      return DealsPageResult(
+        deals: parsedDeals,
+        lastDocument: newLastDoc,
+        hasMore: hasMore,
+        isFromCache: isFromCache,
+      );
+    } catch (e, stack) {
       _log('Pagination hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'deal_pagination',
+        errorType: 'PaginationException',
+        message: 'Fırsatlar sayfalanırken hata oluştu: $e',
+        stack: stack,
+        severity: SystemErrorSeverity.warning,
+      );
+      return DealsPageResult(
+        deals: [],
+        lastDocument: lastDocument,
+        hasMore: false,
+      );
+    }
+  }
+
+  // FS-18: Popüler Fırsatlar Sayfalı ve SWR Destekli Getirme
+  // 200 dokümanlık açık WebSocket .snapshots() akışını tasfiye eder.
+  Future<DealsPageResult> getPopularDealsPaginated({
+    int limit = 40,
+    DocumentSnapshot? lastDocument,
+    int minHotVotes = 3,
+    Source source = Source.serverAndCache,
+  }) async {
+    try {
+      Query query = _firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+
+      if (lastDocument != null) {
+        query = query.startAfterDocument(lastDocument);
+      }
+
+      final snapshot = await query.get(GetOptions(source: source));
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 48));
+
+      final List<Deal> parsedDeals = [];
+      DocumentSnapshot? newLastDoc;
+
+      if (snapshot.docs.isNotEmpty) {
+        newLastDoc = snapshot.docs.last;
+      }
+
+      for (final doc in snapshot.docs) {
+        final deal = _safeParseDeal(doc);
+        if (deal == null) continue;
+        if (deal.isTest == true) continue;
+        if (deal.isExpired == true) continue;
+        if (deal.hotVotes < minHotVotes) continue;
+        if (deal.netScore <= 0) continue;
+        if (deal.createdAt.isBefore(cutoffTime)) continue;
+        parsedDeals.add(deal);
+      }
+
+      // Popülerlik skoruna göre sırala (Wilson Score + Zaman Çürümesi)
+      if (lastDocument == null) {
+        parsedDeals.sort((a, b) => b.popularityScore.compareTo(a.popularityScore));
+      }
+
+      final bool hasMore = snapshot.docs.length >= limit;
+      final bool isFromCache = snapshot.metadata.isFromCache;
+
+      return DealsPageResult(
+        deals: parsedDeals,
+        lastDocument: newLastDoc,
+        hasMore: hasMore,
+        isFromCache: isFromCache,
+      );
+    } catch (e) {
+      _log('getPopularDealsPaginated hatası: $e');
+      return DealsPageResult(
+        deals: [],
+        lastDocument: lastDocument,
+        hasMore: false,
+      );
+    }
+  }
+
+  // FS-18: Favori Kategorilerim Sayfalı ve SWR Destekli Getirme
+  Future<DealsPageResult> getFollowedCategoriesDealsPaginated({
+    required String userId,
+    int limit = 40,
+    DocumentSnapshot? lastDocument,
+    Source source = Source.serverAndCache,
+  }) async {
+    try {
+      // 1. Kullanıcının takip ettiği kategorileri al
+      final subSnap = await _firestore
+          .collection('notificationSubscriptions')
+          .where('uid', isEqualTo: userId)
+          .where('type', isEqualTo: 'category')
+          .where('enabled', isEqualTo: true)
+          .limit(100)
+          .get();
+
+      final Set<String> followedCategoryKeys = {};
+      final Set<String> followedSubCategoryKeys = {};
+
+      for (var doc in subSnap.docs) {
+        final key = (doc.data()['key'] as String? ?? '').toLowerCase();
+        if (key.isEmpty) continue;
+        if (key.contains(':')) {
+          followedSubCategoryKeys.add(key);
+        } else {
+          followedCategoryKeys.add(key);
+        }
+      }
+
+      if (followedCategoryKeys.isEmpty && followedSubCategoryKeys.isEmpty) {
+        return const DealsPageResult(
+          deals: [],
+          lastDocument: null,
+          hasMore: false,
+          isFromCache: false,
+        );
+      }
+
+      // 2. Fırsatları sayfalı çek
+      Query query = _firestore
+          .collection('deals')
+          .where('isApproved', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+
+      if (lastDocument != null) {
+        query = query.startAfterDocument(lastDocument);
+      }
+
+      final snapshot = await query.get(GetOptions(source: source));
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(hours: 48));
+
+      final List<Deal> parsedDeals = [];
+      DocumentSnapshot? newLastDoc;
+
+      if (snapshot.docs.isNotEmpty) {
+        newLastDoc = snapshot.docs.last;
+      }
+
+      for (final doc in snapshot.docs) {
+        final deal = _safeParseDeal(doc);
+        if (deal == null) continue;
+        if (deal.isTest == true) continue;
+        if (deal.createdAt.isBefore(cutoffTime)) continue;
+
+        final catLower = deal.category.toLowerCase();
+        bool matches = followedCategoryKeys.contains(catLower);
+        if (!matches && deal.subCategory != null && deal.subCategory!.isNotEmpty) {
+          final subKey = '$catLower:${deal.subCategory!.toLowerCase()}';
+          matches = followedSubCategoryKeys.contains(subKey);
+        }
+
+        if (matches) {
+          parsedDeals.add(deal);
+        }
+      }
+
+      if (lastDocument == null) {
+        parsedDeals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
+      }
+
+      final bool hasMore = snapshot.docs.length >= limit;
+      final bool isFromCache = snapshot.metadata.isFromCache;
+
+      return DealsPageResult(
+        deals: parsedDeals,
+        lastDocument: newLastDoc,
+        hasMore: hasMore,
+        isFromCache: isFromCache,
+      );
+    } catch (e) {
+      _log('getFollowedCategoriesDealsPaginated hatası: $e');
+      return DealsPageResult(
+        deals: [],
+        lastDocument: lastDocument,
+        hasMore: false,
+      );
+    }
+  }
+
+  // FS-09: Yalnızca en yeni onaylı fırsatı dinleyen ultra hafif dinleyici (limit: 1)
+  // 100 doküman yerine yalnızca tek bir doküman izlenir; oy/yorum değişimlerinde tetiklenmez.
+  Stream<Deal?> getLatestDealStream({String? category}) {
+    Query query = _firestore
+        .collection('deals')
+        .where('isApproved', isEqualTo: true);
+
+    if (category != null && category != 'tumu') {
+      query = query.where('category', isEqualTo: category);
+    }
+
+    return query
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .snapshots()
+        .map((snapshot) {
+      if (snapshot.docs.isEmpty) return null;
+      final deal = _safeParseDeal(snapshot.docs.first);
+      if (deal == null || deal.isTest == true) return null;
+      return deal;
+    });
+  }
+
+  /// FS-20: Hibrit Arama Kademe 2 — Firestore Sunucu Tabanlı Hedefli Arama.
+  /// 40 Milyon okuma maliyeti patlamasını engeller.
+  /// Sadece en fazla [limit] dokümanlık tekil `array-contains` hedefli sorgu atar.
+  Future<List<Deal>> searchDealsServer({
+    required String query,
+    String? category,
+    int limit = 30,
+  }) async {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return [];
+
+    final tokens = DealSearchEngine.tokenize(cleanQuery);
+    if (tokens.isEmpty) return [];
+
+    try {
+      // En ayırt edici / en uzun anahtar kelimeyi seç (örn: "playstation" veya "supurge")
+      final sortedTokens = List<String>.from(tokens)..sort((a, b) => b.length.compareTo(a.length));
+      final primaryToken = sortedTokens.first;
+
+      final queryRef = _firestore
+          .collection('deals')
+          .where('searchKeywords', arrayContains: primaryToken)
+          .limit(limit);
+
+      final snapshot = await queryRef.get();
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(days: 30)); // Son 30 günün fırsatları
+
+      final List<Deal> serverDeals = [];
+      for (final doc in snapshot.docs) {
+        final deal = _safeParseDeal(doc);
+        if (deal == null) continue;
+        if (deal.isApproved != true) continue;
+        if (deal.isTest == true) continue;
+        if (deal.createdAt.isBefore(cutoffTime)) continue;
+        if (category != null && category.isNotEmpty && category != 'tumu' && deal.category != category) {
+          continue;
+        }
+        serverDeals.add(deal);
+      }
+
+      // Alaka düzeyi puanlaması (Relevance score) uygulayarak döndür
+      return DealSearchEngine.searchDeals(serverDeals, cleanQuery);
+    } catch (e, stack) {
+      _log('⚠️ searchDealsServer hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'search',
+        errorType: 'ServerSearchException',
+        message: 'Sunucu araması başarısız: $e',
+        stack: stack,
+        severity: SystemErrorSeverity.warning,
+        metadata: {'query': query, 'category': category},
+      );
       return [];
     }
   }
@@ -459,6 +759,13 @@ class DealService {
         brand: brand,
         isAmazonWarehouse: isAmazonWarehouse || Deal.checkIsAmazonWarehouse(url) || Deal.checkIsAmazonWarehouse(resolvedUrl),
         hidePrice: hidePrice,
+        searchKeywords: DealSearchEngine.generateSearchKeywords(
+          title: title,
+          brand: brand,
+          store: store,
+          category: category,
+          subCategory: subCategory,
+        ),
       );
 
       final docRef = await _firestore.collection('deals').add(deal.toFirestore());
@@ -524,79 +831,97 @@ class DealService {
     }
   }
 
-  // Vote İşlemleri
+  // Vote İşlemleri (FS-08: Kilitsiz Atomik Pipeline & Alt Doküman İzolasyonu)
+  // runTransaction kaldırılmıştır; alt koleksiyon (deals/{dealId}/votes/{userId}) üzerinden
+  // kullanıcı bazlı izole okuma/yazma yapılır ve ana doküman sayaçları (hotVotes, coldVotes)
+  // FieldValue.increment(delta) ile çekişmesiz, kuyruklu ve atomik olarak güncellenir.
   Future<bool> _updateVoteInternal(String dealId, String userId, String? newType) async {
+    final cleanDealId = dealId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanDealId.isEmpty || cleanUserId.isEmpty) {
+      return false;
+    }
+    if (newType != null && newType != 'hot' && newType != 'cold') {
+      return false;
+    }
+
     try {
-      final dealRef = _firestore.collection('deals').doc(dealId);
-      final voteRef = dealRef.collection('votes').doc(userId);
+      final dealRef = _firestore.collection('deals').doc(cleanDealId);
+      final voteRef = dealRef.collection('votes').doc(cleanUserId);
 
-      return await _firestore.runTransaction((transaction) async {
-        final dealSnapshot = await transaction.get(dealRef);
-        final voteSnapshot = await transaction.get(voteRef);
+      // 1. Kullanıcının mevcut oyu izole subcollection'dan kilit olmadan okunur
+      final voteSnapshot = await voteRef.get();
 
-        if (!dealSnapshot.exists) {
-          return false;
-        }
+      String? oldType;
+      bool hasExpired = false;
+      if (voteSnapshot.exists) {
+        final data = voteSnapshot.data();
+        oldType = data?['type'] as String?;
+        hasExpired = data?['expired'] == true;
+      }
 
-        final dealData = dealSnapshot.data() as Map<String, dynamic>;
-        int hotVotes = dealData['hotVotes'] ?? 0;
-        int coldVotes = dealData['coldVotes'] ?? 0;
-
-        String? oldType;
-        if (voteSnapshot.exists) {
-          oldType = voteSnapshot.data()?['type'] as String?;
-        }
-
-        // Eğer eski oy ile yeni oy aynı ise, hiçbir şey yapma
-        if (oldType == newType) {
-          return true;
-        }
-
-        // 1. Eski oyu çıkar ve sayaçları güncelle
-        if (oldType != null) {
-          if (oldType == 'hot') {
-            hotVotes = (hotVotes > 0) ? hotVotes - 1 : 0;
-          } else if (oldType == 'cold') {
-            coldVotes = (coldVotes > 0) ? coldVotes - 1 : 0;
-          }
-        }
-
-        // 2. Yeni oyu ekle ve sayaçları güncelle
-        if (newType != null) {
-          if (newType == 'hot') {
-            hotVotes += 1;
-          } else if (newType == 'cold') {
-            coldVotes += 1;
-          }
-        }
-
-        // 3. vote doc güncelle
-        if (newType == null) {
-          final bool expiredVal = voteSnapshot.exists && voteSnapshot.data()?['expired'] == true;
-          if (!expiredVal) {
-            transaction.delete(voteRef);
-          } else {
-            transaction.update(voteRef, {
-              'type': FieldValue.delete(),
-            });
-          }
-        } else {
-          transaction.set(voteRef, {'type': newType}, SetOptions(merge: true));
-        }
-
-        // 4. deal doc güncelle
-        transaction.update(dealRef, {
-          'hotVotes': hotVotes,
-          'coldVotes': coldVotes,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        // 5. Deal sahibine puan ver / geri al (exploit ve yetki güvenliği):
-        // Puan (+2) ve beğeni (+1) artışı ile rozet kazanımları, Firestore RBAC güvenliği gereği
-        // sunucu tarafında Cloud Functions 'onDealUpdated' trigger'ı üzerinden Admin SDK ile atomik işletilir.
-
+      // Eğer eski oy ile yeni oy aynı ise hiçbir şey yapma (idempotent no-op)
+      if (oldType == newType) {
         return true;
-      });
+      }
+
+      int hotDelta = 0;
+      int coldDelta = 0;
+
+      // 2. Eski oyun deltasını hesapla
+      if (oldType == 'hot') {
+        hotDelta -= 1;
+      } else if (oldType == 'cold') {
+        coldDelta -= 1;
+      }
+
+      // 3. Yeni oyun deltasını hesapla
+      if (newType == 'hot') {
+        hotDelta += 1;
+      } else if (newType == 'cold') {
+        coldDelta += 1;
+      }
+
+      final batch = _firestore.batch();
+
+      // 4. votes/{userId} alt dokümanını güncelle (Kullanıcıya özel izole doküman)
+      if (newType == null) {
+        if (hasExpired) {
+          // 'expired' oyu da verilmişse dokümanı silme, sadece 'type' alanını kaldır
+          batch.update(voteRef, {
+            'type': FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          // Başka alan kalmadıysa dokümanı tamamen sil
+          batch.delete(voteRef);
+        }
+      } else {
+        batch.set(voteRef, {
+          'type': newType,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      // 5. deals/{dealId} ana dokümanını FieldValue.increment ile çekişmesiz atomik güncelle
+      final Map<String, dynamic> dealUpdates = {
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (hotDelta != 0) {
+        dealUpdates['hotVotes'] = FieldValue.increment(hotDelta);
+      }
+      if (coldDelta != 0) {
+        dealUpdates['coldVotes'] = FieldValue.increment(coldDelta);
+      }
+
+      batch.update(dealRef, dealUpdates);
+
+      await batch.commit();
+
+      // Deal sahibine puan ver / geri al (exploit ve yetki güvenliği):
+      // Puan (+2) ve beğeni (+1) artışı ile rozet kazanımları, Firestore RBAC güvenliği gereği
+      // sunucu tarafında Cloud Functions 'onDealUpdated' trigger'ı üzerinden Admin SDK ile atomik işletilir.
+      return true;
     } catch (e) {
       _log('updateVoteInternal hatası: $e');
       return false;
@@ -609,49 +934,55 @@ class DealService {
   Future<bool> removeHotVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, null);
   Future<bool> removeColdVote(String dealId, String userId) => _updateVoteInternal(dealId, userId, null);
 
-  // Bağımsız Fırsat Bitti Oylaması (votes/{userId} dokümanında 'expired': true alanı olarak tutulur)
+  // Bağımsız Fırsat Bitti Oylaması (FS-08: Kilitsiz Atomik Pipeline)
   Future<bool> addExpiredVote(String dealId, String userId) async {
+    final cleanDealId = dealId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanDealId.isEmpty || cleanUserId.isEmpty) {
+      return false;
+    }
+
     try {
-      final dealRef = _firestore.collection('deals').doc(dealId);
-      final voteRef = dealRef.collection('votes').doc(userId);
+      final dealRef = _firestore.collection('deals').doc(cleanDealId);
+      final voteRef = dealRef.collection('votes').doc(cleanUserId);
 
-      return await _firestore.runTransaction((transaction) async {
-        final dealSnapshot = await transaction.get(dealRef);
-        final voteSnapshot = await transaction.get(voteRef);
+      final voteSnapshot = await voteRef.get();
+      if (voteSnapshot.exists && voteSnapshot.data()?['expired'] == true) {
+        return true; // Zaten bitirme oyu verilmiş
+      }
 
-        if (!dealSnapshot.exists) return false;
+      final dealSnapshot = await dealRef.get();
+      if (!dealSnapshot.exists) return false;
 
-        bool alreadyVotedExpired = false;
-        if (voteSnapshot.exists) {
-          alreadyVotedExpired = voteSnapshot.data()?['expired'] == true;
-        }
+      final dealData = dealSnapshot.data() ?? {};
+      final int hotVotes = (dealData['hotVotes'] as num?)?.toInt() ?? 0;
+      final int currentExpired = (dealData['expiredVotes'] as num?)?.toInt() ?? 0;
+      final bool isAlreadyExpired = dealData['isExpired'] == true;
 
-        if (alreadyVotedExpired) return true; // Zaten bitirme oyu verilmiş
+      final dynamicLimit = (5 + (hotVotes / 5).floor()).clamp(5, 20);
+      final bool shouldMarkExpired = (currentExpired + 1) >= dynamicLimit;
 
-        final dealData = dealSnapshot.data() as Map<String, dynamic>;
-        int hotVotes = dealData['hotVotes'] ?? 0;
-        int expiredVotes = dealData['expiredVotes'] ?? 0;
-        bool isExpired = dealData['isExpired'] ?? false;
+      final batch = _firestore.batch();
+      batch.set(voteRef, {
+        'expired': true,
+        'expiredAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-        expiredVotes += 1;
-        final dynamicLimit = (5 + (hotVotes / 5).floor()).clamp(5, 20);
-        if (expiredVotes >= dynamicLimit) {
-          isExpired = true;
-        }
+      final Map<String, dynamic> dealUpdates = {
+        'expiredVotes': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 
-        transaction.set(voteRef, {'expired': true, 'expiredAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
-        final dealUpdates = <String, dynamic>{
-          'expiredVotes': expiredVotes,
-          'isExpired': isExpired,
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-        if (isExpired) {
-          dealUpdates['status'] = 'expired';
-        }
-        transaction.update(dealRef, dealUpdates);
+      if (shouldMarkExpired && !isAlreadyExpired) {
+        dealUpdates['isExpired'] = true;
+        dealUpdates['status'] = 'expired';
+      }
 
-        return true;
-      });
+      batch.update(dealRef, dealUpdates);
+      await batch.commit();
+
+      return true;
     } catch (e) {
       _log('addExpiredVote hatası: $e');
       return false;
@@ -659,41 +990,41 @@ class DealService {
   }
 
   Future<bool> removeExpiredVote(String dealId, String userId) async {
+    final cleanDealId = dealId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanDealId.isEmpty || cleanUserId.isEmpty) {
+      return false;
+    }
+
     try {
-      final dealRef = _firestore.collection('deals').doc(dealId);
-      final voteRef = dealRef.collection('votes').doc(userId);
+      final dealRef = _firestore.collection('deals').doc(cleanDealId);
+      final voteRef = dealRef.collection('votes').doc(cleanUserId);
 
-      return await _firestore.runTransaction((transaction) async {
-        final dealSnapshot = await transaction.get(dealRef);
-        final voteSnapshot = await transaction.get(voteRef);
+      final voteSnapshot = await voteRef.get();
+      if (!voteSnapshot.exists) return false;
 
-        if (!dealSnapshot.exists || !voteSnapshot.exists) return false;
+      final bool alreadyVotedExpired = voteSnapshot.data()?['expired'] == true;
+      if (!alreadyVotedExpired) return true; // Zaten oy verilmemiş
 
-        bool alreadyVotedExpired = voteSnapshot.data()?['expired'] == true;
-        if (!alreadyVotedExpired) return true;
-
-        final dealData = dealSnapshot.data() as Map<String, dynamic>;
-        int expiredVotes = dealData['expiredVotes'] ?? 0;
-        expiredVotes = (expiredVotes > 0) ? expiredVotes - 1 : 0;
-
-        // type alanı da yoksa dökümanı tamamen sil, varsa sadece expired alanını kaldır
-        final String? type = voteSnapshot.data()?['type'] as String?;
-        if (type == null) {
-          transaction.delete(voteRef);
-        } else {
-          transaction.update(voteRef, {
-            'expired': FieldValue.delete(),
-            'expiredAt': FieldValue.delete(),
-          });
-        }
-
-        transaction.update(dealRef, {
-          'expiredVotes': expiredVotes,
+      final batch = _firestore.batch();
+      final String? type = voteSnapshot.data()?['type'] as String?;
+      if (type == null) {
+        batch.delete(voteRef);
+      } else {
+        batch.update(voteRef, {
+          'expired': FieldValue.delete(),
+          'expiredAt': FieldValue.delete(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+      }
 
-        return true;
+      batch.update(dealRef, {
+        'expiredVotes': FieldValue.increment(-1),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      await batch.commit();
+      return true;
     } catch (e) {
       _log('removeExpiredVote hatası: $e');
       return false;
@@ -701,8 +1032,11 @@ class DealService {
   }
 
   Future<bool> hasUserVotedExpired(String dealId, String userId) async {
+    final cleanDealId = dealId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanDealId.isEmpty || cleanUserId.isEmpty) return false;
     try {
-      final doc = await _firestore.collection('deals').doc(dealId).collection('votes').doc(userId).get();
+      final doc = await _firestore.collection('deals').doc(cleanDealId).collection('votes').doc(cleanUserId).get();
       return doc.data()?['expired'] == true;
     } catch (e) {
       return false;
@@ -710,8 +1044,11 @@ class DealService {
   }
 
   Future<String?> getUserVote(String dealId, String userId) async {
+    final cleanDealId = dealId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanDealId.isEmpty || cleanUserId.isEmpty) return null;
     try {
-      final doc = await _firestore.collection('deals').doc(dealId).collection('votes').doc(userId).get();
+      final doc = await _firestore.collection('deals').doc(cleanDealId).collection('votes').doc(cleanUserId).get();
       return doc.data()?['type'] as String?;
     } catch (e) {
       return null;

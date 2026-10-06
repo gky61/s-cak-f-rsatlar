@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import '../models/deal.dart';
 import '../models/comment.dart';
@@ -54,19 +55,39 @@ class FirestoreService {
   
   Stream<DealsSnapshot> getDealsStream() => _dealService.getDealsStream();
   
-  Future<List<Deal>> getDealsPaginated({
+  // FS-09: SWR + Cache-First Sayfalı Fırsat Getirme
+  Future<DealsPageResult> getDealsPaginated({
     int limit = 20,
     DocumentSnapshot? lastDocument,
     String? category,
     String? subCategory,
+    Source source = Source.serverAndCache,
   }) => _dealService.getDealsPaginated(
     limit: limit,
     lastDocument: lastDocument,
     category: category,
     subCategory: subCategory,
+    source: source,
   );
 
-  Future<List<Deal>> getInitialDeals({int limit = 20}) => getDealsPaginated(limit: limit);
+  // FS-09: Yalnızca en yeni fırsatı dinleyen ultra hafif stream (limit: 1)
+  Stream<Deal?> getLatestDealStream({String? category}) =>
+      _dealService.getLatestDealStream(category: category);
+
+  // FS-20: Hibrit Arama Kademe 2 — Firestore Sunucu Tabanlı Hedefli Arama
+  Future<List<Deal>> searchDealsServer({
+    required String query,
+    String? category,
+    int limit = 30,
+  }) =>
+      _dealService.searchDealsServer(
+        query: query,
+        category: category,
+        limit: limit,
+      );
+
+  Future<List<Deal>> getInitialDeals({int limit = 20}) async =>
+      (await getDealsPaginated(limit: limit)).deals;
   
   Stream<List<Deal>> getAllDealsStream() => _dealService.getApprovedDealsStream(); // İsim uyumluluğu için
   
@@ -247,6 +268,34 @@ class FirestoreService {
   /// Alias for backward compatibility
   Stream<List<Deal>> getMostLikedDeals({int minLikes = 3}) => getPopularDeals(minHotVotes: minLikes);
 
+  // FS-18: Popüler Fırsatlar Sayfalı ve SWR Destekli Getirme
+  Future<DealsPageResult> getPopularDealsPaginated({
+    int limit = 40,
+    DocumentSnapshot? lastDocument,
+    int minHotVotes = 3,
+    Source source = Source.serverAndCache,
+  }) =>
+      _dealService.getPopularDealsPaginated(
+        limit: limit,
+        lastDocument: lastDocument,
+        minHotVotes: minHotVotes,
+        source: source,
+      );
+
+  // FS-18: Favori Kategorilerim Sayfalı ve SWR Destekli Getirme
+  Future<DealsPageResult> getFollowedCategoriesDealsPaginated({
+    required String userId,
+    int limit = 40,
+    DocumentSnapshot? lastDocument,
+    Source source = Source.serverAndCache,
+  }) =>
+      _dealService.getFollowedCategoriesDealsPaginated(
+        userId: userId,
+        limit: limit,
+        lastDocument: lastDocument,
+        source: source,
+      );
+
   Stream<List<Deal>> getFollowedCategoriesDeals(String userId) {
     late StreamController<List<Deal>> controller;
     
@@ -362,10 +411,42 @@ class FirestoreService {
   // ===========================================================================
 
   Future<bool> isFavorite(String userId, String dealId) => _userService.isFavorite(userId, dealId);
-  Future<bool> addToFavorites(String userId, String dealId, {String? title, double? price, String? store, String? link, String? imageUrl}) =>
-      _userService.addToFavorites(userId, dealId, title: title, price: price, store: store, link: link, imageUrl: imageUrl);
+  Future<bool> addToFavorites(
+    String userId,
+    String dealId, {
+    String? title,
+    double? price,
+    String? store,
+    String? link,
+    String? imageUrl,
+    String? category,
+    bool? isExpired,
+  }) =>
+      _userService.addToFavorites(
+        userId,
+        dealId,
+        title: title,
+        price: price,
+        store: store,
+        link: link,
+        imageUrl: imageUrl,
+        category: category,
+        isExpired: isExpired,
+      );
   Future<bool> removeFromFavorites(String userId, String dealId) => _userService.removeFromFavorites(userId, dealId);
   Stream<List<Deal>> getFavoriteDeals(String userId) => _userService.getFavoriteDeals(userId);
+  Future<DealsPageResult> getFavoriteDealsPaginated({
+    required String userId,
+    int limit = 20,
+    DocumentSnapshot? lastDocument,
+    Source source = Source.serverAndCache,
+  }) =>
+      _userService.getFavoriteDealsPaginated(
+        userId: userId,
+        limit: limit,
+        lastDocument: lastDocument,
+        source: source,
+      );
   Future<void> addLastSharedDeal(String userId, {required String dealId, required String title, required double price, required String store, required String link}) =>
       _userService.addLastSharedDeal(userId, dealId: dealId, title: title, price: price, store: store, link: link);
   
@@ -755,70 +836,279 @@ class FirestoreService {
   Future<int> deleteAllCommentReplyNotifications(String userId) => 
       _commentService.deleteAllCommentReplyNotifications(userId);
 
-  // Unified Notification Center Methods
+  // ===========================================================================
+  // UNIFIED NOTIFICATION CENTER (FS-02 DUAL-LAYER IN-APP FEED)
+  // ===========================================================================
+
+  static final StreamController<void> _announcementChangeController = StreamController<void>.broadcast();
+  Set<String>? _cachedReadAnnouncements;
+  Set<String>? _cachedDismissedAnnouncements;
+
+  Future<Set<String>> _getReadAnnouncements() async {
+    if (_cachedReadAnnouncements != null) return _cachedReadAnnouncements!;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('read_announcements') ?? [];
+      _cachedReadAnnouncements = list.toSet();
+      return _cachedReadAnnouncements!;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Set<String>> _getDismissedAnnouncements() async {
+    if (_cachedDismissedAnnouncements != null) return _cachedDismissedAnnouncements!;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('dismissed_announcements') ?? [];
+      _cachedDismissedAnnouncements = list.toSet();
+      return _cachedDismissedAnnouncements!;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  // FS-02: Kişisel bildirimler ile küresel duyuruları birleştiren akış (Dual-Layer Feed)
   Stream<List<Map<String, dynamic>>> getUserNotificationsStream(String userId) {
-    return firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .orderBy('createdAt', descending: true)
-        .limit(100)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        DateTime createdAt = DateTime.now();
-        if (data['createdAt'] is Timestamp) {
-          createdAt = (data['createdAt'] as Timestamp).toDate();
-        } else if (data['createdAt'] is String) {
-          createdAt = DateTime.tryParse(data['createdAt'] as String) ?? DateTime.now();
-        }
+    if (userId.isEmpty) return Stream.value([]);
 
-        // Tüm doküman alanlarını koruyarak map oluştur
-        final map = Map<String, dynamic>.from(data);
-        map['id'] = doc.id;
-        map['type'] = data['type'] ?? 'deal';
-        map['dealId'] = data['dealId'] ?? '';
-        map['dealTitle'] = data['dealTitle'] ?? '';
-        map['commentId'] = data['commentId'] ?? '';
-        map['title'] = data['title'] ?? 'Yeni Fırsat';
-        map['body'] = data['body'] ?? '';
-        map['reason'] = data['reason'] ?? '';
-        map['reasonDetail'] = data['reasonDetail'] ?? '';
-        map['read'] = data['read'] ?? false;
-        map['createdAt'] = createdAt;
+    late StreamController<List<Map<String, dynamic>>> controller;
+    StreamSubscription? userSub;
+    StreamSubscription? globalSub;
+    StreamSubscription? changeSub;
 
-        // Akıllı Status tespiti (status alanı eksik/boş olsa dahi başlıktan otomatik kurtarma)
-        final rawStatus = data['status']?.toString().trim().toLowerCase() ?? '';
-        if (rawStatus.isNotEmpty) {
-          map['status'] = rawStatus;
-        } else {
-          final titleLower = (data['title'] ?? '').toString().toLowerCase();
-          if (titleLower.contains('onaylandı') || titleLower.contains('onaylandi')) {
-            map['status'] = 'approved';
-          } else if (titleLower.contains('reddedildi')) {
-            map['status'] = 'rejected';
-          } else {
-            map['status'] = '';
+    List<Map<String, dynamic>> latestUserNotifs = [];
+    List<Map<String, dynamic>> latestGlobalNotifs = [];
+
+    Future<void> emitMerged() async {
+      if (controller.isClosed) return;
+      try {
+        final readSet = await _getReadAnnouncements();
+        final dismissedSet = await _getDismissedAnnouncements();
+        final now = DateTime.now();
+
+        final filteredGlobals = latestGlobalNotifs.where((g) {
+          final id = g['id'] as String? ?? '';
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          if (dismissedSet.contains(id) || dismissedSet.contains(normalizedId)) return false;
+          final expiresAt = g['expiresAt'] as DateTime?;
+          if (expiresAt != null && expiresAt.isBefore(now)) return false;
+          return true;
+        }).map((g) {
+          final copy = Map<String, dynamic>.from(g);
+          final id = copy['id'] as String? ?? '';
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          if (readSet.contains(id) || readSet.contains(normalizedId)) {
+            copy['read'] = true;
           }
+          return copy;
+        }).toList();
+
+        // Tekrarlı ID'leri ele (hem globalAnnouncements hem kişisel doküman varsa)
+        final seenIds = <String>{};
+        final combined = <Map<String, dynamic>>[];
+
+        for (final item in [...filteredGlobals, ...latestUserNotifs]) {
+          final rawId = item['id'] as String? ?? '';
+          final normalizedId = rawId.startsWith('manual_') ? rawId.substring(7) : rawId;
+          final announcementId = item['announcementId'] as String? ?? normalizedId;
+          final dedupKey = announcementId.isNotEmpty ? announcementId : rawId;
+
+          if (dedupKey.isNotEmpty && !seenIds.add(dedupKey)) continue;
+          combined.add(item);
         }
 
-        return map;
-      }).toList();
-    });
+        combined.sort((a, b) {
+          final dateA = (a['createdAt'] is DateTime) ? a['createdAt'] as DateTime : DateTime.fromMillisecondsSinceEpoch(0);
+          final dateB = (b['createdAt'] is DateTime) ? b['createdAt'] as DateTime : DateTime.fromMillisecondsSinceEpoch(0);
+          return dateB.compareTo(dateA);
+        });
+
+        if (!controller.isClosed) {
+          controller.add(combined);
+        }
+      } catch (e) {
+        if (!controller.isClosed) {
+          controller.add(latestUserNotifs);
+        }
+      }
+    }
+
+    controller = StreamController<List<Map<String, dynamic>>>(
+      onListen: () {
+        userSub = firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notifications')
+            .orderBy('createdAt', descending: true)
+            .limit(100)
+            .snapshots()
+            .listen((snapshot) {
+          latestUserNotifs = snapshot.docs.map((doc) {
+            final data = doc.data();
+            DateTime createdAt = DateTime.now();
+            if (data['createdAt'] is Timestamp) {
+              createdAt = (data['createdAt'] as Timestamp).toDate();
+            } else if (data['createdAt'] is String) {
+              createdAt = DateTime.tryParse(data['createdAt'] as String) ?? DateTime.now();
+            }
+
+            final map = Map<String, dynamic>.from(data);
+            map['id'] = doc.id;
+            map['type'] = data['type'] ?? 'deal';
+            map['dealId'] = data['dealId'] ?? '';
+            map['dealTitle'] = data['dealTitle'] ?? '';
+            map['commentId'] = data['commentId'] ?? '';
+            map['title'] = data['title'] ?? 'Yeni Fırsat';
+            map['body'] = data['body'] ?? '';
+            map['reason'] = data['reason'] ?? '';
+            map['reasonDetail'] = data['reasonDetail'] ?? '';
+            map['read'] = data['read'] ?? false;
+            map['createdAt'] = createdAt;
+
+            final rawStatus = data['status']?.toString().trim().toLowerCase() ?? '';
+            if (rawStatus.isNotEmpty) {
+              map['status'] = rawStatus;
+            } else {
+              final titleLower = (data['title'] ?? '').toString().toLowerCase();
+              if (titleLower.contains('onaylandı') || titleLower.contains('onaylandi')) {
+                map['status'] = 'approved';
+              } else if (titleLower.contains('reddedildi')) {
+                map['status'] = 'rejected';
+              } else {
+                map['status'] = '';
+              }
+            }
+            return map;
+          }).toList();
+          emitMerged();
+        }, onError: (err) {
+          if (!controller.isClosed) controller.addError(err);
+        });
+
+        globalSub = firestore
+            .collection('globalAnnouncements')
+            .where('active', isEqualTo: true)
+            .limit(15)
+            .snapshots()
+            .listen((snapshot) {
+          latestGlobalNotifs = snapshot.docs.map((doc) {
+            final data = doc.data();
+            DateTime createdAt = DateTime.now();
+            if (data['createdAt'] is Timestamp) {
+              createdAt = (data['createdAt'] as Timestamp).toDate();
+            } else if (data['createdAt'] is String) {
+              createdAt = DateTime.tryParse(data['createdAt'] as String) ?? DateTime.now();
+            }
+
+            DateTime? expiresAt;
+            if (data['expiresAt'] is Timestamp) {
+              expiresAt = (data['expiresAt'] as Timestamp).toDate();
+            }
+
+            final map = Map<String, dynamic>.from(data);
+            map['id'] = doc.id;
+            map['type'] = data['type'] ?? 'admin_message';
+            map['dealId'] = data['dealId'] ?? '';
+            map['title'] = data['title'] ?? 'Resmi Duyuru';
+            map['body'] = data['body'] ?? '';
+            map['imageUrl'] = data['imageUrl'] ?? '';
+            map['reason'] = data['reason'] ?? 'admin_message';
+            map['read'] = false;
+            map['createdAt'] = createdAt;
+            map['expiresAt'] = expiresAt;
+            map['isGlobalAnnouncement'] = true;
+            return map;
+          }).toList();
+          emitMerged();
+        }, onError: (_) {
+          emitMerged();
+        });
+
+        changeSub = _announcementChangeController.stream.listen((_) {
+          emitMerged();
+        });
+      },
+      onCancel: () {
+        userSub?.cancel();
+        globalSub?.cancel();
+        changeSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   Future<void> markNotificationAsRead(String userId, String notificationId) async {
-    await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .doc(notificationId)
-        .update({'read': true});
+    final rawId = notificationId;
+    final normalizedId = rawId.startsWith('manual_') ? rawId.substring(7) : rawId;
+
+    // 1. SharedPreferences'a ekle (Global duyurular için 0-maliyet okundu bilgisi)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('read_announcements') ?? [];
+      bool changed = false;
+      if (!list.contains(rawId)) {
+        list.add(rawId);
+        changed = true;
+      }
+      if (!list.contains(normalizedId)) {
+        list.add(normalizedId);
+        changed = true;
+      }
+      if (changed) {
+        await prefs.setStringList('read_announcements', list);
+      }
+      _cachedReadAnnouncements?.add(rawId);
+      _cachedReadAnnouncements?.add(normalizedId);
+      _announcementChangeController.add(null);
+    } catch (_) {}
+
+    // 2. Kişisel bildirim dokümanını güncelle
+    try {
+      await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .doc(rawId)
+          .update({'read': true});
+    } catch (_) {}
+
+    if (rawId != normalizedId) {
+      try {
+        await firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notifications')
+            .doc(normalizedId)
+            .update({'read': true});
+      } catch (_) {}
+    }
   }
 
-
   Future<void> markAllNotificationsAsRead(String userId) async {
+    // 1. Aktif duyuruları yerel okundu listesine ekle
+    try {
+      final globalSnap = await firestore
+          .collection('globalAnnouncements')
+          .where('active', isEqualTo: true)
+          .limit(20)
+          .get();
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('read_announcements') ?? [];
+      for (final doc in globalSnap.docs) {
+        final id = doc.id;
+        final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+        if (!list.contains(id)) list.add(id);
+        if (!list.contains(normalizedId)) list.add(normalizedId);
+        _cachedReadAnnouncements?.add(id);
+        _cachedReadAnnouncements?.add(normalizedId);
+      }
+      await prefs.setStringList('read_announcements', list);
+      _announcementChangeController.add(null);
+    } catch (_) {}
+
+    // 2. Kişisel okunmamış bildirimleri Firestore'da güncelle
     final snapshot = await firestore
         .collection('users')
         .doc(userId)
@@ -841,15 +1131,75 @@ class FirestoreService {
   }
 
   Future<void> deleteNotification(String userId, String notificationId) async {
-    await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .doc(notificationId)
-        .delete();
+    final rawId = notificationId;
+    final normalizedId = rawId.startsWith('manual_') ? rawId.substring(7) : rawId;
+
+    // 1. SharedPreferences'a ekle (Global duyurular için 0-maliyet silindi bilgisi)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('dismissed_announcements') ?? [];
+      bool changed = false;
+      if (!list.contains(rawId)) {
+        list.add(rawId);
+        changed = true;
+      }
+      if (!list.contains(normalizedId)) {
+        list.add(normalizedId);
+        changed = true;
+      }
+      if (changed) {
+        await prefs.setStringList('dismissed_announcements', list);
+      }
+      _cachedDismissedAnnouncements?.add(rawId);
+      _cachedDismissedAnnouncements?.add(normalizedId);
+      _announcementChangeController.add(null);
+    } catch (_) {}
+
+    // 2. Kişisel bildirim dokümanını sil
+    try {
+      await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .doc(rawId)
+          .delete();
+    } catch (_) {}
+
+    if (rawId != normalizedId) {
+      try {
+        await firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notifications')
+            .doc(normalizedId)
+            .delete();
+      } catch (_) {}
+    }
   }
 
   Future<void> deleteAllNotifications(String userId) async {
+    // 1. Aktif duyuruları yerel gizlenen listesine ekle
+    try {
+      final globalSnap = await firestore
+          .collection('globalAnnouncements')
+          .where('active', isEqualTo: true)
+          .limit(20)
+          .get();
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('dismissed_announcements') ?? [];
+      for (final doc in globalSnap.docs) {
+        final id = doc.id;
+        final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+        if (!list.contains(id)) list.add(id);
+        if (!list.contains(normalizedId)) list.add(normalizedId);
+        _cachedDismissedAnnouncements?.add(id);
+        _cachedDismissedAnnouncements?.add(normalizedId);
+      }
+      await prefs.setStringList('dismissed_announcements', list);
+      _announcementChangeController.add(null);
+    } catch (_) {}
+
+    // 2. Kişisel bildirimleri Firestore'da sil
     final snapshot = await firestore
         .collection('users')
         .doc(userId)

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void _log(String message) {
   if (kDebugMode) {
@@ -43,18 +44,11 @@ class AppBadgeService {
     _customLocalNotifications = localNotifications;
   }
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notificationsSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _messagesSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _adminMessagesSub;
-
-  int _cachedUnreadNotifications = 0;
-  int _cachedUnreadMessages = 0;
-  int _cachedUnreadAdminMessages = 0;
   int _currentBadgeCount = 0;
 
   DateTime? _lastSyncTime;
   String? _lastSyncUserId;
-  static const Duration _syncCooldown = Duration(seconds: 45);
+  static const Duration _syncCooldown = Duration(seconds: 15);
 
   int get currentBadgeCount => _currentBadgeCount;
 
@@ -117,8 +111,11 @@ class AppBadgeService {
       return 0;
     }
 
-    // Cooldown / Debounce: Son senkronizasyondan bu yana 45 saniye geçmediyse gereksiz Firestore count sorgularını atla
+    // Cooldown / Debounce: Arka plan senkronizasyonlarında son çağrıdan bu yana 15 saniye geçmediyse count sorgularını atla.
+    // Kullanıcı bir bildirim veya mesajı okuduğunda (targetUserId verildiğinde veya forceSync=true olduğunda)
+    // rozet kullanıcının gözü önünde anında ve gecikmesiz senkronize edilir.
     if (!forceSync &&
+        targetUserId == null &&
         _lastSyncUserId == uid &&
         _lastSyncTime != null &&
         DateTime.now().difference(_lastSyncTime!) < _syncCooldown) {
@@ -158,11 +155,34 @@ class AppBadgeService {
         unreadAdminMessages = adminMsgSnap.count ?? 0;
       } catch (_) {}
 
+      // 4. Okunmamış Genel Duyurular (globalAnnouncements where active == true)
+      int unreadAnnouncements = 0;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final readList = prefs.getStringList('read_announcements') ?? [];
+        final dismissedList = prefs.getStringList('dismissed_announcements') ?? [];
+        final annSnap = await _firestore
+            .collection('globalAnnouncements')
+            .where('active', isEqualTo: true)
+            .limit(10)
+            .get();
+        final now = DateTime.now();
+        for (final doc in annSnap.docs) {
+          final id = doc.id;
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          if (dismissedList.contains(id) || dismissedList.contains(normalizedId)) continue;
+          if (readList.contains(id) || readList.contains(normalizedId)) continue;
+          final exp = doc.data()['expiresAt'];
+          if (exp is Timestamp && exp.toDate().isBefore(now)) continue;
+          unreadAnnouncements++;
+        }
+      } catch (_) {}
+
       _lastSyncTime = DateTime.now();
       _lastSyncUserId = uid;
 
-      final totalUnread = unreadNotifs + unreadMessages + unreadAdminMessages;
-      _log('📊 Firestore senkronizasyonu: $unreadNotifs bildirim + $unreadMessages mesaj + $unreadAdminMessages admin = Toplam $totalUnread');
+      final totalUnread = unreadNotifs + unreadMessages + unreadAdminMessages + unreadAnnouncements;
+      _log('📊 Firestore senkronizasyonu: $unreadNotifs bildirim + $unreadMessages mesaj + $unreadAdminMessages admin + $unreadAnnouncements duyuru = Toplam $totalUnread');
 
       if (totalUnread <= 0) {
         await clearBadge();
@@ -176,71 +196,19 @@ class AppBadgeService {
     }
   }
 
-  /// Oturum açıkken Firestore snapshot'ları üzerinden rozeti 100% reaktif canlı tutar
+  /// FS-16: 100k kullanıcı ölçeğinde 300.000 açık WebSocket snapshot dinleyicisinin
+  /// thundering herd ve kota patlaması yaratmasını engellemek için On-Demand & Event-Driven
+  /// rozet modeline geçilmiştir. Sürekli açık stream'ler kapatılmış olup rozet sayısı
+  /// FCM push payload'ları ve [syncBadgeWithFirestore] aggregate query ile senkronize edilir.
   void startRealtimeBadgeSync(String userId) {
     if (kIsWeb || userId.isEmpty) return;
     stopRealtimeBadgeSync();
-    _log('🚀 Canlı rozet dinleyicileri başlatılıyor (uid: $userId)...');
-
-    // 1. Bildirimler Dinleyicisi
-    _notificationsSub = _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .where('read', isEqualTo: false)
-        .limit(100)
-        .snapshots()
-        .listen((snap) {
-      _cachedUnreadNotifications = snap.docs.length;
-      _updateTotalAndApply();
-    }, onError: (e) => _log('⚠️ Bildirim rozet dinleme hatası: $e'));
-
-    // 2. Birebir Sohbet Mesajları Dinleyicisi
-    _messagesSub = _firestore
-        .collection('messages')
-        .where('receiverId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
-        .limit(100)
-        .snapshots()
-        .listen((snap) {
-      _cachedUnreadMessages = snap.docs.length;
-      _updateTotalAndApply();
-    }, onError: (e) => _log('⚠️ Mesaj rozet dinleme hatası: $e'));
-
-    // 3. Admin-Kullanıcı Mesajları Dinleyicisi
-    _adminMessagesSub = _firestore
-        .collection('adminToUserMessages')
-        .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
-        .limit(100)
-        .snapshots()
-        .listen((snap) {
-      _cachedUnreadAdminMessages = snap.docs.length;
-      _updateTotalAndApply();
-    }, onError: (e) => _log('⚠️ Admin mesaj rozet dinleme hatası: $e'));
+    _log('ℹ️ [AppBadgeService] FS-16 Kalkanı: On-Demand & Event-Driven rozet senkronizasyonu aktif (300k socket tasarrufu, uid: $userId)');
   }
 
-  void _updateTotalAndApply() {
-    final total = _cachedUnreadNotifications + _cachedUnreadMessages + _cachedUnreadAdminMessages;
-    if (total <= 0) {
-      clearBadge();
-    } else {
-      setBadge(total);
-    }
-  }
 
-  /// Oturum kapatıldığında veya kullanıcı değiştiğinde dinleyicileri bellek sızıntısız durdurur
+  /// Oturum kapatıldığında veya kullanıcı değiştiğinde rozet durumunu sıfırlar
   void stopRealtimeBadgeSync() {
-    _notificationsSub?.cancel();
-    _notificationsSub = null;
-    _messagesSub?.cancel();
-    _messagesSub = null;
-    _adminMessagesSub?.cancel();
-    _adminMessagesSub = null;
-
-    _cachedUnreadNotifications = 0;
-    _cachedUnreadMessages = 0;
-    _cachedUnreadAdminMessages = 0;
     _lastSyncTime = null;
     _lastSyncUserId = null;
     _log('🛑 Canlı rozet dinleyicileri durduruldu');

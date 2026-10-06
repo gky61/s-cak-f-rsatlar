@@ -122,21 +122,35 @@ class CommentService {
       final dealRef = _firestore.collection('deals').doc(dealId);
       final commentRef = dealRef.collection('comments').doc(commentId);
 
-      return await _firestore.runTransaction((transaction) async {
-        final dealDoc = await transaction.get(dealRef);
-        final currentCount = dealDoc.exists ? ((dealDoc.data()?['commentCount'] as num?)?.toInt() ?? 0) : 0;
-        final newCount = currentCount > 0 ? currentCount - 1 : 0;
+      try {
+        final batch = _firestore.batch();
+        batch.delete(commentRef);
+        batch.update(dealRef, {
+          'commentCount': FieldValue.increment(-1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
 
-        transaction.delete(commentRef);
-        if (dealDoc.exists) {
-          transaction.update(dealRef, {
-            'commentCount': newCount,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
+        await batch.commit();
         return true;
-      });
-    } catch (e) {
+      } catch (batchErr) {
+        // Savunmacı Fallback: Fırsat sayacı kısıtlaması veya desenkronize sayaç durumunda
+        // kullanıcının kendi yorumunu silme işlemi asla engellenmemelidir.
+        try {
+          await commentRef.delete();
+          return true;
+        } catch (_) {}
+        rethrow;
+      }
+    } catch (e, stack) {
+      _log('Yorum silme hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'comment',
+        errorType: 'CommentDeleteException',
+        message: 'Yorum silinemedi (deal: $dealId, comment: $commentId): $e',
+        stack: stack,
+        severity: SystemErrorSeverity.warning,
+        metadata: {'dealId': dealId, 'commentId': commentId},
+      );
       return false;
     }
   }

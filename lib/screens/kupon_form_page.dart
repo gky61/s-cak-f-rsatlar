@@ -149,7 +149,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
         AppSnackBar.showPostPop(
           message: widget.kupon != null
               ? '🎉 Kupon başarıyla güncellendi!'
-              : '🎉 Kupon başarıyla paylaşıldı!',
+              : '🎟️ Kuponunuz onaya gönderildi! İncelemeden sonra yayına alınacaktır.',
           icon: Icons.check_circle_rounded,
           backgroundColor: AppTheme.primary,
         );

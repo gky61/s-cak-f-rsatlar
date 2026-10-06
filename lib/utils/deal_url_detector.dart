@@ -8,7 +8,7 @@ class DealUrlDetector {
 
   /// Bilinen e-ticaret mağaza alan adları (şemasız veya www ile başlayan paylaşımlar için)
   static final RegExp _bareDomainRegex = RegExp(
-    r'(?:^|[\s(])((?:www\.)?(?:mavi\.com|boyner\.com\.tr|trendyol\.com|hepsiburada\.com|amazon\.com\.tr|amazon\.com|teknosa\.com|n11\.com|pazarama\.com|vatanbilgisayar\.com|mediamarkt\.com\.tr|idefix\.com|itopya\.com|incehesap\.com|migros\.com\.tr|getir\.com|beymen\.com|zara\.com|mango\.com|defacto\.com\.tr|pttavm\.com|havitstore\.com\.tr|gamer\.gen\.tr|gaming\.gen\.tr)\/[^\s)]*)',
+    r'(?:^|[\s(])((?:www\.)?(?:mavi\.com|boyner\.com\.tr|trendyol\.com|hepsiburada\.com|amazon\.com\.tr|amazon\.com|teknosa\.com|n11\.com|pazarama\.com|vatanbilgisayar\.com|mediamarkt\.com\.tr|idefix\.com|itopya\.com|incehesap\.com|migros\.com\.tr|getir\.com|beymen\.com|zara\.com|mango\.com|defacto\.com\.tr|pttavm\.com|havitstore\.com\.tr|gamer\.gen\.tr|gaming\.gen\.tr|fenom\.io)\/[^\s)]*)',
     caseSensitive: false,
   );
 
@@ -107,7 +107,7 @@ class DealUrlDetector {
     if (lower.contains('hepsiburada.com') || lower.contains('hb.biz') || lower.contains('hepsiburada.net')) {
       return 'Hepsiburada';
     }
-    if (lower.contains('amazon.com.tr') || lower.contains('amazon.com') || lower.contains('amzn.to') || lower.contains('amzn.eu')) {
+    if (lower.contains('amazon.com.tr') || lower.contains('amazon.com') || lower.contains('amzn.to') || lower.contains('amzn.eu') || lower.contains('link.amazon') || lower.contains('amzlinks.') || lower.contains('fenom.io')) {
       return 'Amazon';
     }
     if (lower.contains('teknosa.com')) {

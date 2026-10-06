@@ -11,7 +11,29 @@ class AmazonScraper extends BaseProductScraper {
     return lower.includes('amazon.') || 
            lower.includes('amzn.') || 
            lower.includes('link.amazon') || 
-           lower.includes('amzlinks.');
+           lower.includes('amzlinks.') ||
+           lower.includes('fenom.io');
+  }
+
+  /**
+   * .a-price ve .apex-pricetopay-value elementlerinden çift metin (offscreen + aria-hidden)
+   * birleşmesini önleyerek tekil ve temiz fiyat metnini ayıklar.
+   */
+  extractCleanPriceText(el) {
+    if (!el || !el.length) return '';
+    // 1. Eğer içinde .a-offscreen veya .aok-offscreen varsa ve boş değilse öncelikle onu al
+    const offscreen = el.find('.a-offscreen, .aok-offscreen').first().text().trim();
+    if (offscreen) {
+      return offscreen;
+    }
+    // 2. Eğer aria-hidden altında whole + fraction varsa onu birleştir
+    const whole = el.find('.a-price-whole').first().text().replace(/[^\d]/g, '');
+    const fraction = el.find('.a-price-fraction').first().text().replace(/[^\d]/g, '');
+    if (whole) {
+      return fraction ? `${whole},${fraction}` : whole;
+    }
+    // 3. Fallback: Elemanın kendi metni
+    return el.text().trim();
   }
 
   scrapePriceLabel($) {
@@ -179,7 +201,39 @@ class AmazonScraper extends BaseProductScraper {
       } catch (_) {}
     }
 
-    // 2. Depo / İkinci El / Yenilenmiş Özel Seçiciler
+    // 2. Birincil Satış Fiyatı Seçicileri
+    const primarySelectors = [
+      '#rightCol #tp_price_block_total_price_ww .a-offscreen, #rightCol #tp_price_block_total_price_ww .aok-offscreen',
+      '#corePrice_feature_div .a-price .a-offscreen, #corePrice_feature_div .a-price .aok-offscreen',
+      '#corePriceDisplay_desktop_feature_div .a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-price .aok-offscreen',
+      '#corePriceDisplay_desktop_feature_div .a-price',
+      '#rightCol .priceToPay .a-offscreen, #rightCol .priceToPay .aok-offscreen',
+      '#centerCol .priceToPay .a-offscreen, #centerCol .priceToPay .aok-offscreen',
+      '#rightCol .apexPriceToPay .a-offscreen, #rightCol .apexPriceToPay .aok-offscreen',
+      '#centerCol .apexPriceToPay .a-offscreen, #centerCol .apexPriceToPay .aok-offscreen',
+      '.apex-pricetopay-value',
+      '#rightCol #aod-ingress-link .a-price .a-offscreen',
+      '#price_inside_buybox',
+      '#priceBlock_dealPrice',
+      '#priceBlock_ourPrice',
+      '.priceToPay',
+      '.apexPriceToPay'
+    ];
+
+    for (const sel of primarySelectors) {
+      const el = $(sel).first();
+      if (el.length) {
+        if (el.closest('.a-text-price').length === 0) { // Üstü çizili değilse
+          const rawText = this.extractCleanPriceText(el);
+          const val = this.parsePriceText(rawText);
+          if (val !== null && val > 0) {
+            return val;
+          }
+        }
+      }
+    }
+
+    // 3. Depo / İkinci El / Yenilenmiş Özel Seçiciler
     const depoSelectors = [
       '#apex-pricetopay-accessibility-label',
       '.apex-pricetopay-value',
@@ -196,39 +250,10 @@ class AmazonScraper extends BaseProductScraper {
     for (const sel of depoSelectors) {
       const el = $(sel).first();
       if (el.length) {
-        const val = this.parsePriceText(el.text());
+        const rawText = this.extractCleanPriceText(el);
+        const val = this.parsePriceText(rawText);
         if (val !== null && val > 0) {
           return val;
-        }
-      }
-    }
-
-    // 3. Birincil Satış Fiyatı Seçicileri
-    const primarySelectors = [
-      '#rightCol #tp_price_block_total_price_ww .a-offscreen, #rightCol #tp_price_block_total_price_ww .aok-offscreen',
-      '#corePrice_feature_div .a-price .a-offscreen, #corePrice_feature_div .a-price .aok-offscreen',
-      '#corePriceDisplay_desktop_feature_div .a-price .a-offscreen, #corePriceDisplay_desktop_feature_div .a-price .aok-offscreen',
-      '#corePriceDisplay_desktop_feature_div .a-price',
-      '#rightCol .priceToPay .a-offscreen, #rightCol .priceToPay .aok-offscreen',
-      '#centerCol .priceToPay .a-offscreen, #centerCol .priceToPay .aok-offscreen',
-      '#rightCol .apexPriceToPay .a-offscreen, #rightCol .apexPriceToPay .aok-offscreen',
-      '#centerCol .apexPriceToPay .a-offscreen, #centerCol .apexPriceToPay .aok-offscreen',
-      '#rightCol #aod-ingress-link .a-price .a-offscreen',
-      '#price_inside_buybox',
-      '#priceBlock_dealPrice',
-      '#priceBlock_ourPrice',
-      '.priceToPay',
-      '.apexPriceToPay'
-    ];
-
-    for (const sel of primarySelectors) {
-      const el = $(sel).first();
-      if (el.length) {
-        if (el.closest('.a-text-price').length === 0) { // Üstü çizili değilse
-          const val = this.parsePriceText(el.text());
-          if (val !== null && val > 0) {
-            return val;
-          }
         }
       }
     }
@@ -241,7 +266,8 @@ class AmazonScraper extends BaseProductScraper {
       if (el.closest('.a-text-price').length > 0) {
         continue; // Üstü çizili liste fiyatını atla
       }
-      const val = this.parsePriceText(el.text());
+      const rawText = this.extractCleanPriceText(el);
+      const val = this.parsePriceText(rawText);
       if (val !== null && val > 0) {
         if (bestPrice === null || val < bestPrice) {
           bestPrice = val;
@@ -253,7 +279,8 @@ class AmazonScraper extends BaseProductScraper {
     // 5. Fallback: Eğer yukarıdakiler bulunamadıysa, sayfa genelindeki ilk geçerli fiyatı dön
     for (let i = 0; i < offscreenEls.length; i++) {
       const el = $(offscreenEls[i]);
-      const val = this.parsePriceText(el.text());
+      const rawText = this.extractCleanPriceText(el);
+      const val = this.parsePriceText(rawText);
       if (val !== null && val > 0) {
         return val;
       }

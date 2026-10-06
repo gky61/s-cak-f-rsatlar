@@ -689,6 +689,9 @@ class NotificationService {
 
         _log('✅ User device / FCM Token registered in userDevices: $deviceIdDoc');
         
+        // FS-25: Aktif kelime konularını arka planda senkronize et
+        resubscribeAllKeywordTopics().catchError((_) {});
+        
         // Tekil token refresh dinleyicisi
         _tokenRefreshSub?.cancel();
         _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) async {
@@ -808,6 +811,66 @@ class NotificationService {
       _log('🚫 Topluluk kuponu bildirimlerinden (community_coupons) çıkıldı');
     } catch (e) {
       _log('❌ Topluluk kuponu abonelik çıkış hatası: $e');
+    }
+  }
+
+  // FS-02: Genel Fırsat & Yönetici Duyuruları konusuna abone ol (sicak_firsatlar_general_v2)
+  Future<void> subscribeToGeneralTopic() async {
+    if (kIsWeb) return;
+    int attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      try {
+        await _messaging.subscribeToTopic('sicak_firsatlar_general_v2');
+        _log('✅ Genel bildirim konusuna (sicak_firsatlar_general_v2) abone olundu (Deneme ${attempts + 1})');
+        return;
+      } catch (e) {
+        attempts++;
+        _log('❌ Genel bildirim abonelik hatası (Deneme $attempts/$maxAttempts): $e');
+        if (attempts >= maxAttempts) break;
+        await Future.delayed(Duration(seconds: 2 * attempts));
+      }
+    }
+  }
+
+  // FS-02: Genel Fırsat & Yönetici Duyuruları konusundan çık
+  Future<void> unsubscribeFromGeneralTopic() async {
+    if (kIsWeb) return;
+    try {
+      await _messaging.unsubscribeFromTopic('sicak_firsatlar_general_v2');
+      _log('🚫 Genel bildirim konusundan (sicak_firsatlar_general_v2) çıkıldı');
+    } catch (e) {
+      _log('❌ Genel bildirim abonelik çıkış hatası: $e');
+    }
+  }
+
+  // FS-02: Pazarlama & Özel Kampanya duyuruları konusuna abone ol (firsatkolik_marketing_v1)
+  Future<void> subscribeToMarketingTopic() async {
+    if (kIsWeb) return;
+    int attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      try {
+        await _messaging.subscribeToTopic('firsatkolik_marketing_v1');
+        _log('✅ Pazarlama bildirim konusuna (firsatkolik_marketing_v1) abone olundu (Deneme ${attempts + 1})');
+        return;
+      } catch (e) {
+        attempts++;
+        _log('❌ Pazarlama bildirim abonelik hatası (Deneme $attempts/$maxAttempts): $e');
+        if (attempts >= maxAttempts) break;
+        await Future.delayed(Duration(seconds: 2 * attempts));
+      }
+    }
+  }
+
+  // FS-02: Pazarlama & Özel Kampanya duyuruları konusundan çık
+  Future<void> unsubscribeFromMarketingTopic() async {
+    if (kIsWeb) return;
+    try {
+      await _messaging.unsubscribeFromTopic('firsatkolik_marketing_v1');
+      _log('🚫 Pazarlama bildirim konusundan (firsatkolik_marketing_v1) çıkıldı');
+    } catch (e) {
+      _log('❌ Pazarlama bildirim abonelik çıkış hatası: $e');
     }
   }
 
@@ -997,7 +1060,9 @@ class NotificationService {
       // Topluluk kuponu topic'inden çık
       await unsubscribeFromCommunityTopic();
       
-      // Genel bildirimlerden çık
+      // FS-02: Genel ve Pazarlama topic'lerinden çık
+      await unsubscribeFromGeneralTopic();
+      await unsubscribeFromMarketingTopic();
       await _messaging.unsubscribeFromTopic('all_deals');
       
       // Kullanıcının takip ettiği kategorilerden çık
@@ -1468,16 +1533,47 @@ class NotificationService {
     });
   }
   
-  // Kullanıcının tercihlerine göre FCM Topic senkronizasyonunu yap (Topluluk Kuponları & Admin)
+  // Kullanıcının tercihlerine göre FCM Topic senkronizasyonunu yap (FS-02)
   Future<void> resubscribeToTopics() async {
     if (kIsWeb) return;
     try {
       final prefs = await getNotificationPreferences();
+      
+      // 1. Genel Fırsat & Yönetici Duyuruları (sicak_firsatlar_general_v2)
+      final shouldSubscribeGeneral = prefs.pushMasterEnabled && prefs.dealNotificationsEnabled;
+      if (shouldSubscribeGeneral) {
+        await subscribeToGeneralTopic();
+      } else {
+        await unsubscribeFromGeneralTopic();
+      }
+
+      // 2. Pazarlama & Özel Kampanyalar (firsatkolik_marketing_v1)
+      final shouldSubscribeMarketing = prefs.pushMasterEnabled && prefs.marketingNotificationsEnabled;
+      if (shouldSubscribeMarketing) {
+        await subscribeToMarketingTopic();
+      } else {
+        await unsubscribeFromMarketingTopic();
+      }
+
+      // 3. Topluluk Kuponları (community_coupons)
       final shouldSubscribeCommunity = prefs.pushMasterEnabled && prefs.communityNotificationsEnabled;
       if (shouldSubscribeCommunity) {
         await subscribeToCommunityTopic();
       } else {
         await unsubscribeFromCommunityTopic();
+      }
+
+      // 4. FS-25: Anahtar Kelime Radarı Dinamik Konuları (kw_<keyword>)
+      try {
+        final keywords = await getNotificationKeywords();
+        for (final kw in keywords) {
+          final cleanKw = _sanitizeKeywordForTopic(kw);
+          if (cleanKw.isNotEmpty) {
+            await _messaging.subscribeToTopic('kw_$cleanKw').catchError((_) {});
+          }
+        }
+      } catch (kwErr) {
+        _log('⚠️ Keyword topics resubscribe error: $kwErr');
       }
     } catch (e) {
       _log('❌ resubscribeToTopics hatası: $e');
@@ -2901,6 +2997,18 @@ class NotificationService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
       _log('✅ Keyword subscription added: $keyword');
+
+      // FS-25: Dinamik FCM Topic Aboneliği (150 limit tavanını aşan sıfır maliyetli kalkan)
+      if (!kIsWeb) {
+        final cleanKw = _sanitizeKeywordForTopic(normalized);
+        if (cleanKw.isNotEmpty) {
+          final kwTopic = 'kw_$cleanKw';
+          await _messaging.subscribeToTopic(kwTopic).catchError((e) {
+            _log('⚠️ Keyword topic ($kwTopic) subscribe error: $e');
+          });
+          _log('📢 [FCM-Topic] Kelime konusuna abone olundu: $kwTopic');
+        }
+      }
     } catch (e) {
       _log('❌ Keyword subscription add error: $e');
       rethrow;
@@ -2915,9 +3023,62 @@ class NotificationService {
     try {
       await _firestore.collection('notificationSubscriptions').doc(subId).delete();
       _log('✅ Keyword subscription removed: $keyword');
+
+      // FS-25: Dinamik FCM Topic Aboneliğinden Çıkış
+      if (!kIsWeb) {
+        final cleanKw = _sanitizeKeywordForTopic(normalized);
+        if (cleanKw.isNotEmpty) {
+          final kwTopic = 'kw_$cleanKw';
+          await _messaging.unsubscribeFromTopic(kwTopic).catchError((e) {
+            _log('⚠️ Keyword topic ($kwTopic) unsubscribe error: $e');
+          });
+          _log('📢 [FCM-Topic] Kelime konusundan çıkıldı: $kwTopic');
+        }
+      }
     } catch (e) {
       _log('❌ Keyword subscription remove error: $e');
       rethrow;
+    }
+  }
+
+  /// FS-25: Kelimeyi FCM Topic kuralına göre güvenle temizleyen standartlaştırıcı
+  String _sanitizeKeywordForTopic(String rawKeyword) {
+    final normalized = normalizeKeyword(rawKeyword);
+    return normalized
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_-]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+  }
+
+  /// FS-25: Aktif anahtar kelime aboneliklerini FCM topic'lerine yeniden bağla (Cihaz değişikliği / yeniden kurulum / yükseltme sonrası kalkan)
+  Future<void> resubscribeAllKeywordTopics() async {
+    if (kIsWeb) return;
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+    try {
+      final snap = await _firestore
+          .collection('notificationSubscriptions')
+          .where('uid', isEqualTo: userId)
+          .where('type', isEqualTo: 'keyword')
+          .where('enabled', isEqualTo: true)
+          .limit(100)
+          .get();
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final rawKey = (data['key'] ?? data['displayValue'] ?? '').toString();
+        final cleanKw = _sanitizeKeywordForTopic(rawKey);
+        if (cleanKw.isNotEmpty) {
+          final kwTopic = 'kw_$cleanKw';
+          await _messaging.subscribeToTopic(kwTopic).catchError((e) {
+            _log('⚠️ Keyword topic ($kwTopic) resubscribe error: $e');
+          });
+        }
+      }
+      _log('✅ FS-25: ${snap.docs.length} aktif kelime konusu FCM ile senkronize edildi.');
+    } catch (e) {
+      _log('⚠️ resubscribeAllKeywordTopics hatası: $e');
     }
   }
 

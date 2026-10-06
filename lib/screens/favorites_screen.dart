@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/deal.dart';
 import '../services/firestore_service.dart';
@@ -36,9 +37,16 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   // Cached streams to prevent re-listening/recreating on rebuilds
   Stream<List<Deal>>? _myFavoritesStream;
-  Stream<List<Deal>>? _followedCategoriesStream;
   String? _cachedUserId;
   StreamSubscription? _authSub;
+
+  // FS-18: Followed Categories SWR & Pagination State
+  List<Deal> _followedDealsList = [];
+  DocumentSnapshot? _lastFollowedDocument;
+  bool _isLoadingFollowed = false;
+  bool _isFirstLoadFollowed = true;
+  bool _hasMoreFollowed = true;
+  String? _followedErrorMessage;
 
   int _favoriteFilterIndex = 0; // 0: Tümü, 1: Aktif, 2: Süresi Dolanlar
 
@@ -100,6 +108,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         _showScrollToTop = showScrollToTopNow;
       });
     }
+
+    // FS-18: Takip edilen kategoriler sonsuz kaydırma tetikleyicisi
+    if (_tabController.index == 1 && _followedCategoriesScrollController.hasClients) {
+      if (_followedCategoriesScrollController.offset >=
+          _followedCategoriesScrollController.position.maxScrollExtent - 350) {
+        _loadMoreFollowed();
+      }
+    }
   }
 
   void _tabListener() {
@@ -108,8 +124,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       double offset = 0;
       if (_tabController.index == 0 && _myFavoritesScrollController.hasClients) {
         offset = _myFavoritesScrollController.offset;
-      } else if (_tabController.index == 1 && _followedCategoriesScrollController.hasClients) {
-        offset = _followedCategoriesScrollController.offset;
+      } else if (_tabController.index == 1) {
+        if (_followedCategoriesScrollController.hasClients) {
+          offset = _followedCategoriesScrollController.offset;
+        }
+        if (_followedDealsList.isEmpty && !_isLoadingFollowed) {
+          _loadFollowedFirstPage();
+        }
       }
 
       setState(() {
@@ -123,14 +144,108 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   void _initializeStreams(String? userId) {
     if (userId == null) {
       _myFavoritesStream = null;
-      _followedCategoriesStream = null;
       _cachedUserId = null;
+      _followedDealsList = [];
+      _lastFollowedDocument = null;
       return;
     }
     if (_cachedUserId != userId) {
       _cachedUserId = userId;
       _myFavoritesStream = _firestoreService.getFavoriteDeals(userId);
-      _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(userId);
+      _loadFollowedFirstPage();
+    }
+  }
+
+  /// FS-18: Followed Categories SWR + Cache-First ilk yükleme
+  Future<void> _loadFollowedFirstPage() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !mounted) return;
+    setState(() {
+      _isLoadingFollowed = true;
+      _followedErrorMessage = null;
+    });
+
+    try {
+      // 1. Aşama: Cache-First (0ms yerel önbellekten açılış)
+      try {
+        final cacheResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
+          userId: user.uid,
+          limit: 45,
+          source: Source.cache,
+        );
+        if (mounted && cacheResult.deals.isNotEmpty) {
+          setState(() {
+            _followedDealsList = cacheResult.deals;
+            _lastFollowedDocument = cacheResult.lastDocument;
+            _hasMoreFollowed = cacheResult.hasMore;
+            _isFirstLoadFollowed = false;
+          });
+        }
+      } catch (_) {}
+
+      // 2. Aşama: SWR Server Revalidation (Sunucudan taze doğrula)
+      final serverResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
+        userId: user.uid,
+        limit: 45,
+        source: Source.server,
+      );
+
+      if (mounted) {
+        setState(() {
+          _followedDealsList = serverResult.deals;
+          _lastFollowedDocument = serverResult.lastDocument;
+          _hasMoreFollowed = serverResult.hasMore;
+          _isLoadingFollowed = false;
+          _isFirstLoadFollowed = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingFollowed = false;
+          _isFirstLoadFollowed = false;
+          if (_followedDealsList.isEmpty) {
+            _followedErrorMessage = 'Fırsatlar yüklenemedi';
+          }
+        });
+      }
+    }
+  }
+
+  /// FS-18: Sonsuz kaydırma - Takip edilen kategoriler sonraki sayfa
+  Future<void> _loadMoreFollowed() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _isLoadingFollowed || !_hasMoreFollowed || _lastFollowedDocument == null || !mounted) return;
+
+    setState(() {
+      _isLoadingFollowed = true;
+    });
+
+    try {
+      final result = await _firestoreService.getFollowedCategoriesDealsPaginated(
+        userId: user.uid,
+        limit: 30,
+        lastDocument: _lastFollowedDocument,
+        source: Source.serverAndCache,
+      );
+
+      if (mounted) {
+        final existingIds = _followedDealsList.map((d) => d.id).toSet();
+        final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+        setState(() {
+          _followedDealsList.addAll(newDeals);
+          _lastFollowedDocument = result.lastDocument;
+          _hasMoreFollowed = result.hasMore && newDeals.isNotEmpty;
+          _isLoadingFollowed = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingFollowed = false;
+        });
+      }
     }
   }
 
@@ -1050,8 +1165,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         if (currentUser != null) {
           setState(() {
             _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
-            _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
           });
+          await _loadFollowedFirstPage();
         }
       },
       child: GridView.builder(
@@ -1067,18 +1182,22 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         itemCount: deals.length,
         itemBuilder: (context, index) {
           final deal = deals[index];
-          return DealCard(
-            deal: deal,
-            viewMode: CardViewMode.vertical,
-            onTap: () {
-              HapticFeedback.lightImpact();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DealDetailScreen(dealId: deal.id),
-                ),
-              );
-            },
+          return RepaintBoundary(
+            key: ValueKey('fav_deal_boundary_${deal.id}'),
+            child: DealCard(
+              key: ValueKey('fav_deal_${deal.id}_v'),
+              deal: deal,
+              viewMode: CardViewMode.vertical,
+              onTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DealDetailScreen(dealId: deal.id),
+                  ),
+                );
+              },
+            ),
           );
         },
       ),
@@ -1162,15 +1281,20 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       );
     }
 
-    return StreamBuilder<List<Deal>>(
-      stream: _followedCategoriesStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingGrid(isDark);
-        }
+    if (_isFirstLoadFollowed && _isLoadingFollowed && _followedDealsList.isEmpty) {
+      return _buildLoadingGrid(isDark);
+    }
 
-        if (snapshot.hasError) {
-          return Center(
+    if (_followedErrorMessage != null && _followedDealsList.isEmpty) {
+      return RefreshIndicator(
+        color: AppTheme.primary,
+        onRefresh: _loadFollowedFirstPage,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1181,22 +1305,53 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Bir hata oluştu',
+                  _followedErrorMessage ?? 'Bir hata oluştu',
                   style: TextStyle(
                     fontSize: 16.5,
                     fontWeight: FontWeight.w800,
                     color: textColor,
                   ),
                 ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    _loadFollowedFirstPage();
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text(
+                    'Tekrar Dene',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
               ],
             ),
-          );
-        }
+          ),
+        ),
+      );
+    }
 
-        final deals = snapshot.data ?? [];
+    final deals = _followedDealsList;
 
-        if (deals.isEmpty) {
-          return Center(
+    if (deals.isEmpty) {
+      return RefreshIndicator(
+        color: AppTheme.primary,
+        onRefresh: _loadFollowedFirstPage,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1243,9 +1398,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                         builder: (_) => const CategoryPreferencesScreen(),
                       ),
                     ).then((_) {
-                      setState(() {
-                        _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
-                      });
+                      _loadFollowedFirstPage();
                     });
                   },
                   icon: const Icon(Icons.tune_rounded, size: 18),
@@ -1265,102 +1418,100 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                 ),
               ],
             ),
-          );
-        }
+          ),
+        ),
+      );
+    }
 
-        return Column(
-          children: [
-            AnimatedCrossFade(
-              firstChild: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      children: [
+        AnimatedCrossFade(
+          firstChild: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.local_offer_outlined,
-                          size: 16,
-                          color: secondaryTextColor,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${deals.length} Fırsat',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: secondaryTextColor,
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      Icons.local_offer_outlined,
+                      size: 16,
+                      color: secondaryTextColor,
                     ),
-                    InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CategoryPreferencesScreen(),
-                          ),
-                        ).then((_) {
-                          setState(() {
-                            _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
-                          });
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
-                        decoration: BoxDecoration(
-                          color: isDark ? AppTheme.darkSurface : Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                            width: 1.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.tune_rounded,
-                              size: 14,
-                              color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Kategorileri Düzenle',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                          ],
-                        ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${deals.length} Fırsat',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: secondaryTextColor,
                       ),
                     ),
                   ],
                 ),
-              ),
-              secondChild: const SizedBox.shrink(),
-              crossFadeState: _showCleanupButton ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              duration: const Duration(milliseconds: 200),
+                InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CategoryPreferencesScreen(),
+                      ),
+                    ).then((_) {
+                      _loadFollowedFirstPage();
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                        width: 1.0,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          size: 14,
+                          color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Kategorileri Düzenle',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: _buildFollowedCategoriesDealGrid(deals, isDark, _followedCategoriesScrollController),
-            ),
-          ],
-        );
-      },
+          ),
+          secondChild: const SizedBox.shrink(),
+          crossFadeState: _showCleanupButton ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+          duration: const Duration(milliseconds: 200),
+        ),
+        Expanded(
+          child: _buildFollowedCategoriesDealGrid(deals, isDark, _followedCategoriesScrollController),
+        ),
+      ],
     );
   }
 
@@ -1465,17 +1616,31 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           }
         }
 
+        if (_isLoadingFollowed && !_isFirstLoadFollowed) {
+          slivers.add(
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else {
+          slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 24)));
+        }
+
         return RefreshIndicator(
           color: AppTheme.primary,
-          onRefresh: () async {
-            final currentUser = FirebaseAuth.instance.currentUser;
-            if (currentUser != null) {
-              setState(() {
-                _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
-                _followedCategoriesStream = _firestoreService.getFollowedCategoriesDeals(currentUser.uid);
-              });
-            }
-          },
+          onRefresh: _loadFollowedFirstPage,
           child: CustomScrollView(
             controller: scrollController,
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),

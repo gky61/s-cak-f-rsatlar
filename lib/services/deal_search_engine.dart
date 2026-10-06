@@ -42,6 +42,42 @@ class DealSearchEngine {
         .toList();
   }
 
+  /// Fırsat dokümanının Firestore'da hedeflenmiş sunucu sorgusuyla bulunabilmesi için
+  /// normalize edilmiş aranabilir kök kelime kümesini üretir.
+  static List<String> generateSearchKeywords({
+    required String title,
+    String? brand,
+    String? store,
+    String? category,
+    String? subCategory,
+  }) {
+    final Set<String> keywords = {};
+
+    // 1. Başlık kelimeleri
+    keywords.addAll(tokenize(title));
+
+    // 2. Marka kelimeleri
+    if (brand != null && brand.trim().isNotEmpty) {
+      keywords.addAll(tokenize(brand));
+    }
+
+    // 3. Mağaza kelimeleri
+    if (store != null && store.trim().isNotEmpty) {
+      keywords.addAll(tokenize(store));
+    }
+
+    // 4. Kategori ve Alt kategori kelimeleri
+    if (category != null && category.trim().isNotEmpty) {
+      keywords.addAll(tokenize(category));
+    }
+    if (subCategory != null && subCategory.trim().isNotEmpty) {
+      keywords.addAll(tokenize(subCategory));
+    }
+
+    // En fazla 50 özgün arama anahtarı döner
+    return keywords.take(50).toList();
+  }
+
   /// Verilen fırsat listesi üzerinde arama yapar ve sonuçları Alaka Düzeyine göre sıralar.
   static List<Deal> searchDeals(List<Deal> deals, String query) {
     final cleanQuery = query.trim();

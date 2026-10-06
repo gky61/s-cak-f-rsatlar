@@ -9,8 +9,10 @@ import 'dart:async';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../models/user.dart';
+import '../models/kupon.dart';
 import '../services/firestore_service.dart';
 import '../services/user_service.dart';
+import '../services/kupon_service.dart';
 import '../services/message_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
@@ -54,6 +56,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   final FirestoreService _firestoreService = FirestoreService();
   final UserService _userService = UserService();
   final MessageService _messageService = MessageService();
+  final KuponService _kuponService = KuponService();
   late TabController _tabController;
 
   // Güvenlik Muhafızı: Admin yetki doğrulaması
@@ -63,6 +66,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   // Tab bildirim sayıları
   int _pendingCount = 0;
   int _userSubmittedCount = 0;
+  int _pendingCouponsCount = 0;
   int _expiredCount = 0;
   int _usersCount = 0;
   int _pendingReportsCount = 0;
@@ -72,6 +76,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   // Stream Subscriptions - Bellek sızıntısını önlemek için
   StreamSubscription? _pendingSubscription;
   StreamSubscription? _userSubmittedSubscription;
+  StreamSubscription? _pendingCouponsSubscription;
   StreamSubscription? _expiredSubscription;
   StreamSubscription? _usersSubscription;
   StreamSubscription? _reportsSubscription;
@@ -140,10 +145,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   void initState() {
     super.initState();
     NotificationService.isAdminScreenActive = true;
-    final initialIndex = (widget.initialTabIndex != null && widget.initialTabIndex! >= 0 && widget.initialTabIndex! < 5)
+    final initialIndex = (widget.initialTabIndex != null && widget.initialTabIndex! >= 0 && widget.initialTabIndex! < 6)
         ? widget.initialTabIndex!
         : 0;
-    _tabController = TabController(length: 5, vsync: this, initialIndex: initialIndex);
+    _tabController = TabController(length: 6, vsync: this, initialIndex: initialIndex);
     _verifyAdminAccess();
   }
 
@@ -210,6 +215,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     // Tüm stream subscription'ları iptal et
     _pendingSubscription?.cancel();
     _userSubmittedSubscription?.cancel();
+    _pendingCouponsSubscription?.cancel();
     _expiredSubscription?.cancel();
     _usersSubscription?.cancel();
     _reportsSubscription?.cancel();
@@ -234,6 +240,15 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       if (mounted) {
         setState(() {
           _userSubmittedCount = deals.length;
+        });
+      }
+    });
+
+    // Onay bekleyen topluluk kuponları
+    _pendingCouponsSubscription = _kuponService.getPendingKuponlarStream().listen((kuponlar) {
+      if (mounted) {
+        setState(() {
+          _pendingCouponsCount = kuponlar.length;
         });
       }
     });
@@ -317,6 +332,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           tabs: [
             _buildTabWithBadge('Onay Bekleyen', _pendingCount),
             _buildTabWithBadge('Paylaşılanlar', _userSubmittedCount),
+            _buildTabWithBadge('🎟️ Kupon Onay', _pendingCouponsCount),
             _buildTabWithBadge('Süresi Biten', _expiredCount),
             _buildTabWithBadge('Kullanıcılar', _usersCount),
             _buildTabWithBadge('Raporlar', _pendingReportsCount),
@@ -328,6 +344,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         children: [
           _buildDealList(_AdminListType.pending),
           _buildDealList(_AdminListType.userSubmitted),
+          _buildPendingCouponsList(),
           const AdminExpiredDealsView(),
           _buildUsersList(),
           const AdminReportsList(),
@@ -2628,6 +2645,713 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
+        );
+      }
+    }
+  }
+
+  // =========================================================================
+  // 🎟️ KUPON ONAY VE MODERASYON YÖNETİMİ
+  // =========================================================================
+
+  Widget _buildPendingCouponsList() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return StreamBuilder<List<Kupon>>(
+      stream: _kuponService.getPendingKuponlarStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final kuponlar = snapshot.data ?? [];
+
+        if (kuponlar.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.confirmation_number_outlined,
+                  size: 64,
+                  color: isDark ? Colors.grey[700] : Colors.grey[300],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Onay bekleyen kupon yok',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Kullanıcılar tarafından paylaşılan kuponlar burada listelenir.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey[500] : Colors.grey[400],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: kuponlar.length,
+          itemBuilder: (context, index) {
+            return _buildKuponAdminCard(kuponlar[index]);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildKuponAdminCard(Kupon kupon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final timeAgo = _formatDealTimeAgo(kupon.olusturulmaTarihi);
+    final fullDate = DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(kupon.olusturulmaTarihi);
+    final author = kupon.paylasanKullaniciAdi.isNotEmpty
+        ? '@${kupon.paylasanKullaniciAdi}'
+        : (kupon.paylasanKullaniciId.isNotEmpty ? kupon.paylasanKullaniciId.substring(0, 8) : 'Topluluk Üyesi');
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Üst Bilgi Çubuğu: Paylaşan & Tarih & Silme
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                  width: 0.8,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withValues(alpha: isDark ? 0.25 : 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.person_rounded, size: 13, color: isDark ? Colors.indigo[300] : Colors.indigo[700]),
+                      const SizedBox(width: 4),
+                      Text(
+                        author,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.indigo[300] : Colors.indigo[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 13,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeAgo,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '($fullDate)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                  tooltip: 'Kuponu Kalıcı Sil',
+                  onPressed: () => _confirmDeleteKupon(kupon),
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ),
+
+          // Kupon Detayları
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3), width: 0.8),
+                      ),
+                      child: Text(
+                        kupon.magazaAdi.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: kupon.isExpired
+                            ? Colors.red.withValues(alpha: 0.12)
+                            : (isDark ? const Color(0xFF1E293B) : Colors.grey[200]),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.timer_outlined,
+                            size: 13,
+                            color: kupon.isExpired ? Colors.red : (isDark ? Colors.grey[400] : Colors.grey[700]),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            kupon.bitisTarihi != null
+                                ? DateFormat('dd.MM.yyyy', 'tr_TR').format(kupon.bitisTarihi!)
+                                : 'Süresiz',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: kupon.isExpired ? Colors.red : (isDark ? Colors.grey[300] : Colors.grey[800]),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  kupon.baslik,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (kupon.aciklama.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    kupon.aciklama,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                // Kod Alanı (Kopyalanabilir)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.vpn_key_rounded, size: 16, color: AppTheme.primary),
+                          const SizedBox(width: 8),
+                          SelectableText(
+                            kupon.kuponKodu,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        tooltip: 'Kodu Kopyala',
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: kupon.kuponKodu));
+                          AppSnackBar.show(
+                            context: context,
+                            message: 'Kupon kodu kopyalandı! 📋',
+                            icon: Icons.check,
+                            backgroundColor: Colors.blueGrey,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Divider(height: 1),
+
+          // Alt Aksiyon Butonları (Reddet, Düzenle, Onayla & Push)
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () => _showRejectKuponDialog(kupon),
+                  icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                  label: const Text('Reddet', style: TextStyle(color: Colors.red)),
+                ),
+              ),
+              Container(width: 1, height: 30, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () => _showEditKuponDialog(kupon),
+                  icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                  label: const Text('Düzenle', style: TextStyle(color: Colors.blue)),
+                ),
+              ),
+              Container(width: 1, height: 30, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () => _showApproveKuponDialog(kupon),
+                  icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
+                  label: const Text('Onayla & Push', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showApproveKuponDialog(Kupon kupon) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.verified_rounded, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Kuponu Onayla ve Yayınla'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Bu kuponu onaylayıp yayına almak istiyor musunuz?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text('• Mağaza: ${kupon.magazaAdi}'),
+            Text('• Kod: ${kupon.kuponKodu}'),
+            Text('• Başlık: ${kupon.baslik}'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.notifications_active, color: Colors.green, size: 18),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Onaylandığında topluluk bildirimi tüm kullanıcılara otomatik gönderilecek ve kupon anında yayına girecektir.',
+                      style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            icon: const Icon(Icons.check, size: 16),
+            label: const Text('Onayla & Yayınla'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+      final success = await _kuponService.approveKupon(
+        kuponId: kupon.id,
+        adminId: adminId,
+      );
+
+      if (mounted) {
+        if (success) {
+          AppSnackBar.show(
+            context: context,
+            message: 'Kupon başarıyla onaylandı ve yayınlandı! 🎉',
+            icon: Icons.check_circle,
+            backgroundColor: Colors.green,
+          );
+        } else {
+          AppSnackBar.show(
+            context: context,
+            message: 'Kupon onaylanırken bir hata oluştu.',
+            icon: Icons.error,
+            backgroundColor: Colors.red,
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showRejectKuponDialog(Kupon kupon) async {
+    String selectedReason = 'Geçersiz veya süresi dolmuş kupon kodu';
+    final customReasonController = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final reasons = [
+              'Geçersiz veya süresi dolmuş kupon kodu',
+              'Yanıltıcı veya eksik indirim şartı',
+              'Mükerrer (daha önce paylaşılan) kupon',
+              'Topluluk kurallarına aykırı içerik',
+              'Diğer (özel gerekçe)',
+            ];
+
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.cancel_rounded, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Kuponu Reddet'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${kupon.magazaAdi} - ${kupon.kuponKodu} kuponunu reddetmek üzeresiniz. Lütfen kullanıcıya iletilecek red gerekçesini seçin:',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    ...reasons.map((r) {
+                      final isSelected = selectedReason == r;
+                      return InkWell(
+                        onTap: () {
+                          setDialogState(() {
+                            selectedReason = r;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                size: 18,
+                                color: isSelected ? Colors.red : Colors.grey,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  r,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    if (selectedReason == 'Diğer (özel gerekçe)') ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: customReasonController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          hintText: 'Red gerekçesini buraya yazın...',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.all(8),
+                        ),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx, null),
+                  child: const Text('Vazgeç'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final finalReason = selectedReason == 'Diğer (özel gerekçe)'
+                        ? (customReasonController.text.trim().isNotEmpty
+                            ? customReasonController.text.trim()
+                            : 'Kurallara aykırı bulundu')
+                        : selectedReason;
+                    Navigator.pop(dialogCtx, finalReason);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Reddet'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null && mounted) {
+      final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+      final success = await _kuponService.rejectKupon(
+        kuponId: kupon.id,
+        adminId: adminId,
+        reason: result,
+      );
+
+      if (mounted) {
+        if (success) {
+          AppSnackBar.show(
+            context: context,
+            message: 'Kupon reddedildi ve kullanıcıya bildirim gönderildi.',
+            icon: Icons.cancel,
+            backgroundColor: Colors.orange[800] ?? Colors.orange,
+          );
+        } else {
+          AppSnackBar.show(
+            context: context,
+            message: 'Kupon reddedilirken bir hata oluştu.',
+            icon: Icons.error,
+            backgroundColor: Colors.red,
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showEditKuponDialog(Kupon kupon) async {
+    final magazaController = TextEditingController(text: kupon.magazaAdi);
+    final baslikController = TextEditingController(text: kupon.baslik);
+    final aciklamaController = TextEditingController(text: kupon.aciklama);
+    final kodController = TextEditingController(text: kupon.kuponKodu);
+    DateTime? bitisTarihi = kupon.bitisTarihi;
+
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.edit, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Kuponu Düzenle'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: magazaController,
+                      decoration: const InputDecoration(labelText: 'Mağaza Adı'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: baslikController,
+                      decoration: const InputDecoration(labelText: 'Başlık'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: kodController,
+                      decoration: const InputDecoration(labelText: 'Kupon Kodu'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: aciklamaController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(labelText: 'Açıklama / Koşullar'),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Son Geçerlilik Tarihi', style: TextStyle(fontSize: 13)),
+                      subtitle: Text(
+                        bitisTarihi != null
+                            ? DateFormat('dd.MM.yyyy', 'tr_TR').format(bitisTarihi!)
+                            : 'Belirtilmedi (Süresiz)',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (bitisTarihi != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () => setDialogState(() => bitisTarihi = null),
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.calendar_today, size: 18),
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: bitisTarihi ?? DateTime.now().add(const Duration(days: 7)),
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                              );
+                              if (picked != null) {
+                                setDialogState(() => bitisTarihi = picked);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx, false),
+                  child: const Text('Vazgeç'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogCtx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Kaydet'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (updated == true && mounted) {
+      await _kuponService.updateKupon(
+        kuponId: kupon.id,
+        magazaAdi: magazaController.text.trim(),
+        baslik: baslikController.text.trim(),
+        aciklama: aciklamaController.text.trim(),
+        kuponKodu: kodController.text.trim(),
+        bitisTarihi: bitisTarihi,
+      );
+
+      if (mounted) {
+        AppSnackBar.show(
+          context: context,
+          message: 'Kupon bilgileri güncellendi.',
+          icon: Icons.check,
+          backgroundColor: Colors.blue,
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteKupon(Kupon kupon) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Kuponu Sil'),
+        content: Text('${kupon.magazaAdi} - ${kupon.kuponKodu} kuponunu kalıcı olarak silmek istediğinize emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Kalıcı Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _kuponService.deleteKupon(kupon.id);
+      if (mounted) {
+        AppSnackBar.show(
+          context: context,
+          message: 'Kupon kalıcı olarak silindi.',
+          icon: Icons.delete,
+          backgroundColor: Colors.red,
         );
       }
     }

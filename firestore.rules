@@ -195,11 +195,12 @@ service cloud.firestore {
     // MESSAGES COLLECTION (User-to-User)
     // ========================================
     match /messages/{messageId} {
-      // Sadece gönderen, alıcı veya admin okuyabilir
+      // Sadece gönderen, alıcı, katılımcı veya admin okuyabilir (FS-21 tekil stream desteği)
       allow read: if isAuthenticated() && 
                   (resource == null ||
                    resource.data.senderId == userId() || 
                    resource.data.receiverId == userId() ||
+                   (resource.data.participants != null && userId() in resource.data.participants) ||
                    isAdmin());
       
       // Giriş yapmış kullanıcılar mesaj gönderilebilir; admin herhangi bir gönderen adına simüle edebilir
@@ -360,19 +361,21 @@ service cloud.firestore {
       allow create: if canWrite() && (
         isAdmin() || (
           request.resource.data.paylasanKullaniciId == userId() &&
+          (!('durum' in request.resource.data) || request.resource.data.durum == 'beklemede') &&
           (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi == 0) &&
           (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi == 0)
         )
       );
-      // P0-06 (R-AUTH-03): Kupon oy ve durum koruması. Yalnızca engellenmemiş kullanıcılar (canWrite) ve +-1 delta ile güncelleyebilir.
+      // P0-06 (R-AUTH-03) & FS-01: Kupon oy ve durum koruması. Yalnızca engellenmemiş kullanıcılar (canWrite) ve +-1 delta ile güncelleyebilir.
+      // Topluluk kuponu moderasyon kalkanı: Kullanıcı kendi kuponunu güncellerken durum alanını değiştiremez; durum onayı yalnızca isAdmin() yetkisine aittir.
       allow update: if canWrite() && (
         isAdmin() ||
         (
           resource.data.paylasanKullaniciId == userId() &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['paylasanKullaniciId', 'sicakOySayisi', 'sogukOySayisi'])
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['paylasanKullaniciId', 'sicakOySayisi', 'sogukOySayisi', 'durum'])
         ) ||
         (request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['sicakOySayisi', 'sogukOySayisi', 'durum']) &&
+          .hasOnly(['sicakOySayisi', 'sogukOySayisi']) &&
          isValidDelta('sicakOySayisi') &&
          isValidDelta('sogukOySayisi') &&
          (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi >= 0) &&
@@ -425,6 +428,14 @@ service cloud.firestore {
     // ========================================
     match /{path=**}/notifications/{notificationId} {
       allow read, write: if isAdmin();
+    }
+
+    // ========================================
+    // GLOBAL ANNOUNCEMENTS (FS-02 Dual-Layer Feed)
+    // ========================================
+    match /globalAnnouncements/{announcementId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // ========================================

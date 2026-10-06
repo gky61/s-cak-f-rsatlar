@@ -39,6 +39,9 @@ class Message {
   // Emoji Tepkileri (Reactions): {'userId': '❤️', 'userId2': '👍'}
   final Map<String, String> reactions;
 
+  // Katılımcı kimlikleri (FS-21: Güvenli tekil stream sorgusu)
+  final List<String> participants;
+
   // Optimistic UI ve durum kontrolü ('sending', 'sent', 'failed')
   final String status;
 
@@ -72,6 +75,7 @@ class Message {
     this.replyToText,
     this.deletedBy = const [],
     this.reactions = const {},
+    this.participants = const [],
     this.status = 'sent',
   });
 
@@ -147,6 +151,7 @@ class Message {
       replyToText: data['replyToText'] as String?,
       deletedBy: deletedBy,
       reactions: reactions,
+      participants: List<String>.from(data['participants'] ?? [senderId, receiverId].where((s) => s.isNotEmpty)),
       status: 'sent',
     );
   }
@@ -198,8 +203,12 @@ class Message {
   // Message'i Firestore'a yazmak için Map'e dönüştürme
   Map<String, dynamic> toFirestore() {
     final effectiveConvId = conversationId ?? computeConversationId(senderId, receiverId);
+    final effectiveParticipants = participants.isNotEmpty
+        ? participants
+        : [senderId, receiverId].where((s) => s.isNotEmpty).toList();
     return {
       if (effectiveConvId.isNotEmpty) 'conversationId': effectiveConvId,
+      'participants': effectiveParticipants,
       'senderId': senderId,
       'senderName': senderName,
       'senderImageUrl': senderImageUrl,
@@ -247,6 +256,7 @@ class Message {
     String? replyToText,
     List<String>? deletedBy,
     Map<String, String>? reactions,
+    List<String>? participants,
     String? status,
   }) {
     return Message(
@@ -273,6 +283,7 @@ class Message {
       replyToText: replyToText ?? this.replyToText,
       deletedBy: deletedBy ?? this.deletedBy,
       reactions: reactions ?? this.reactions,
+      participants: participants ?? this.participants,
       status: status ?? this.status,
     );
   }

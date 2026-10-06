@@ -47,8 +47,56 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
   Timer? _timeoutTimer;
   bool _isDisposed = false;
 
+  // FS-27: Sınırlı Keep-Alive Havuzu (Bounded KeepAlive Pool - Azami 5 Aktif Reklam)
+  // Uzun liste kaydırmalarında sınırsız Native PlatformView birikimini engelleyerek
+  // düşük RAM'li Android/iOS cihazlarda OOM (Out Of Memory) çökmesini %100 önler.
+  static final List<_AdNativeWidgetState> _activeAdsPool = [];
+  static const int _maxConcurrentActiveAds = 5;
+  bool _isKeepAliveGranted = false;
+
+  void _grantKeepAlive() {
+    if (_isDisposed || !mounted || !_isAdLoaded) return;
+    if (!_isKeepAliveGranted) {
+      _isKeepAliveGranted = true;
+      _activeAdsPool.remove(this);
+      _activeAdsPool.add(this);
+      if (_activeAdsPool.length > _maxConcurrentActiveAds) {
+        final oldest = _activeAdsPool.removeAt(0);
+        oldest._revokeKeepAlive();
+      }
+      updateKeepAlive();
+    } else {
+      _activeAdsPool.remove(this);
+      _activeAdsPool.add(this);
+    }
+  }
+
+  void _revokeKeepAlive() {
+    if (_isKeepAliveGranted) {
+      _isKeepAliveGranted = false;
+      if (mounted && !_isDisposed) {
+        updateKeepAlive();
+      }
+    }
+  }
+
+  void _touchKeepAlive() {
+    if (!_isDisposed && _isAdLoaded) {
+      if (_isKeepAliveGranted) {
+        _activeAdsPool.remove(this);
+        _activeAdsPool.add(this);
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_isDisposed && _isAdLoaded) {
+            _grantKeepAlive();
+          }
+        });
+      }
+    }
+  }
+
   @override
-  bool get wantKeepAlive => _isAdLoaded && !_isDisposed;
+  bool get wantKeepAlive => _isAdLoaded && !_isDisposed && _isKeepAliveGranted;
 
   @override
   void initState() {
@@ -64,6 +112,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     super.didUpdateWidget(oldWidget);
     if (widget.adUnitId != oldWidget.adUnitId || widget.viewMode != oldWidget.viewMode) {
       _timeoutTimer?.cancel();
+      _isKeepAliveGranted = false;
+      _activeAdsPool.remove(this);
       final adToDispose = _nativeAd;
       _nativeAd = null;
       _isAdLoaded = false;
@@ -85,6 +135,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     if (!adManager.isAdsEnabled || !adManager.nativeEnabled) {
       _timeoutTimer?.cancel();
       _isLoading = false;
+      _isKeepAliveGranted = false;
+      _activeAdsPool.remove(this);
       final adToDispose = _nativeAd;
       _nativeAd = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -261,6 +313,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
               _isAdLoaded = true;
               _isAdFailed = false;
             });
+            _grantKeepAlive();
           }
         },
         onPaidEvent: (Ad ad, double valueMicros, PrecisionType precision, String currencyCode) {
@@ -300,6 +353,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
           }
 
           if (mounted && !_isDisposed) {
+            _isKeepAliveGranted = false;
+            _activeAdsPool.remove(this);
             setState(() {
               _isAdLoaded = false;
               _isAdFailed = true;
@@ -334,6 +389,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
   @override
   void dispose() {
     _isDisposed = true;
+    _isKeepAliveGranted = false;
+    _activeAdsPool.remove(this);
     AdManagerService.instance.removeListener(_onAdSettingsChanged);
     _timeoutTimer?.cancel();
     _isLoading = false;
@@ -433,6 +490,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    _touchKeepAlive();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;

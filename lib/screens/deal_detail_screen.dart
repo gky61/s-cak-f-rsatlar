@@ -163,6 +163,8 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         store: _currentDeal!.store,
         link: _currentDeal!.link,
         imageUrl: _currentDeal!.imageUrl,
+        category: _currentDeal!.category,
+        isExpired: _currentDeal!.isExpired,
       );
     } else {
       success = await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);

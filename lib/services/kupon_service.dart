@@ -1,13 +1,66 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/kupon.dart';
 
+class KuponlarPageResult {
+  final List<Kupon> kuponlar;
+  final DocumentSnapshot? lastDocument;
+  final bool hasMore;
+  final bool isFromCache;
+
+  const KuponlarPageResult({
+    required this.kuponlar,
+    this.lastDocument,
+    required this.hasMore,
+    this.isFromCache = false,
+  });
+}
+
 class KuponService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Kuponları real-time dinleme (Maksimum 100 güncel kupon ile sınırlandırılmış güvenli akış)
+  // FS-19: Kuponları sayfalı ve SWR önbellek destekli getirme
+  // 100k kullanıcıda her oyda 100 dokümanlık broadcast okuma patlamasını ortadan kaldırır.
+  Future<KuponlarPageResult> getKuponlarPaginated({
+    int limit = 30,
+    DocumentSnapshot? lastDocument,
+    Source source = Source.serverAndCache,
+  }) async {
+    try {
+      Query query = _firestore
+          .collection('kuponlar')
+          .where('durum', isEqualTo: 'aktif')
+          .orderBy('olusturulmaTarihi', descending: true)
+          .limit(limit);
+
+      if (lastDocument != null) {
+        query = query.startAfterDocument(lastDocument);
+      }
+
+      final snapshot = await query.get(GetOptions(source: source));
+      final kuponlar = snapshot.docs.map((doc) => Kupon.fromFirestore(doc)).toList();
+      final newLastDoc = snapshot.docs.isNotEmpty ? snapshot.docs.last : null;
+      final hasMore = snapshot.docs.length >= limit;
+
+      return KuponlarPageResult(
+        kuponlar: kuponlar,
+        lastDocument: newLastDoc,
+        hasMore: hasMore,
+        isFromCache: snapshot.metadata.isFromCache,
+      );
+    } catch (e) {
+      return KuponlarPageResult(
+        kuponlar: [],
+        lastDocument: lastDocument,
+        hasMore: false,
+      );
+    }
+  }
+
+  // Kuponları real-time dinleme (Maksimum 100 güncel onaylı kupon ile sınırlandırılmış güvenli akış)
   Stream<List<Kupon>> getKuponlarStream() {
     return _firestore
         .collection('kuponlar')
+        .where('durum', isEqualTo: 'aktif')
         .orderBy('olusturulmaTarihi', descending: true)
         .limit(100)
         .snapshots()
@@ -16,7 +69,20 @@ class KuponService {
     });
   }
 
-  // Yeni kupon paylaşma
+  // Onay bekleyen kuponları dinleme (Admin Paneli Moderasyon Akışı)
+  Stream<List<Kupon>> getPendingKuponlarStream() {
+    return _firestore
+        .collection('kuponlar')
+        .where('durum', isEqualTo: 'beklemede')
+        .orderBy('olusturulmaTarihi', descending: true)
+        .limit(100)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => Kupon.fromFirestore(doc)).toList();
+    });
+  }
+
+  // Yeni kupon paylaşma (Varsayılan durum: 'beklemede' - Admin onayı gerektirir)
   Future<void> shareKupon({
     required String magazaAdi,
     required String baslik,
@@ -39,10 +105,48 @@ class KuponService {
       kaynakTipi: 'topluluk',
       sicakOySayisi: 0,
       sogukOySayisi: 0,
-      durum: 'aktif',
+      durum: 'beklemede',
     );
 
     await _firestore.collection('kuponlar').add(kupon.toFirestore());
+  }
+
+  // Admin: Kupon Onaylama (durum: 'aktif' yapar, Cloud Function FCM bildirimini fırlatır)
+  Future<bool> approveKupon({
+    required String kuponId,
+    required String adminId,
+  }) async {
+    try {
+      await _firestore.collection('kuponlar').doc(kuponId).update({
+        'durum': 'aktif',
+        'approvedAt': FieldValue.serverTimestamp(),
+        'approvedBy': adminId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Admin: Kupon Reddetme (durum: 'reddedildi' yapar ve gerekçe ekler)
+  Future<bool> rejectKupon({
+    required String kuponId,
+    required String adminId,
+    required String reason,
+  }) async {
+    try {
+      await _firestore.collection('kuponlar').doc(kuponId).update({
+        'durum': 'reddedildi',
+        'redNedeni': reason,
+        'rejectedAt': FieldValue.serverTimestamp(),
+        'rejectedBy': adminId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Kupon güncelleme
@@ -68,77 +172,81 @@ class KuponService {
     await _firestore.collection('kuponlar').doc(kuponId).delete();
   }
 
-  // Kupona oy verme işlemi (Transaction ile - Idempotent)
+  // Kupona oy verme işlemi (FS-08: Kilitsiz Atomik Pipeline & Alt Doküman İzolasyonu)
   Future<bool> setKuponVote({
     required String kuponId,
     required String userId,
     required String? targetVoteType, // "hot", "cold" veya null (kaldırma)
   }) async {
-    final kuponRef = _firestore.collection('kuponlar').doc(kuponId);
-    final voteRef = kuponRef.collection('votes').doc(userId);
+    final cleanKuponId = kuponId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanKuponId.isEmpty || cleanUserId.isEmpty) {
+      return false;
+    }
+    if (targetVoteType != null && targetVoteType != 'hot' && targetVoteType != 'cold') {
+      return false;
+    }
+
+    final kuponRef = _firestore.collection('kuponlar').doc(cleanKuponId);
+    final voteRef = kuponRef.collection('votes').doc(cleanUserId);
 
     try {
-      return await _firestore.runTransaction((transaction) async {
-        final kuponDoc = await transaction.get(kuponRef);
-        if (!kuponDoc.exists) return false;
+      final voteDoc = await voteRef.get();
+      String? currentDbVote;
+      if (voteDoc.exists) {
+        currentDbVote = voteDoc.data()?['type'] as String?;
+      }
 
-        final voteDoc = await transaction.get(voteRef);
-        final data = kuponDoc.data() as Map<String, dynamic>;
-
-        int sicakOySayisi = (data['sicakOySayisi'] as num?)?.toInt() ?? 0;
-        int sogukOySayisi = (data['sogukOySayisi'] as num?)?.toInt() ?? 0;
-        String? currentDbVote;
-        if (voteDoc.exists) {
-          currentDbVote = voteDoc.data()?['type'] as String?;
-        }
-
-        if (currentDbVote == targetVoteType) {
-          // Zaten veritabanındaki durum ile hedef durum aynı, bir şey yapma
-          return true;
-        }
-
-        // Önceki oyu düşür
-        if (currentDbVote == 'hot') {
-          sicakOySayisi = (sicakOySayisi > 0) ? sicakOySayisi - 1 : 0;
-        } else if (currentDbVote == 'cold') {
-          sogukOySayisi = (sogukOySayisi > 0) ? sogukOySayisi - 1 : 0;
-        }
-
-        // Yeni oyu uygula
-        if (targetVoteType == 'hot') {
-          sicakOySayisi += 1;
-          transaction.set(voteRef, {'type': 'hot'}, SetOptions(merge: true));
-        } else if (targetVoteType == 'cold') {
-          sogukOySayisi += 1;
-          transaction.set(voteRef, {'type': 'cold'}, SetOptions(merge: true));
-        } else {
-          // Oy kaldırıldı
-          transaction.delete(voteRef);
-        }
-
-        // Skor kontrolü ve otomatik gecersiz yapma/silme
-        String durum = data['durum'] ?? 'aktif';
-        final kaynakTipi = data['kaynakTipi'] ?? 'topluluk';
-
-        if (sogukOySayisi - sicakOySayisi >= 5) {
-          if (kaynakTipi == 'web') {
-            transaction.delete(kuponRef);
-            return true;
-          } else {
-            durum = 'gecersiz';
-          }
-        } else if (durum == 'gecersiz' && (sogukOySayisi - sicakOySayisi < 5)) {
-          durum = 'aktif';
-        }
-
-        transaction.update(kuponRef, {
-          'sicakOySayisi': sicakOySayisi,
-          'sogukOySayisi': sogukOySayisi,
-          'durum': durum,
-        });
-
+      if (currentDbVote == targetVoteType) {
+        // Zaten veritabanındaki durum ile hedef durum aynı, bir şey yapma (idempotent no-op)
         return true;
-      });
+      }
+
+      int hotDelta = 0;
+      int coldDelta = 0;
+
+      // Önceki oyu düşür
+      if (currentDbVote == 'hot') {
+        hotDelta -= 1;
+      } else if (currentDbVote == 'cold') {
+        coldDelta -= 1;
+      }
+
+      // Yeni oyu uygula
+      if (targetVoteType == 'hot') {
+        hotDelta += 1;
+      } else if (targetVoteType == 'cold') {
+        coldDelta += 1;
+      }
+
+      final batch = _firestore.batch();
+
+      if (targetVoteType == 'hot') {
+        batch.set(voteRef, {'type': 'hot', 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      } else if (targetVoteType == 'cold') {
+        batch.set(voteRef, {'type': 'cold', 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      } else {
+        batch.delete(voteRef);
+      }
+
+      // CRITICAL (FS-01, P0-06 & firestore.rules):
+      // firestore.rules kuponlar için normal kullanıcılara SADECE 'sicakOySayisi' ve 'sogukOySayisi'
+      // alanlarını güncelletir (hasOnly(['sicakOySayisi', 'sogukOySayisi'])).
+      // Bu nedenle 'updatedAt' ana kupon dokümanına eklenmemelidir (aksi halde PERMISSION_DENIED alır).
+      final Map<String, dynamic> kuponUpdates = {};
+      if (hotDelta != 0) {
+        kuponUpdates['sicakOySayisi'] = FieldValue.increment(hotDelta);
+      }
+      if (coldDelta != 0) {
+        kuponUpdates['sogukOySayisi'] = FieldValue.increment(coldDelta);
+      }
+
+      if (kuponUpdates.isNotEmpty) {
+        batch.update(kuponRef, kuponUpdates);
+      }
+
+      await batch.commit();
+      return true;
     } catch (e) {
       // ignore: avoid_print
       print('setKuponVote hatası: $e');
@@ -146,84 +254,35 @@ class KuponService {
     }
   }
 
-  // Kupona oy verme işlemi (Toggle bazlı eski metod - geriye uyumluluk için korundu)
+  // Kupona oy verme işlemi (Toggle bazlı metod - setKuponVote'a delege edilir)
   Future<bool> voteKupon({
     required String kuponId,
     required String userId,
     required String voteType, // "hot" veya "cold"
   }) async {
-    final kuponRef = _firestore.collection('kuponlar').doc(kuponId);
-    final voteRef = kuponRef.collection('votes').doc(userId);
+    final cleanKuponId = kuponId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanKuponId.isEmpty || cleanUserId.isEmpty) {
+      return false;
+    }
+    if (voteType != 'hot' && voteType != 'cold') {
+      return false;
+    }
 
     try {
-      return await _firestore.runTransaction((transaction) async {
-        final kuponDoc = await transaction.get(kuponRef);
-        if (!kuponDoc.exists) return false;
+      final voteRef = _firestore.collection('kuponlar').doc(cleanKuponId).collection('votes').doc(cleanUserId);
+      final voteDoc = await voteRef.get();
+      String? oldVoteType;
+      if (voteDoc.exists) {
+        oldVoteType = voteDoc.data()?['type'] as String?;
+      }
 
-        final voteDoc = await transaction.get(voteRef);
-        final data = kuponDoc.data() as Map<String, dynamic>;
-
-        int sicakOySayisi = (data['sicakOySayisi'] as num?)?.toInt() ?? 0;
-        int sogukOySayisi = (data['sogukOySayisi'] as num?)?.toInt() ?? 0;
-        String? oldVoteType;
-        if (voteDoc.exists) {
-          oldVoteType = voteDoc.data()?['type'] as String?;
-        }
-        if (oldVoteType == voteType) {
-          // Zaten aynı oyu vermiş, oyu geri al (toggle)
-          if (voteType == 'hot') {
-            sicakOySayisi = (sicakOySayisi > 0) ? sicakOySayisi - 1 : 0;
-          } else {
-            sogukOySayisi = (sogukOySayisi > 0) ? sogukOySayisi - 1 : 0;
-          }
-          transaction.delete(voteRef);
-        } else {
-          // Farklı oya tıklamış (veya ilk defa oy veriyor)
-          if (oldVoteType != null) {
-            // Eski oyu düşür
-            if (oldVoteType == 'hot') {
-              sicakOySayisi = (sicakOySayisi > 0) ? sicakOySayisi - 1 : 0;
-            } else {
-              sogukOySayisi = (sogukOySayisi > 0) ? sogukOySayisi - 1 : 0;
-            }
-          }
-
-          // Yeni oyu arttır
-          if (voteType == 'hot') {
-            sicakOySayisi += 1;
-          } else {
-            sogukOySayisi += 1;
-          }
-          transaction.set(voteRef, {'type': voteType}, SetOptions(merge: true));
-        }
-
-        // Skor kontrolü ve otomatik gecersiz yapma/silme
-        // Net skor <= -5 olduğunda:
-        // Topluluk kuponu ise durumu 'gecersiz' yapılır.
-        // Kupon Radarı (web) ise tamamen veritabanından silinir.
-        String durum = data['durum'] ?? 'aktif';
-        final kaynakTipi = data['kaynakTipi'] ?? 'topluluk';
-
-        if (sogukOySayisi - sicakOySayisi >= 5) {
-          if (kaynakTipi == 'web') {
-            transaction.delete(kuponRef);
-            return true;
-          } else {
-            durum = 'gecersiz';
-          }
-        } else if (durum == 'gecersiz' && (sogukOySayisi - sicakOySayisi < 5)) {
-          // Oylarla kurtarıldıysa tekrar aktif yap
-          durum = 'aktif';
-        }
-
-        transaction.update(kuponRef, {
-          'sicakOySayisi': sicakOySayisi,
-          'sogukOySayisi': sogukOySayisi,
-          'durum': durum,
-        });
-
-        return true;
-      });
+      final String? targetVoteType = (oldVoteType == voteType) ? null : voteType;
+      return await setKuponVote(
+        kuponId: cleanKuponId,
+        userId: cleanUserId,
+        targetVoteType: targetVoteType,
+      );
     } catch (e) {
       // ignore: avoid_print
       print('voteKupon hatası: $e');
@@ -236,12 +295,16 @@ class KuponService {
     required String kuponId,
     required String userId,
   }) async {
+    final cleanKuponId = kuponId.trim();
+    final cleanUserId = userId.trim();
+    if (cleanKuponId.isEmpty || cleanUserId.isEmpty) return null;
+
     try {
       final doc = await _firestore
           .collection('kuponlar')
-          .doc(kuponId)
+          .doc(cleanKuponId)
           .collection('votes')
-          .doc(userId)
+          .doc(cleanUserId)
           .get();
       if (doc.exists) {
         return doc.data()?['type'] as String?;
