@@ -79,6 +79,18 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     title = data['notification_title'] ?? '👮‍♂️ Yeni Onay Bekleyen Fırsat';
     body = data['notification_body'] ?? 'Onay için bekleyen bir fırsat var. Dokunun.';
     payload = 'admin_deal:${data['dealId']}';
+  } else if (type == 'admin_coupon') {
+    final magaza = data['magazaAdi'] ?? '';
+    title = data['notification_title'] ?? '🎟️ Yeni Onay Bekleyen Kupon';
+    body = data['notification_body'] ?? (magaza.toString().trim().isNotEmpty ? '$magaza için yeni bir kupon onay bekliyor.' : 'Onay bekleyen yeni bir kupon var. Dokunun.');
+    payload = 'admin_coupon:${data['kuponId'] ?? ''}';
+    channelId = 'admin_channel';
+  } else if (type == 'coupon' || type == 'community_coupon') {
+    final magaza = data['magazaAdi'] ?? '';
+    title = data['notification_title'] ?? (magaza.toString().trim().isNotEmpty ? '🎟️ $magaza Kuponu!' : '🎟️ Yeni Kupon!');
+    body = data['notification_body'] ?? 'Toplulukta yeni bir indirim kuponu paylaşıldı.';
+    payload = 'coupon:${data['kuponId'] ?? ''}';
+    channelId = 'sicak_firsatlar_general_v2';
   } else if (type == 'submission_status') {
     final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
     final notifTitle = data['notification_title'] ?? data['title'] ?? '';
@@ -162,15 +174,21 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     final senderId = (data['senderId'] ?? '').toString();
     final dealId = (data['dealId'] ?? '').toString();
+    final kuponId = (data['kuponId'] ?? data['kupon_id'] ?? '').toString();
     final isMessage = type == 'message' || type == 'user_message' || type == 'admin_message';
+    final isCoupon = type == 'admin_coupon' || type == 'coupon' || type == 'community_coupon';
     
     final notifId = isMessage
         ? ((senderId.isNotEmpty ? senderId : 'admin').hashCode % 100000)
-        : (dealId.isNotEmpty ? dealId.hashCode % 100000 : DateTime.now().millisecondsSinceEpoch % 100000);
+        : (isCoupon
+            ? (kuponId.isNotEmpty ? kuponId.hashCode % 100000 : DateTime.now().millisecondsSinceEpoch % 100000)
+            : (dealId.isNotEmpty ? dealId.hashCode % 100000 : DateTime.now().millisecondsSinceEpoch % 100000));
         
     final tag = isMessage
         ? 'msg_${senderId.isNotEmpty ? senderId : "admin"}'
-        : (dealId.isNotEmpty ? 'deal_$dealId' : null);
+        : (isCoupon
+            ? (kuponId.isNotEmpty ? 'coupon_$kuponId' : null)
+            : (dealId.isNotEmpty ? 'deal_$dealId' : null));
 
     await flutterLocalNotificationsPlugin.show(
       notifId,

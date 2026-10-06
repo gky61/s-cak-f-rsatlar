@@ -1732,9 +1732,73 @@ exports.onCouponCreated = functions
     functions.logger.info(`🎟️ Yeni topluluk kuponu kaydedildi: ${kuponId} (${magazaAdi} - ${paylasanAdi})`);
 
     // FS-01: Eğer kupon 'beklemede' durumundaysa genel push GÖNDERİLMEZ.
-    // Kupon onay bekleyen moderasyon kuyruğuna alınır ve admin onaylayana kadar bekletilir.
+    // Kupon onay bekleyen moderasyon kuyruğuna alınır ve admine onay bildirimi gönderilir.
     if (kupon.durum === 'beklemede') {
       functions.logger.info(`⏳ Topluluk kuponu moderasyon kuyruğuna alındı (durum: beklemede): ${kuponId} (${magazaAdi} - ${baslik})`);
+
+      // 👮‍♂️ ADMİNE ANLIK PUSH BİLDİRİMİ (topic: admin_deals)
+      // Mobil cihazı açık olan yöneticilere kupon onay kuyruğuna yeni kupon düştüğünü bildirir
+      const adminNotifTitle = `👮‍♂️ Yeni Onay Bekleyen Kupon (@${paylasanAdi})`;
+      const adminNotifBody = `🏷️ ${magazaAdi}\n"${baslik}"`;
+      const adminCouponPayload = {
+        notification: {
+          title: adminNotifTitle,
+          body: adminNotifBody,
+        },
+        data: {
+          type: 'admin_coupon',
+          kuponId: String(kuponId),
+          magazaAdi: String(magazaAdi),
+          authorName: String(paylasanAdi),
+          durum: 'beklemede',
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          notification_title: adminNotifTitle,
+          notification_body: adminNotifBody,
+        },
+        android: {
+          priority: 'high',
+          ttl: 86400000,
+          notification: {
+            channelId: 'admin_channel',
+            sound: 'default',
+            color: '#8E24AA', // Mor kupon rengi
+            tag: `admin_coupon_${kuponId}`,
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            priority: 'high',
+            visibility: 'public',
+          }
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-expiration': String(Math.floor(Date.now() / 1000) + 86400),
+          },
+          payload: {
+            aps: {
+              alert: {
+                title: adminNotifTitle,
+                body: adminNotifBody,
+              },
+              sound: 'default',
+              badge: 1,
+              'interruption-level': 'active',
+              category: 'ADMIN_NOTIFICATION',
+            },
+          },
+        },
+      };
+
+      try {
+        await admin.messaging().send({
+          ...adminCouponPayload,
+          topic: 'admin_deals'
+        });
+        functions.logger.info(`✅ Admin kupon onay bildirimi başarıyla gönderildi (kuponId: ${kuponId})`);
+      } catch (adminErr) {
+        functions.logger.error('❌ Admin kupon onay bildirimi hatası:', adminErr);
+      }
+
       return null;
     }
 
@@ -1839,7 +1903,37 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
       functions.logger.warn('⚠️ Topluluk kuponu FCM topic gönderim uyarısı:', topicErr.message);
     }
 
-    // 2. YAZARA ONAY BİLDİRİMİ (submission_status)
+    // 2. KÜRESEL DUYURU KAYDI (Global Announcements - FS-02 Çift Katmanlı Feed)
+    // Kupon bildiriminin tüm kullanıcıların Bildirim Merkezinde (AdminNotificationsScreen) anında görünmesini sağlar
+    try {
+      const announcementId = `coupon_${kuponId}`;
+      const announcementRef = admin.firestore().collection('globalAnnouncements').doc(announcementId);
+      await announcementRef.set({
+        id: announcementId,
+        announcementId: announcementId,
+        type: 'coupon',
+        reason: 'community',
+        title: `🎟️ ${magazaAdi} Kuponu!`,
+        body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`,
+        kuponId: String(kuponId),
+        magazaAdi: String(magazaAdi),
+        authorName: String(paylasanAdi),
+        authorId: String(paylasanId),
+        hasCode: Boolean(kuponKodu),
+        active: true,
+        isTopicDelivered: true,
+        pushStatus: 'delivered_via_topic',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: kupon.bitisTarihi
+          ? admin.firestore.Timestamp.fromDate(new Date(kupon.bitisTarihi))
+          : admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 86400 * 1000)
+      }, { merge: true });
+      functions.logger.info(`📢 Topluluk kuponu küresel duyurusu (globalAnnouncements/${announcementId}) oluşturuldu.`);
+    } catch (globalAnnErr) {
+      functions.logger.warn('⚠️ Kupon globalAnnouncements dokümanı oluşturulurken hata:', globalAnnErr.message);
+    }
+
+    // 3. YAZARA ONAY BİLDİRİMİ VE PUAN ÖDÜLÜ (submission_status)
     if (paylasanId && paylasanId !== 'admin') {
       try {
         const authorNotifId = `coupon_status_approved_${kuponId}`;
@@ -1855,19 +1949,41 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
             title: '🎉 Kuponunuz Onaylandı!',
             body: `Paylaştığınız "${magazaAdi} - ${baslik}" kuponu onaylandı ve yayına alındı.`,
             status: 'approved',
-            isTopicDelivered: true,
-            pushStatus: 'delivered_via_topic',
+            isUserSubmitted: true,
+            sendPush: true,
             read: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
         functions.logger.info(`✅ Kupon yazarına onay bildirimi yazıldı: ${paylasanId}`);
+
+        // Kupon paylaşan kullanıcıya +10 topluluk katkı puanı ver
+        const userRef = admin.firestore().collection('users').doc(paylasanId);
+        await userRef.set({
+          points: admin.firestore.FieldValue.increment(10),
+          couponCount: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
       } catch (authErr) {
         functions.logger.warn('⚠️ Yazara kupon onay bildirimi yazılırken hata:', authErr.message);
       }
     }
 
-    // 3. Hedefli Mağaza ve Yazar Abonelikleri (In-App Bildirim Merkezi Doküman Yazımı)
+    // 4. Hedefli Mağaza ve Yazar Abonelikleri + Geriye Dönük Uyumluluk (In-App Doküman Yazımı)
     const targetUserIds = new Set();
+
+    // Eski sürüm istemcilerin de kişisel bildirim kutusunda görebilmesi için azami 150 aktif kullanıcı
+    try {
+      const activeUsersSnap = await admin.firestore().collection('users')
+        .select()
+        .limit(150)
+        .get();
+      activeUsersSnap.forEach(d => {
+        if (d.id !== paylasanId) targetUserIds.add(d.id);
+      });
+    } catch (usersErr) {
+      functions.logger.warn('⚠️ Aktif kullanıcı listesi alınırken hata:', usersErr.message);
+    }
+
     const storeKeyword = normalize(magazaAdi).trim();
     const queries = [];
 
@@ -2004,11 +2120,11 @@ exports.onCouponUpdated = functions
               type: 'submission_status',
               kuponId: kuponId,
               magazaAdi: afterData.magazaAdi || '',
-              title: '❌ Kuponunuz Onaylanmadı',
+              title: 'ℹ️ Kuponunuz Reddedildi',
               body: `Paylaştığınız "${afterData.magazaAdi || ''} - ${afterData.baslik || ''}" kuponu onaylanmadı. Gerekçe: ${reason}`,
               status: 'rejected',
-              isTopicDelivered: true,
-              pushStatus: 'delivered_via_topic',
+              isUserSubmitted: true,
+              sendPush: true,
               read: false,
               createdAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });

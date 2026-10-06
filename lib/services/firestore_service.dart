@@ -959,6 +959,7 @@ class FirestoreService {
             map['dealId'] = data['dealId'] ?? '';
             map['dealTitle'] = data['dealTitle'] ?? '';
             map['commentId'] = data['commentId'] ?? '';
+            map['kuponId'] = data['kuponId'] ?? data['targetId'] ?? '';
             map['title'] = data['title'] ?? 'Yeni Fırsat';
             map['body'] = data['body'] ?? '';
             map['reason'] = data['reason'] ?? '';
@@ -1010,6 +1011,7 @@ class FirestoreService {
             map['id'] = doc.id;
             map['type'] = data['type'] ?? 'admin_message';
             map['dealId'] = data['dealId'] ?? '';
+            map['kuponId'] = data['kuponId'] ?? data['targetId'] ?? '';
             map['title'] = data['title'] ?? 'Resmi Duyuru';
             map['body'] = data['body'] ?? '';
             map['imageUrl'] = data['imageUrl'] ?? '';

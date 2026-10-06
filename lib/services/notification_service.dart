@@ -1684,6 +1684,23 @@ class NotificationService {
       return NotificationRoutingDecision(
         destination: NotificationDestinationType.adminScreen,
         dealId: dealId.isNotEmpty ? dealId : null,
+        initialTabIndex: 0,
+      );
+    }
+
+    // 3.1 Onay Bekleyen Kupon (Admin - FS-02)
+    if (rawType == 'admin_coupon') {
+      final kId = (
+        data['kuponId'] ??
+        data['kupon_id'] ??
+        data['couponId'] ??
+        data['coupon_id'] ??
+        ''
+      ).toString().trim();
+      return NotificationRoutingDecision(
+        destination: NotificationDestinationType.adminScreen,
+        kuponId: kId.isNotEmpty ? kId : null,
+        initialTabIndex: 2, // AdminScreen '🎟️ Kupon Onay' sekmesi
       );
     }
 
@@ -1833,6 +1850,9 @@ class NotificationService {
     } else if (payload.startsWith('admin_deal:')) {
       final dealId = payload.substring('admin_deal:'.length);
       _handleNotificationTap({'type': 'admin_deal', 'dealId': dealId});
+    } else if (payload.startsWith('admin_coupon:')) {
+      final kuponId = payload.substring('admin_coupon:'.length);
+      _handleNotificationTap({'type': 'admin_coupon', 'kuponId': kuponId});
     } else if (payload.startsWith('submission_status:')) {
       final parts = payload.split(':');
       final dealId = parts.length > 1 ? parts[1] : '';
@@ -1932,7 +1952,7 @@ class NotificationService {
         break;
 
       case NotificationDestinationType.adminScreen:
-        _navigateToAdminScreen(dealId: decision.dealId);
+        _navigateToAdminScreen(dealId: decision.dealId, tabIndex: decision.initialTabIndex);
         break;
 
       case NotificationDestinationType.chat:
@@ -2290,9 +2310,9 @@ class NotificationService {
         }
       }
 
-      // B. Yönetici Admin panelindeyse ve onay bekleyen fırsat bildirimi geldiyse bastır
-      if (isAdminScreenActive && (type == 'admin_deal' || reason == 'admin_deal')) {
-        _log('🛡️ Yönetici zaten admin ekranında, onay bekleyen fırsat ön plan bildirimi bastırıldı.');
+      // B. Yönetici Admin panelindeyse ve onay bekleyen fırsat/kupon bildirimi geldiyse bastır
+      if (isAdminScreenActive && (type == 'admin_deal' || reason == 'admin_deal' || type == 'admin_coupon' || reason == 'admin_coupon')) {
+        _log('🛡️ Yönetici zaten admin ekranında, onay bekleyen fırsat/kupon ön plan bildirimi bastırıldı.');
         return;
       }
 
@@ -2491,6 +2511,17 @@ class NotificationService {
         icon = Icons.admin_panel_settings_rounded;
         if (title.isEmpty) title = 'Onay Bekleyen Fırsat';
         if (body.isEmpty) body = dealTitle.isNotEmpty ? dealTitle : 'Yeni bir fırsat onay kuyruğunda bekliyor.';
+      } else if (type == 'admin_coupon' || reason == 'admin_coupon') {
+        badge = 'Kupon Onay Bekliyor';
+        color = const Color(0xFF7B1FA2); // Purple Admin
+        icon = Icons.confirmation_number_rounded;
+        if (title.isEmpty) title = '🎟️ Onay Bekleyen Kupon';
+        final magaza = clean(message.data['magazaAdi']);
+        if (body.isEmpty) {
+          body = magaza.isNotEmpty
+              ? '$magaza için yeni bir kupon onay bekliyor.'
+              : 'Yeni bir kupon onay kuyruğunda bekliyor.';
+        }
       } else if (type == 'badge' || type == 'level_up' || reason == 'gamification') {
         badge = 'Tebrikler!';
         color = const Color(0xFFFFB300); // Amber
@@ -2721,6 +2752,8 @@ class NotificationService {
         } else if (type == 'coupon' || type == 'community_coupon') {
           final magazaAdi = clean(data['magazaAdi']);
           title = magazaAdi.isNotEmpty ? '🎟️ $magazaAdi Kuponu!' : '🎟️ Yeni Kupon!';
+        } else if (type == 'admin_coupon') {
+          title = '🎟️ Onay Bekleyen Kupon';
         } else if (dealTitle.isNotEmpty) {
           title = '🎯 $dealTitle';
         } else {
@@ -2760,6 +2793,11 @@ class NotificationService {
           body = 'Yeni bir yönetici bildiriminiz var.';
         } else if (type == 'coupon' || type == 'community_coupon') {
           body = 'Toplulukta yeni bir indirim kuponu paylaşıldı.';
+        } else if (type == 'admin_coupon') {
+          final magazaAdi = clean(data['magazaAdi']);
+          body = magazaAdi.isNotEmpty
+              ? '$magazaAdi için yeni bir kupon onay bekliyor.'
+              : 'Yeni bir topluluk kuponu onay kuyruğunda bekliyor.';
         } else {
           body = 'Detayları görüntülemek için dokunun.';
         }
@@ -2792,6 +2830,14 @@ class NotificationService {
         tag = 'admin_deal_${dealId.isNotEmpty ? dealId : seedKey}';
         notifId = ('admin_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'admin_deal:$dealId';
+      } else if (type == 'admin_coupon') {
+        final kuponId = clean(data['kuponId'] ?? data['kupon_id'] ?? data['couponId'] ?? data['coupon_id']);
+        channelId = 'admin_channel';
+        channelName = 'Admin Bildirimleri';
+        channelDescription = 'Onay bekleyen ve sistem admin bildirimleri';
+        tag = 'admin_coupon_${kuponId.isNotEmpty ? kuponId : seedKey}';
+        notifId = ('admin_coupon_${kuponId.isNotEmpty ? kuponId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
+        payload = 'admin_coupon:$kuponId';
       } else if (type == 'submission_status') {
         final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
         final titleLower = title.toLowerCase();
