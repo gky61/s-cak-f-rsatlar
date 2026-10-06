@@ -1602,6 +1602,16 @@ class NotificationService {
       ''
     ).toString().trim();
 
+    final kuponId = (
+      data['kuponId'] ??
+      data['kupon_id'] ??
+      data['couponId'] ??
+      data['coupon_id'] ??
+      data['targetKuponId'] ??
+      data['target_kupon_id'] ??
+      ''
+    ).toString().trim();
+
     final commentId = (
       data['commentId'] ??
       data['comment_id'] ??
@@ -1655,7 +1665,7 @@ class NotificationService {
       );
     }
 
-    // 2.1 Kullanıcı Fırsat Gönderim Durumu (submission_status)
+    // 2.1 Kullanıcı Fırsat/Kupon Gönderim Durumu (submission_status)
     if (rawType == 'submission_status') {
       final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
       final titleLower = (data['notification_title'] ?? data['title'] ?? '').toString().toLowerCase();
@@ -1664,16 +1674,27 @@ class NotificationService {
           (rawStatus.isEmpty && (titleLower.contains('onaylandı') || titleLower.contains('onaylandi') || bodyLower.contains('onaylandı') || bodyLower.contains('onaylandi')));
       final notifId = (data['notificationId'] ?? data['notification_id'] ?? data['id'] ?? '').toString().trim();
 
-      if (isAppr && dealId.isNotEmpty) {
-        return NotificationRoutingDecision(
-          destination: NotificationDestinationType.deal,
-          dealId: dealId,
-          notificationId: notifId.isNotEmpty ? notifId : null,
-        );
+      if (isAppr) {
+        if (dealId.isNotEmpty) {
+          return NotificationRoutingDecision(
+            destination: NotificationDestinationType.deal,
+            dealId: dealId,
+            notificationId: notifId.isNotEmpty ? notifId : null,
+          );
+        }
+        if (kuponId.isNotEmpty) {
+          return NotificationRoutingDecision(
+            destination: NotificationDestinationType.coupons,
+            kuponId: kuponId,
+            initialTabIndex: 1, // 'Topluluk Kuponları' sekmesi
+            notificationId: notifId.isNotEmpty ? notifId : null,
+          );
+        }
       }
       return NotificationRoutingDecision(
         destination: NotificationDestinationType.adminNotifications,
         dealId: dealId.isNotEmpty ? dealId : null,
+        kuponId: kuponId.isNotEmpty ? kuponId : null,
         notificationId: notifId.isNotEmpty ? notifId : null,
         initialTabIndex: 1, // 'Admin' sekmesi
       );
@@ -1690,16 +1711,9 @@ class NotificationService {
 
     // 3.1 Onay Bekleyen Kupon (Admin - FS-02)
     if (rawType == 'admin_coupon') {
-      final kId = (
-        data['kuponId'] ??
-        data['kupon_id'] ??
-        data['couponId'] ??
-        data['coupon_id'] ??
-        ''
-      ).toString().trim();
       return NotificationRoutingDecision(
         destination: NotificationDestinationType.adminScreen,
-        kuponId: kId.isNotEmpty ? kId : null,
+        kuponId: kuponId.isNotEmpty ? kuponId : null,
         initialTabIndex: 2, // AdminScreen '🎟️ Kupon Onay' sekmesi
       );
     }
@@ -1731,14 +1745,6 @@ class NotificationService {
     }
 
     // 5.1. Topluluk Kuponu Bildirimi (NOTIF-15)
-    final kuponId = (
-      data['kuponId'] ??
-      data['kupon_id'] ??
-      data['couponId'] ??
-      data['coupon_id'] ??
-      ''
-    ).toString().trim();
-
     if (rawType == 'coupon' || rawType == 'community_coupon') {
       return NotificationRoutingDecision(
         destination: NotificationDestinationType.coupons,
@@ -1858,6 +1864,11 @@ class NotificationService {
       final dealId = parts.length > 1 ? parts[1] : '';
       final status = parts.length > 2 ? parts[2] : '';
       _handleNotificationTap({'type': 'submission_status', 'dealId': dealId, 'status': status});
+    } else if (payload.startsWith('submission_status_coupon:')) {
+      final parts = payload.split(':');
+      final kuponId = parts.length > 1 ? parts[1] : '';
+      final status = parts.length > 2 ? parts[2] : '';
+      _handleNotificationTap({'type': 'submission_status', 'kuponId': kuponId, 'status': status});
     } else if (payload.startsWith('comment_reply:') || payload.startsWith('comment:')) {
       final parts = payload.split(':');
       final dealId = parts.length > 1 ? parts[1] : '';
@@ -1948,11 +1959,16 @@ class NotificationService {
           initialTab: decision.initialTabIndex == 1 ? 'admin' : (decision.initialTabIndex == 2 ? 'replies' : 'all'),
           highlightNotificationId: decision.notificationId,
           highlightDealId: decision.dealId,
+          highlightKuponId: decision.kuponId,
         );
         break;
 
       case NotificationDestinationType.adminScreen:
-        _navigateToAdminScreen(dealId: decision.dealId, tabIndex: decision.initialTabIndex);
+        _navigateToAdminScreen(
+          dealId: decision.dealId,
+          kuponId: decision.kuponId,
+          tabIndex: decision.initialTabIndex,
+        );
         break;
 
       case NotificationDestinationType.chat:
@@ -2173,43 +2189,40 @@ class NotificationService {
     }
   }
 
-  // Admin bildirimler ekranına yönlendirme
+  // Bildirimler / Bildirim Merkezi ekranına yönlendirme
   Future<void> _navigateToAdminNotifications({
     String? initialTab,
     String? highlightNotificationId,
     String? highlightDealId,
+    String? highlightKuponId,
   }) async {
-    final isAdmin = await AuthService().isAdmin();
-    if (!isAdmin) {
-      _log('🛡️ Admin bildirimler yönlendirmesi engellendi: Kullanıcı admin değil');
-      return;
-    }
-
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
-      _log('🔔 Admin bildirimler ekranına yönlendiriliyor (tab: $initialTab, notifId: $highlightNotificationId, dealId: $highlightDealId)');
+      _log('🔔 Bildirimler ekranına yönlendiriliyor (tab: $initialTab, notifId: $highlightNotificationId, dealId: $highlightDealId, kuponId: $highlightKuponId)');
       navigator.push(
         MaterialPageRoute(
           builder: (context) => AdminNotificationsScreen(
             initialTab: initialTab,
             highlightNotificationId: highlightNotificationId,
             highlightDealId: highlightDealId,
+            highlightKuponId: highlightKuponId,
           ),
         ),
       );
     } else {
-      _log('⚠️ Navigator henüz hazır değil, admin bildirimler ekranı sıraya alınıyor');
+      _log('⚠️ Navigator henüz hazır değil, bildirimler ekranı sıraya alınıyor');
       _startPendingNotificationCheck({
         'type': 'admin_notifications',
         if (initialTab != null) 'initialTab': initialTab,
         if (highlightNotificationId != null) 'notificationId': highlightNotificationId,
         if (highlightDealId != null) 'dealId': highlightDealId,
+        if (highlightKuponId != null) 'kuponId': highlightKuponId,
       });
     }
   }
 
-  // Admin ekranına yönlendirme (onay bekleyen fırsatlar için)
-  Future<void> _navigateToAdminScreen({String? dealId, int? tabIndex}) async {
+  // Admin ekranına yönlendirme (onay bekleyen fırsatlar ve kuponlar için)
+  Future<void> _navigateToAdminScreen({String? dealId, String? kuponId, int? tabIndex}) async {
     final isAdmin = await AuthService().isAdmin();
     if (!isAdmin) {
       _log('🛡️ Admin ekranı yönlendirmesi engellendi: Kullanıcı admin değil');
@@ -2218,20 +2231,22 @@ class NotificationService {
 
     final navigator = navigatorKey.currentState;
     if (navigator != null) {
-      _log('🔔 Admin ekranına yönlendiriliyor (onay bekleyen fırsatlar, dealId: $dealId, tabIndex: $tabIndex)');
+      _log('🔔 Admin ekranına yönlendiriliyor (onay bekleyenler, dealId: $dealId, kuponId: $kuponId, tabIndex: $tabIndex)');
       navigator.push(
         MaterialPageRoute(
           builder: (context) => AdminScreen(
             initialDealId: dealId,
-            initialTabIndex: tabIndex ?? 0,
+            initialTabIndex: tabIndex ?? (kuponId != null && kuponId.isNotEmpty ? 2 : 0),
           ),
         ),
       );
     } else {
       _log('⚠️ Navigator henüz hazır değil, admin ekranı yönlendirmesi sıraya alınıyor');
       _startPendingNotificationCheck({
-        'type': 'admin_deal',
+        'type': kuponId != null && kuponId.isNotEmpty ? 'admin_coupon' : 'admin_deal',
         if (dealId != null && dealId.isNotEmpty) 'dealId': dealId,
+        if (kuponId != null && kuponId.isNotEmpty) 'kuponId': kuponId,
+        if (tabIndex != null) 'tabIndex': tabIndex,
       });
     }
   }
@@ -2454,6 +2469,7 @@ class NotificationService {
         final rawStatus = clean(message.data['status']).toLowerCase();
         final titleLower = (title.isNotEmpty ? title : clean(message.data['title'])).toLowerCase();
         final bodyLower = (body.isNotEmpty ? body : clean(message.data['body'])).toLowerCase();
+        final isCouponSub = clean(message.data['kuponId']).isNotEmpty || clean(message.data['submissionType']) == 'coupon';
 
         final bool isApproved;
         final bool isRejected;
@@ -2478,20 +2494,20 @@ class NotificationService {
           badge = 'Onaylandı';
           color = const Color(0xFF10B981); // Emerald Green
           icon = Icons.verified_rounded;
-          if (title.isEmpty) title = '🎉 Fırsatınız Onaylandı!';
-          if (body.isEmpty) body = 'Tebrikler! Gönderdiğiniz fırsat onaylandı ve yayına alındı.';
+          if (title.isEmpty) title = isCouponSub ? '🎉 Kuponunuz Onaylandı!' : '🎉 Fırsatınız Onaylandı!';
+          if (body.isEmpty) body = isCouponSub ? 'Tebrikler! Gönderdiğiniz kupon onaylandı ve yayına alındı.' : 'Tebrikler! Gönderdiğiniz fırsat onaylandı ve yayına alındı.';
         } else if (isRejected) {
           badge = 'Reddedildi';
           color = const Color(0xFFF59E0B); // Amber / Kehribar (#F59E0B)
           icon = Icons.info_outline_rounded;
-          if (title.isEmpty) title = 'ℹ️ Fırsatınız Reddedildi';
-          if (body.isEmpty) body = 'Gönderdiğiniz fırsat maalesef onaylanamadı. Detaylar için dokunun.';
+          if (title.isEmpty) title = isCouponSub ? 'ℹ️ Kuponunuz Reddedildi' : 'ℹ️ Fırsatınız Reddedildi';
+          if (body.isEmpty) body = isCouponSub ? 'Gönderdiğiniz kupon maalesef onaylanamadı. Detaylar için dokunun.' : 'Gönderdiğiniz fırsat maalesef onaylanamadı. Detaylar için dokunun.';
         } else {
-          badge = 'Fırsat Durumu';
+          badge = isCouponSub ? 'Kupon Durumu' : 'Fırsat Durumu';
           color = const Color(0xFF2196F3); // Blue
           icon = Icons.assignment_outlined;
-          if (title.isEmpty) title = '📋 Fırsat Durumu';
-          if (body.isEmpty) body = 'Fırsatınızın gönderim durumu güncellendi.';
+          if (title.isEmpty) title = isCouponSub ? '📋 Kupon Durumu' : '📋 Fırsat Durumu';
+          if (body.isEmpty) body = isCouponSub ? 'Kuponunuzun gönderim durumu güncellendi.' : 'Fırsatınızın gönderim durumu güncellendi.';
         }
       } else if (type == 'keyword' || reason == 'keyword') {
         badge = 'Kelime Radarı';
@@ -2723,6 +2739,7 @@ class NotificationService {
         } else if (type == 'comment_reply') {
           title = '💬 $senderName yorumunuza cevap verdi';
         } else if (type == 'submission_status') {
+          final isCouponSub = clean(data['kuponId']).isNotEmpty || clean(data['submissionType']) == 'coupon';
           final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
           final rawBodyCandidate = clean(data['notification_body']).isNotEmpty
               ? clean(data['notification_body'])
@@ -2735,11 +2752,11 @@ class NotificationService {
               (rawStatus.isEmpty && (titleLower.contains('reddedildi') || bodyLower.contains('reddedildi')));
 
           if (isAppr) {
-            title = '🎉 Fırsatınız Onaylandı!';
+            title = isCouponSub ? '🎉 Kuponunuz Onaylandı!' : '🎉 Fırsatınız Onaylandı!';
           } else if (isRej) {
-            title = 'ℹ️ Fırsatınız Reddedildi';
+            title = isCouponSub ? 'ℹ️ Kuponunuz Reddedildi' : 'ℹ️ Fırsatınız Reddedildi';
           } else {
-            title = '📋 Fırsat Durumu';
+            title = isCouponSub ? '📋 Kupon Durumu' : '📋 Fırsat Durumu';
           }
         } else if (type == 'admin_deal') {
           title = '👮‍♂️ Onay Bekleyen Fırsat';
@@ -2778,12 +2795,13 @@ class NotificationService {
           final isRej = rawStatus == 'rejected' ||
               (rawStatus.isEmpty && (titleLower.contains('reddedildi') || titleLower.contains('red')));
 
+          final isCouponSub = clean(data['kuponId']).isNotEmpty || clean(data['submissionType']) == 'coupon';
           if (isAppr) {
-            body = 'Tebrikler! Gönderdiğiniz fırsat onaylandı ve yayınlandı.';
+            body = isCouponSub ? 'Tebrikler! Gönderdiğiniz kupon onaylandı ve yayına alındı.' : 'Tebrikler! Gönderdiğiniz fırsat onaylandı ve yayınlandı.';
           } else if (isRej) {
-            body = 'Gönderdiğiniz fırsat maalesef onaylanamadı. Detaylar için dokunun.';
+            body = isCouponSub ? 'Gönderdiğiniz kupon maalesef onaylanamadı. Detaylar için dokunun.' : 'Gönderdiğiniz fırsat maalesef onaylanamadı. Detaylar için dokunun.';
           } else {
-            body = 'Fırsatınızın gönderim durumu güncellendi. Detaylar için dokunun.';
+            body = isCouponSub ? 'Kuponunuzun gönderim durumu güncellendi. Detaylar için dokunun.' : 'Fırsatınızın gönderim durumu güncellendi. Detaylar için dokunun.';
           }
         } else if (type == 'deal') {
           body = 'İlginizi çekebilecek yeni bir indirim paylaşıldı.';
@@ -2839,17 +2857,19 @@ class NotificationService {
         notifId = ('admin_coupon_${kuponId.isNotEmpty ? kuponId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
         payload = 'admin_coupon:$kuponId';
       } else if (type == 'submission_status') {
+        final kId = clean(data['kuponId'] ?? data['kupon_id'] ?? data['couponId'] ?? data['coupon_id']);
         final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
         final titleLower = title.toLowerCase();
         final isAppr = rawStatus == 'approved' || titleLower.contains('onaylandı') || titleLower.contains('onaylandi');
         final isRej = rawStatus == 'rejected' || titleLower.contains('reddedildi');
         final cleanStatus = isAppr ? 'approved' : (isRej ? 'rejected' : rawStatus);
         channelId = 'sicak_firsatlar_general_v2';
-        channelName = 'Fırsat Onay/Ret';
-        channelDescription = 'Gönderdiğiniz fırsatların onay veya ret bildirimleri';
-        tag = 'submission_${dealId.isNotEmpty ? dealId : seedKey}';
-        notifId = ('submission_${dealId.isNotEmpty ? dealId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
-        payload = 'submission_status:$dealId:$cleanStatus';
+        channelName = kId.isNotEmpty ? 'Kupon Onay/Ret' : 'Fırsat Onay/Ret';
+        channelDescription = kId.isNotEmpty ? 'Gönderdiğiniz kuponların onay veya ret bildirimleri' : 'Gönderdiğiniz fırsatların onay veya ret bildirimleri';
+        final targetId = kId.isNotEmpty ? kId : dealId;
+        tag = 'submission_${targetId.isNotEmpty ? targetId : seedKey}';
+        notifId = ('submission_${targetId.isNotEmpty ? targetId : seedKey}'.hashCode & 0x7FFFFFFF) % 100000;
+        payload = kId.isNotEmpty ? 'submission_status_coupon:$kId:$cleanStatus' : 'submission_status:$dealId:$cleanStatus';
       } else if (type == 'keyword' || reason == 'keyword') {
         channelId = 'keyword_alerts_channel';
         channelName = 'Özel Fırsat Bildirimleri';

@@ -386,6 +386,55 @@ void main() {
       expect(decision.initialTabIndex, equals(1));
       expect(decision.notificationId, equals('notif_mod_999'));
     });
+
+    test('28. Kupon Gönderim Onayı (type=submission_status, status=approved) -> Kuponlar Sayfasına gitmeli', () {
+      final data = {
+        'type': 'submission_status',
+        'status': 'approved',
+        'kuponId': 'coupon_appr_777',
+        'title': '🎉 Kuponunuz Onaylandı!',
+        'body': 'Paylaştığınız indirim kuponu incelendi ve yayına alındı.',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.coupons));
+      expect(decision.kuponId, equals('coupon_appr_777'));
+      expect(decision.initialTabIndex, equals(1)); // Topluluk kuponları sekmesi
+    });
+
+    test('29. Kupon Gönderim Reddi (type=submission_status, status=rejected) -> Bildirim Merkezine kuponId ile gitmeli', () {
+      final data = {
+        'type': 'submission_status',
+        'status': 'rejected',
+        'kuponId': 'coupon_rej_888',
+        'title': 'ℹ️ Kuponunuz Reddedildi',
+        'moderationReason': 'Geçersiz veya süresi dolmuş kupon kodu.',
+        'notificationId': 'notif_coupon_rej_123',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.adminNotifications));
+      expect(decision.kuponId, equals('coupon_rej_888'));
+      expect(decision.initialTabIndex, equals(1)); // 'admin' bildirimleri sekmesi
+      expect(decision.notificationId, equals('notif_coupon_rej_123'));
+    });
+
+    test('30. Admin Onay Bekleyen Kupon (type=admin_coupon) -> Admin Paneli Kupon Onay Sekmesine gitmeli', () {
+      final data = {
+        'type': 'admin_coupon',
+        'kuponId': 'coupon_pending_999',
+        'magazaAdi': 'Trendyol',
+        'durum': 'beklemede',
+      };
+
+      final decision = NotificationService.resolveRouting(data);
+
+      expect(decision.destination, equals(NotificationDestinationType.adminScreen));
+      expect(decision.kuponId, equals('coupon_pending_999'));
+      expect(decision.initialTabIndex, equals(2)); // '🎟️ Kupon Onay' sekmesi
+    });
   });
 }
 

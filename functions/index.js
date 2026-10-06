@@ -1908,6 +1908,22 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
     try {
       const announcementId = `coupon_${kuponId}`;
       const announcementRef = admin.firestore().collection('globalAnnouncements').doc(announcementId);
+      let expiresTimestamp;
+      if (kupon.bitisTarihi) {
+        if (typeof kupon.bitisTarihi.toDate === 'function') {
+          expiresTimestamp = kupon.bitisTarihi;
+        } else if (kupon.bitisTarihi._seconds) {
+          expiresTimestamp = admin.firestore.Timestamp.fromMillis(kupon.bitisTarihi._seconds * 1000);
+        } else {
+          const parsed = new Date(kupon.bitisTarihi);
+          expiresTimestamp = isNaN(parsed.getTime())
+            ? admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 86400 * 1000)
+            : admin.firestore.Timestamp.fromDate(parsed);
+        }
+      } else {
+        expiresTimestamp = admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 86400 * 1000);
+      }
+
       await announcementRef.set({
         id: announcementId,
         announcementId: announcementId,
@@ -1924,9 +1940,7 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
         isTopicDelivered: true,
         pushStatus: 'delivered_via_topic',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: kupon.bitisTarihi
-          ? admin.firestore.Timestamp.fromDate(new Date(kupon.bitisTarihi))
-          : admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 86400 * 1000)
+        expiresAt: expiresTimestamp
       }, { merge: true });
       functions.logger.info(`📢 Topluluk kuponu küresel duyurusu (globalAnnouncements/${announcementId}) oluşturuldu.`);
     } catch (globalAnnErr) {
@@ -2044,6 +2058,7 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
         batch.set(notifRef, {
           type: 'coupon',
           reason: 'community',
+          announcementId: announcementId,
           title: `🎟️ ${magazaAdi} Kuponu!`,
           body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`,
           kuponId: kuponId,
@@ -2123,6 +2138,7 @@ exports.onCouponUpdated = functions
               title: 'ℹ️ Kuponunuz Reddedildi',
               body: `Paylaştığınız "${afterData.magazaAdi || ''} - ${afterData.baslik || ''}" kuponu onaylanmadı. Gerekçe: ${reason}`,
               status: 'rejected',
+              moderationReason: reason,
               isUserSubmitted: true,
               sendPush: true,
               read: false,
@@ -2133,6 +2149,14 @@ exports.onCouponUpdated = functions
           functions.logger.warn('⚠️ Kupon red bildirimi yazılırken hata:', rejErr.message);
         }
       }
+
+      // Reddedilen kuponun küresel duyurusu varsa yayından kaldır
+      try {
+        await admin.firestore().collection('globalAnnouncements').doc(`coupon_${kuponId}`).set({
+          active: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (_) {}
     }
 
     // 3. İÇERİK MODERASYONU (Güncelleme sırasında küfür/uygunsuz metin kontrolü)
@@ -2834,7 +2858,7 @@ exports.onNotificationCreated = functions.firestore
       }
 
       // Kupon bildirimleri için ek meta veriler (P0-14 Kalkanı: kupon kodu push payload'ında açık iletilmez)
-      if (type === 'coupon' || type === 'community_coupon') {
+      if (type === 'coupon' || type === 'community_coupon' || notification.kuponId) {
         safeData.kuponId = String(notification.kuponId || '');
         safeData.magazaAdi = String(notification.magazaAdi || '');
         safeData.hasCode = (notification.hasCode === true || notification.hasCode === 'true' || Boolean(notification.kuponKodu)) ? 'true' : 'false';
@@ -2852,7 +2876,7 @@ exports.onNotificationCreated = functions.firestore
         ? `admin_msg_${notification.messageId || notificationId}`
         : ((type === 'comment' || type === 'comment_reply') && notification.commentId
             ? `comment_${notification.commentId}`
-            : ((type === 'coupon' || type === 'community_coupon')
+            : ((type === 'coupon' || type === 'community_coupon' || notification.kuponId)
                 ? `coupon_${notification.kuponId || notificationId}`
                 : (reason === 'keyword' ? `keyword_${dealId}` : `${type}_${dealId}`)));
 

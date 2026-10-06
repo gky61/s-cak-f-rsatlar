@@ -92,6 +92,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     payload = 'coupon:${data['kuponId'] ?? ''}';
     channelId = 'sicak_firsatlar_general_v2';
   } else if (type == 'submission_status') {
+    final kId = (data['kuponId'] ?? '').toString().trim();
+    final isCoupon = kId.isNotEmpty || (data['submissionType'] ?? '').toString() == 'coupon';
     final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
     final notifTitle = data['notification_title'] ?? data['title'] ?? '';
     final titleLower = notifTitle.toString().toLowerCase();
@@ -104,9 +106,15 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         (rawStatus.isEmpty && (titleLower.contains('reddedildi') || bodyLower.contains('reddedildi')));
     final status = isAppr ? 'approved' : (isRej ? 'rejected' : rawStatus);
 
-    title = data['notification_title'] ?? (isAppr ? '🎉 Fırsatınız Onaylandı!' : (isRej ? 'ℹ️ Fırsatınız Reddedildi' : '📋 Fırsat Durumu'));
-    body = data['notification_body'] ?? (isAppr ? 'Gönderdiğiniz fırsat onaylandı ve yayınlandı.' : (isRej ? 'Gönderdiğiniz fırsat maalesef onaylanamadı.' : 'Fırsatınızın gönderim durumu güncellendi.'));
-    payload = 'submission_status:${data['dealId']}:$status';
+    if (isCoupon) {
+      title = data['notification_title'] ?? (isAppr ? '🎉 Kuponunuz Onaylandı!' : (isRej ? 'ℹ️ Kuponunuz Reddedildi' : '📋 Kupon Durumu'));
+      body = data['notification_body'] ?? (isAppr ? 'Gönderdiğiniz kupon onaylandı ve yayına alındı.' : (isRej ? 'Gönderdiğiniz kupon maalesef onaylanamadı.' : 'Kuponunuzun gönderim durumu güncellendi.'));
+      payload = 'submission_status_coupon:$kId:$status';
+    } else {
+      title = data['notification_title'] ?? (isAppr ? '🎉 Fırsatınız Onaylandı!' : (isRej ? 'ℹ️ Fırsatınız Reddedildi' : '📋 Fırsat Durumu'));
+      body = data['notification_body'] ?? (isAppr ? 'Gönderdiğiniz fırsat onaylandı ve yayınlandı.' : (isRej ? 'Gönderdiğiniz fırsat maalesef onaylanamadı.' : 'Fırsatınızın gönderim durumu güncellendi.'));
+      payload = 'submission_status:${data['dealId']}:$status';
+    }
     channelId = 'sicak_firsatlar_general_v2';
   } else if (type == 'admin_message') {
     title = data['notification_title'] ?? data['title'] ?? '📩 Yeni Admin Mesajı';

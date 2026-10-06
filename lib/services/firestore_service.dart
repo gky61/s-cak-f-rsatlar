@@ -1005,6 +1005,8 @@ class FirestoreService {
             DateTime? expiresAt;
             if (data['expiresAt'] is Timestamp) {
               expiresAt = (data['expiresAt'] as Timestamp).toDate();
+            } else if (data['expiresAt'] is String) {
+              expiresAt = DateTime.tryParse(data['expiresAt'] as String);
             }
 
             final map = Map<String, dynamic>.from(data);

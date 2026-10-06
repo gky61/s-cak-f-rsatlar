@@ -18,12 +18,14 @@ class AdminNotificationsScreen extends StatefulWidget {
   final String? initialTab; // 'all', 'admin', 'replies'
   final String? highlightNotificationId;
   final String? highlightDealId;
+  final String? highlightKuponId;
 
   const AdminNotificationsScreen({
     super.key,
     this.initialTab,
     this.highlightNotificationId,
     this.highlightDealId,
+    this.highlightKuponId,
   });
 
   @override
@@ -147,12 +149,24 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         _showModernNotificationDetailDialog(context, item);
       }
     } else if (type == 'submission_status') {
+      final kuponId = (item['kuponId'] ?? item['kupon_id'] ?? item['couponId'] ?? item['coupon_id'] ?? '').toString().trim();
       if (isApproved && dealId.isNotEmpty && mounted) {
         // Onaylanan fırsat tıklandığında doğrudan canlı fırsat detayına git!
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => DealDetailScreen(dealId: dealId),
+          ),
+        );
+      } else if (isApproved && kuponId.isNotEmpty && mounted) {
+        // Onaylanan kupon tıklandığında doğrudan KuponlarPage topluluk sekmesine git!
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => KuponlarPage(
+              initialTabIndex: 1,
+              highlightKuponId: kuponId,
+            ),
           ),
         );
       } else if (mounted) {
@@ -206,11 +220,22 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         _showModernNotificationDetailDialog(context, item);
       }
     } else {
+      final kuponId = (item['kuponId'] ?? item['kupon_id'] ?? '').toString().trim();
       if (dealId.isNotEmpty && !isRejected && mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => DealDetailScreen(dealId: dealId),
+          ),
+        );
+      } else if (kuponId.isNotEmpty && !isRejected && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => KuponlarPage(
+              initialTabIndex: 1,
+              highlightKuponId: kuponId,
+            ),
           ),
         );
       } else if (mounted) {
@@ -231,6 +256,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final dealId = (item['dealId'] ?? '').toString().trim();
     final dealTitle = (item['dealTitle'] ?? '').toString().trim();
     final commentId = (item['commentId'] ?? '').toString().trim();
+    final kuponId = (item['kuponId'] ?? item['kupon_id'] ?? item['couponId'] ?? item['coupon_id'] ?? '').toString().trim();
     final imageUrl = (item['imageUrl'] as String? ?? '').trim();
     final title = (item['title'] ?? 'Bildirim Detayı').toString().trim();
     final body = (item['body'] ?? '').toString().trim();
@@ -430,7 +456,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                       child: Text(
                         (item['moderationReason'] != null && (item['moderationReason'] as String).trim().isNotEmpty)
                             ? (item['moderationReason'] as String).trim()
-                            : 'Paylaşılan fırsat topluluk kurallarımıza, fiyat/stok kriterlerine veya mükerrer paylaşımlara göre incelenerek onaylanmamıştır.',
+                            : (kuponId.isNotEmpty
+                                ? 'Paylaşılan kupon topluluk kurallarımıza, geçerlilik veya mükerrer kod kriterlerine göre incelenerek onaylanmamıştır.'
+                                : 'Paylaşılan fırsat topluluk kurallarımıza, fiyat/stok kriterlerine veya mükerrer paylaşımlara göre incelenerek onaylanmamıştır.'),
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
@@ -520,19 +548,18 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                   ),
                   const SizedBox(width: 12),
                 ],
-                if (type == 'coupon' || type == 'community_coupon') ...[
+                if (type == 'coupon' || type == 'community_coupon' || (kuponId.isNotEmpty && !isRejected)) ...[
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
                         if (context.mounted) {
-                          final kId = (item['kuponId'] ?? item['kupon_id'] ?? '').toString().trim();
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => KuponlarPage(
                                 initialTabIndex: 1,
-                                highlightKuponId: kId.isNotEmpty ? kId : null,
+                                highlightKuponId: kuponId.isNotEmpty ? kuponId : null,
                               ),
                             ),
                           );
@@ -960,11 +987,12 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
 
     // Otomatik odaklama / detay açma (Push veya in-app bildirimine tıklanıp gelindiyse)
-    if (!_hasAutoOpened && (widget.highlightNotificationId != null || widget.highlightDealId != null)) {
+    if (!_hasAutoOpened && (widget.highlightNotificationId != null || widget.highlightDealId != null || widget.highlightKuponId != null)) {
       final target = allItems.cast<Map<String, dynamic>?>().firstWhere(
         (it) =>
             (widget.highlightNotificationId != null && it?['id'] == widget.highlightNotificationId) ||
-            (widget.highlightDealId != null && it?['dealId'] == widget.highlightDealId),
+            (widget.highlightDealId != null && it?['dealId'] == widget.highlightDealId) ||
+            (widget.highlightKuponId != null && (it?['kuponId'] == widget.highlightKuponId || it?['kupon_id'] == widget.highlightKuponId)),
         orElse: () => null,
       );
       if (target != null) {
@@ -1162,13 +1190,18 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
           }
         }
         if (type == 'submission_status') {
+          final isKupon = (item['kuponId'] as String? ?? '').trim().isNotEmpty;
           if (isAppr) {
-            displayBody = 'Fırsatınız başarıyla onaylandı ve yayına alındı.';
+            displayBody = isKupon
+                ? 'Kuponunuz başarıyla onaylandı ve yayına alındı.'
+                : 'Fırsatınız başarıyla onaylandı ve yayına alındı.';
           } else if (isRej) {
             final modReason = (item['moderationReason'] as String? ?? '').trim();
             displayBody = modReason.isNotEmpty
                 ? 'Red sebebi: $modReason'
-                : 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.';
+                : (isKupon
+                    ? 'Kuponunuz topluluk kurallarımıza uymadığı için reddedildi.'
+                    : 'Fırsatınız topluluk kurallarımıza uymadığı için reddedildi.');
           }
         }
 
