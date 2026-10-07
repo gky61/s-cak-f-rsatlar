@@ -729,8 +729,8 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                                 ),
                               )
                             else ...[
-                              Text(
-                                '${deal.price.toStringAsFixed(deal.price.truncateToDouble() == deal.price ? 0 : 2)} ₺',
+                              FormattedPriceText(
+                                value: deal.price,
                                 style: const TextStyle(
                                   fontSize: 14.5,
                                   fontWeight: FontWeight.w900,
@@ -739,8 +739,8 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                               ),
                               if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
                                 const SizedBox(width: 6),
-                                Text(
-                                  '${deal.originalPrice!.toStringAsFixed(0)} ₺',
+                                FormattedPriceText(
+                                  value: deal.originalPrice,
                                   style: TextStyle(
                                     fontSize: 11,
                                     decoration: TextDecoration.lineThrough,

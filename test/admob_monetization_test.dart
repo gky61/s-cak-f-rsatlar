@@ -260,5 +260,34 @@ void main() {
       expect(favoritesCode.contains("_buildDealGrid(displayedDeals, isDark, _myFavoritesScrollController)"), isTrue,
           reason: 'Tab 1 (Kaydettiklerim) MUST use clean _buildDealGrid without any ads to protect high-intent affiliate conversions');
     });
+
+    test('19. Faz 3.5: UMP Consent & ATT UI Orchestration prevents collision with Tutorial', () async {
+      final adManager = AdManagerService.instance;
+      expect(adManager.isConsentFlowCompleted, isFalse);
+
+      // Verify markConsentFlowCompleted logic
+      adManager.markConsentFlowCompleted();
+      expect(adManager.isConsentFlowCompleted, isTrue);
+
+      // Verify waitForConsentFlow returns immediately once completed
+      await expectLater(adManager.waitForConsentFlow(timeout: const Duration(milliseconds: 100)), completes);
+
+      // Verify main.dart wires markConsentFlowCompleted
+      final mainCode = File('lib/main.dart').readAsStringSync();
+      expect(mainCode.contains('AdManagerService.instance.markConsentFlowCompleted()'), isTrue,
+          reason: 'main.dart must call markConsentFlowCompleted when UMP completes or dismisses');
+
+      // Verify home_screen.dart waits for consent before starting tutorial
+      final homeScreenCode = File('lib/screens/home_screen.dart').readAsStringSync();
+      expect(homeScreenCode.contains('await AdManagerService.instance.waitForConsentFlow()'), isTrue,
+          reason: 'home_screen.dart must await waitForConsentFlow before triggering tutorial');
+
+      // Verify ios/Runner/Info.plist has Apple-compliant ATT description
+      final infoPlist = File('ios/Runner/Info.plist').readAsStringSync();
+      expect(infoPlist.contains('NSUserTrackingUsageDescription'), isTrue);
+      expect(infoPlist.contains('Size özel indirim ve fırsat bildirimleri'), isFalse,
+          reason: 'Must not confuse notifications with tracking permission in ATT description');
+      expect(infoPlist.contains('İlginizi çeken fırsat ve indirimleri size özel sunabilmek'), isTrue);
+    });
   });
 }

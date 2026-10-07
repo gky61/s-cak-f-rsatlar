@@ -59,5 +59,130 @@ Ben uydu ile değil sadece uygulamalarını kullanıyorum. Smart özelliği bir 
       final brand = scraper.scrapeBrand(doc);
       expect(brand, equals('LG'));
     });
+
+    test('should parse priceLabel as "Premium\'a Özel" and correct prices for Profilo sample', () async {
+      const html = '''
+      <html>
+        <head>
+          <script id="__NEXT_DATA__" type="application/json">
+          {
+            "props": {
+              "pageProps": {
+                "productDetail": {
+                  "id": 13312991,
+                  "currentPrice": {
+                    "effectivePrice": 43315.09,
+                    "price": 47599,
+                    "discountedPrice": 44267.07,
+                    "premiumDiscountedPrice": 43315.09,
+                    "premiumPromotionTitle": "Premiuma Özel Fiyatlar",
+                    "premiumPromotionDiscount": 4283.91
+                  }
+                }
+              }
+            }
+          }
+          </script>
+        </head>
+        <body>
+          <span class="truncate">Premium'u Keşfet</span>
+        </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(43315.09));
+
+      final origPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(origPrice, equals(47599.0));
+
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+      expect(priceLabel, equals("Premium'a Özel"));
+    });
+
+    test('should parse priceLabel as "Premium\'a Özel" for Bosch sample', () async {
+      const html = '''
+      <html>
+        <head>
+          <script id="__NEXT_DATA__" type="application/json">
+          {
+            "props": {
+              "pageProps": {
+                "productDetail": {
+                  "id": 1568810,
+                  "currentPrice": {
+                    "effectivePrice": 48020,
+                    "price": 49000,
+                    "discountedPrice": 0,
+                    "premiumDiscountedPrice": 48020,
+                    "premiumPromotionTitle": "Premiuma Özel Fiyatlar",
+                    "premiumPromotionDiscount": 980
+                  }
+                }
+              }
+            }
+          }
+          </script>
+        </head>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(48020.0));
+
+      final origPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(origPrice, equals(49000.0));
+
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+      expect(priceLabel, equals("Premium'a Özel"));
+    });
+
+    test('should return null for priceLabel on non-premium product even with header "Premium\'u Keşfet"', () async {
+      const html = '''
+      <html>
+        <head>
+          <script id="__NEXT_DATA__" type="application/json">
+          {
+            "props": {
+              "pageProps": {
+                "productDetail": {
+                  "id": 211425,
+                  "currentPrice": {
+                    "effectivePrice": 598.5,
+                    "price": 630,
+                    "discountedPrice": 598.5,
+                    "premiumDiscountedPrice": null,
+                    "premiumPromotionTitle": null,
+                    "premiumPromotionDiscount": 0
+                  }
+                }
+              }
+            }
+          }
+          </script>
+        </head>
+        <body>
+          <div class="header">
+            <a href="/premium"><span class="truncate">Premium'u Keşfet</span></a>
+          </div>
+          <div class="product-price">
+            <span class="text-title-2xl text-secondary-600">598,50 TL</span>
+          </div>
+        </body>
+      </html>
+      ''';
+      final doc = html_parser.parse(html);
+
+      final price = await scraper.scrapePrice(doc);
+      expect(price, equals(598.5));
+
+      final origPrice = scraper.scrapeOriginalPrice(doc, price);
+      expect(origPrice, equals(630.0));
+
+      final priceLabel = await scraper.scrapePriceLabel(doc);
+      expect(priceLabel, isNull);
+    });
   });
 }

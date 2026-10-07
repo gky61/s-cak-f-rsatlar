@@ -607,12 +607,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           }
 
           if (_priceController.text.trim().isEmpty && cleanPreview.price != null && cleanPreview.price! > 0) {
-            final doubleVal = cleanPreview.price!;
-            if (doubleVal == doubleVal.toInt()) {
-              _priceController.text = doubleVal.toInt().toString();
-            } else {
-              _priceController.text = doubleVal.toString();
-            }
+            _priceController.text = PriceFormatUtil.formatForInput(cleanPreview.price!);
             hasPrice = true;
           }
 
@@ -1044,7 +1039,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         final submitResult = await _firestoreService.createDeal(
           title: _titleController.text.trim(),
           description: AdvertisingComplianceService.ensureDisclosure(_descriptionController.text.trim()),
-          price: double.tryParse(_priceController.text.trim()) ?? 0.0,
+          price: PriceFormatUtil.parse(_priceController.text.trim()) ?? 0.0,
           store: _storeController.text.trim(),
           category: categoryId,
           subCategory: subCategoryName,
@@ -1733,7 +1728,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   Widget _buildLiveHeroPreviewCard(bool isDark) {
     final title = _titleController.text.trim();
     final priceText = _priceController.text.trim();
-    final price = double.tryParse(priceText) ?? 0.0;
+    final price = PriceFormatUtil.parse(priceText) ?? 0.0;
     final store = _selectedStore ?? _storeController.text.trim();
 
     final bool hasData = _previewImageUrl != null || title.isNotEmpty || price > 0 || _isAutoDetecting;
@@ -2247,8 +2242,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                         ),
                       )
                     else ...[
-                      Text(
-                        price > 0 ? '${price.toStringAsFixed(price.truncateToDouble() == price ? 0 : 2)} ₺' : '0 ₺',
+                      FormattedPriceText(
+                        value: price > 0 ? price : 0,
                         style: const TextStyle(
                           fontSize: 15.5,
                           fontWeight: FontWeight.w900,
@@ -2257,29 +2252,31 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                         ),
                       ),
                       if (_scrapedOriginalPrice != null && _scrapedOriginalPrice! > price) ...[
-                        Text(
-                          '${_scrapedOriginalPrice!.toStringAsFixed(0)} ₺',
+                        FormattedPriceText(
+                          value: _scrapedOriginalPrice,
                           style: TextStyle(
                             fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
                             color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
                             decoration: TextDecoration.lineThrough,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFDC2626).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            '%${(((_scrapedOriginalPrice! - price) / _scrapedOriginalPrice!) * 100).round()} İndirim',
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFFDC2626),
+                        if (PriceFormatUtil.calculateDiscountRate(_scrapedOriginalPrice, price) != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              '%${PriceFormatUtil.calculateDiscountRate(_scrapedOriginalPrice, price)} İndirim',
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFDC2626),
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ],
                   ],
@@ -2452,9 +2449,12 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
               onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
               style: TextStyle(color: textColor, fontWeight: FontWeight.w700, fontSize: 15),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                TurkishCurrencyInputFormatter(),
+              ],
               decoration: InputDecoration(
                 labelText: 'Fiyat (₺) *',
-                hintText: '0.00',
+                hintText: '0,00',
                 filled: true,
                 fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
                 prefixIcon: const Padding(
@@ -2484,8 +2484,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return 'Lütfen bir fiyat giriniz';
                 }
-                if (double.tryParse(value.trim()) == null) {
-                  return 'Geçerli bir sayı giriniz';
+                final parsed = PriceFormatUtil.parse(value.trim());
+                if (parsed == null || parsed < 0) {
+                  return 'Geçerli bir fiyat giriniz';
                 }
                 return null;
               },
@@ -2830,7 +2831,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         lower.contains('trendyol') ||
         lower.contains('hepsiburada') ||
         lower.contains('pazarama') ||
-        lower.contains('migros');
+        lower.contains('migros') ||
+        lower.contains('idefix');
   }
 
   bool _isMembershipBadgeLabel(String label) {
@@ -2866,6 +2868,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     if (lower.contains('hepsiburada')) return 'Premium ile';
     if (lower.contains('pazarama')) return 'Plus ile';
     if (lower.contains('migros')) return 'Money ile';
+    if (lower.contains('idefix')) return "Premium'a Özel";
     return 'Özel Fiyat';
   }
 

@@ -69,6 +69,106 @@ async function run() {
   assert.strictEqual(ratingLg.ratingValue, 4.8);
   assert.strictEqual(ratingLg.ratingCount, 32);
   assert.strictEqual(scraper.scrapeBrand($lg), 'LG');
+
+  // 5. Sample Profilo Premium: priceLabel "Premium'a Özel"
+  const profiloHtml = `
+    <html>
+      <head>
+        <script id="__NEXT_DATA__" type="application/json">
+        {
+          "props": {
+            "pageProps": {
+              "productDetail": {
+                "id": 13312991,
+                "currentPrice": {
+                  "effectivePrice": 43315.09,
+                  "price": 47599,
+                  "discountedPrice": 44267.07,
+                  "premiumDiscountedPrice": 43315.09,
+                  "premiumPromotionTitle": "Premiuma Özel Fiyatlar",
+                  "premiumPromotionDiscount": 4283.91
+                }
+              }
+            }
+          }
+        }
+        </script>
+      </head>
+      <body>
+        <span class="truncate">Premium'u Keşfet</span>
+      </body>
+    </html>
+  `;
+  const $profilo = cheerio.load(profiloHtml);
+  const priceProfilo = scraper.scrapePrice($profilo);
+  assert.strictEqual(priceProfilo, 43315.09);
+  assert.strictEqual(scraper.scrapeOriginalPrice($profilo, priceProfilo), 47599);
+  assert.strictEqual(scraper.scrapePriceLabel($profilo), "Premium'a Özel");
+
+  // 6. Sample Bosch Premium: priceLabel "Premium'a Özel"
+  const boschHtml = `
+    <html>
+      <head>
+        <script id="__NEXT_DATA__" type="application/json">
+        {
+          "props": {
+            "pageProps": {
+              "productDetail": {
+                "id": 1568810,
+                "currentPrice": {
+                  "effectivePrice": 48020,
+                  "price": 49000,
+                  "discountedPrice": 0,
+                  "premiumDiscountedPrice": 48020,
+                  "premiumPromotionTitle": "Premiuma Özel Fiyatlar",
+                  "premiumPromotionDiscount": 980
+                }
+              }
+            }
+          }
+        }
+        </script>
+      </head>
+    </html>
+  `;
+  const $bosch = cheerio.load(boschHtml);
+  const priceBosch = scraper.scrapePrice($bosch);
+  assert.strictEqual(priceBosch, 48020);
+  assert.strictEqual(scraper.scrapeOriginalPrice($bosch, priceBosch), 49000);
+  assert.strictEqual(scraper.scrapePriceLabel($bosch), "Premium'a Özel");
+
+  // 7. False Positive Prevention: non-premium product with header "Premium'u Keşfet" link
+  const nonPremHtml = `
+    <html>
+      <head>
+        <script id="__NEXT_DATA__" type="application/json">
+        {
+          "props": {
+            "pageProps": {
+              "productDetail": {
+                "id": 211425,
+                "currentPrice": {
+                  "effectivePrice": 598.5,
+                  "price": 630,
+                  "discountedPrice": 598.5,
+                  "premiumDiscountedPrice": null,
+                  "premiumPromotionTitle": null,
+                  "premiumPromotionDiscount": 0
+                }
+              }
+            }
+          }
+        }
+        </script>
+      </head>
+      <body>
+        <a href="/premium"><span class="truncate">Premium'u Keşfet</span></a>
+      </body>
+    </html>
+  `;
+  const $nonPrem = cheerio.load(nonPremHtml);
+  assert.strictEqual(scraper.scrapePriceLabel($nonPrem), null, 'Non-premium product must not have membership priceLabel');
+  console.log('✅ Idefix priceLabel testleri başarıyla geçti!');
 }
 
 module.exports = { run };

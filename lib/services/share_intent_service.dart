@@ -4,11 +4,9 @@ import 'dart:async';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import '../main.dart'; // navigatorKey
 import 'auth_service.dart';
-import 'firestore_service.dart';
 import '../utils/deal_url_detector.dart';
 import '../screens/submit_deal_screen.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
-import '../widgets/deal_restriction_bottom_sheet.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -23,13 +21,12 @@ class ShareIntentService {
   static final ShareIntentService instance = ShareIntentService._();
 
   final AuthService _authService = AuthService();
-  final FirestoreService _firestoreService = FirestoreService();
 
   StreamSubscription? _intentSub;
-  Timer? _pendingCheckTimer;
   String? _pendingUrl;
   bool _isInitialized = false;
   bool _isNavigating = false;
+  int _shareCheckToken = 0;
 
   String? _lastHandledUrl;
   DateTime? _lastHandledTime;
@@ -73,86 +70,110 @@ class ShareIntentService {
     }
   }
 
-  /// Gelen paylaşılan medya listesini analiz eder ve URL'i işleme alır.
+  /// Gelen paylaşılan medya listesini analiz eder ve ilk geçerli e-ticaret URL'ini işleme alır.
   void handleSharedMedia(List<SharedMediaFile> files, {bool isColdStart = false}) {
     if (files.isEmpty) return;
 
-    final sharedText = files.first.path;
-    _log('📥 Paylaşılan ham veri: $sharedText (coldStart: $isColdStart)');
+    // Birden fazla medya (küçük resim + url vb.) paylaşıldığında geçerli URL içeren öğeyi tara
+    String? detectedUrl;
+    for (final file in files) {
+      final rawPath = file.path;
+      final url = DealUrlDetector.extractUrl(rawPath);
+      if (url != null && url.trim().isNotEmpty) {
+        detectedUrl = url.trim();
+        _log('📥 Paylaşılan veri içerisinden URL bulundu: $detectedUrl (coldStart: $isColdStart)');
+        break;
+      }
+    }
 
-    final url = DealUrlDetector.extractUrl(sharedText);
-    if (url == null || url.trim().isEmpty) {
-      _log('⚠️ Paylaşılan metinde geçerli bir HTTP/HTTPS linki bulunamadı.');
+    if (detectedUrl == null || detectedUrl.isEmpty) {
+      _log('⚠️ Paylaşılan metin veya dosyalarda geçerli bir HTTP/HTTPS linki bulunamadı.');
       // Geçersiz içerik için native intent kuyruğunu sıfırla ki takılı kalmasın
       ReceiveSharingIntent.instance.reset();
       return;
     }
 
-    _log('🎯 Ayıklanan URL: $url');
+    final targetUrl = detectedUrl;
 
     // Mükerrer tetikleme koruması: Aynı URL son 3 saniye içinde işlendiyse atla
     final now = DateTime.now();
-    if (_lastHandledUrl == url &&
+    if (_lastHandledUrl == targetUrl &&
         _lastHandledTime != null &&
         now.difference(_lastHandledTime!) < const Duration(milliseconds: 3000)) {
-      _log('⚠️ Mükerrer paylaşım linki engellendi (Debounce 3s): $url');
+      _log('⚠️ Mükerrer paylaşım linki engellendi (Debounce 3s): $targetUrl');
       return;
     }
 
-    _pendingUrl = url.trim();
+    _pendingUrl = targetUrl;
     _startPendingShareCheck(isColdStart: isColdStart);
   }
 
-  /// Navigator ve Firebase Auth oturum durumu hazır olana kadar kuyruğu kontrol eder.
-  void _startPendingShareCheck({bool isColdStart = false}) {
-    _pendingCheckTimer?.cancel();
+  /// Navigator ve Firebase Auth oturum durumu hazır olduğunda anında yönlendirmeyi tetikler.
+  /// Warm Start senaryosunda Navigator ve Auth hazır olduğundan 0 ms gecikmeyle ilk mikrosaniyede açılır.
+  /// Cold Start senaryosunda Navigator ilk frame'i çizene kadar (50ms sequential loop) beklenir,
+  /// ardından SubmitDealScreen ekranına anında (0 ms ağ beklemesi) geçilir.
+  Future<void> _startPendingShareCheck({bool isColdStart = false}) async {
+    final int currentToken = ++_shareCheckToken;
+    if (_pendingUrl == null || _isNavigating) return;
+
+    // 1. Navigator hazırlığı: Cold start durumunda ilk kare çizilene kadar hafif sequential bekleme
     int attempts = 0;
-    const maxAttempts = 60; // 60 * 150ms = 9 saniye tavan kontrol süresi
+    const maxAttempts = 60; // 60 * 50ms = 3 saniye tavan emniyet süresi
 
-    // Warm start durumunda sistem zaten hazırsa 0 ms gecikmeyle ilk kontrolde anında açılır.
-    _pendingCheckTimer = Timer.periodic(const Duration(milliseconds: 150), (timer) async {
+    while ((navigatorKey.currentState == null ||
+            navigatorKey.currentContext == null ||
+            !(navigatorKey.currentContext?.mounted ?? false)) &&
+           attempts < maxAttempts) {
+      if (currentToken != _shareCheckToken || _pendingUrl == null) return;
       attempts++;
-      final navigatorState = navigatorKey.currentState;
-      final currentUser = _authService.currentUser;
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
 
-      // Soğuk başlangıçta Firebase Auth'un yerel depolamadan kullanıcıyı yüklemesi 100-300ms sürer.
-      // Bu yüzden ilk birkaç denemede hemen "misafir" varsaymayıp auth'un yerleşmesini bekliyoruz.
-      final bool isAuthSettled = currentUser != null || attempts >= 10;
-      final bool isReady = navigatorState != null && isAuthSettled;
+    if (currentToken != _shareCheckToken || _pendingUrl == null || _isNavigating) return;
 
-      if (isReady) {
-        timer.cancel();
-        _pendingCheckTimer = null;
+    final navState = navigatorKey.currentState;
+    final navContext = navigatorKey.currentContext;
+    if (navState == null || navContext == null || !navContext.mounted) {
+      _log('⚠️ ShareIntentService zaman aşımı: Navigator hazır hale gelmedi.');
+      _pendingUrl = null;
+      ReceiveSharingIntent.instance.reset();
+      return;
+    }
 
-        if (_pendingUrl != null && !_isNavigating) {
-          final targetUrl = _pendingUrl!;
-          _log('🚀 Navigator ve Oturum hazır (Deneme: $attempts, coldStart: $isColdStart). Yönlendirme icra ediliyor: $targetUrl');
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _executeNavigation(targetUrl);
-          });
-        }
-      } else if (attempts >= maxAttempts) {
-        timer.cancel();
-        _pendingCheckTimer = null;
-        _log('⚠️ ShareIntentService zaman aşımı ($maxAttempts deneme): Navigator veya Oturum hazır hale gelmedi.');
-        _pendingUrl = null;
-        ReceiveSharingIntent.instance.reset();
-      }
+    // 2. Auth durumu hazırlığı: Cold start'ta yerel anahtarlıktan oturumun okunmasını bekle
+    var currentUser = _authService.currentUser;
+    if (currentUser == null && isColdStart) {
+      try {
+        currentUser = await _authService.authStateChanges
+            .first
+            .timeout(const Duration(milliseconds: 350), onTimeout: () => null);
+      } catch (_) {}
+    }
+
+    if (currentToken != _shareCheckToken || _pendingUrl == null || _isNavigating) return;
+
+    // Hedef URL'i hemen tüket ve kilit koyarak frame aralığında mükerrer kuyruk oluşmasını engelle
+    final targetUrl = _pendingUrl!;
+    _pendingUrl = null;
+    _isNavigating = true;
+
+    _log('🚀 Navigator ve Oturum hazır (Deneme: $attempts, coldStart: $isColdStart, uid: ${currentUser?.uid ?? "guest"}). Yönlendirme icra ediliyor: $targetUrl');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _executeNavigation(targetUrl);
     });
   }
 
   /// Hedef URL ile SubmitDealScreen ekranına yönlendirmeyi icra eder.
   Future<void> _executeNavigation(String url) async {
-    if (_isNavigating) return;
     _isNavigating = true;
 
     try {
       final navState = navigatorKey.currentState;
       final navContext = navigatorKey.currentContext;
 
-      if (navState == null || navContext == null) {
-        _log('❌ Navigator context bulunamadı.');
-        _isNavigating = false;
+      if (navState == null || navContext == null || !navContext.mounted) {
+        _log('❌ Navigator context bulunamadı veya mounted değil.');
         return;
       }
 
@@ -172,55 +193,30 @@ class ShareIntentService {
             _executeNavigation(url);
           },
         );
-        return;
-      }
-
-      // 2. Sistem Şalteri ve Kullanıcı Ban Kontrolü
-      final results = await Future.wait([
-        _firestoreService.isDealSharingEnabled(),
-        _firestoreService.isUserDealBanned(user.uid),
-      ]);
-
-      final isSharingEnabled = results[0];
-      final isDealBanned = results[1];
-
-      final currentContext = navigatorKey.currentContext;
-      if (currentContext == null || !currentContext.mounted) {
-        _isNavigating = false;
-        return;
-      }
-
-      if (!isSharingEnabled) {
-        _log('⛔ Fırsat paylaşımı sistem genelinde devre dışı.');
-        _isNavigating = false;
-        showDealSharingDisabledBottomSheet(currentContext);
         ReceiveSharingIntent.instance.reset();
-        _pendingUrl = null;
         return;
       }
 
-      if (isDealBanned) {
-        _log('🚫 Kullanıcının fırsat paylaşım yetkisi kısıtlanmış.');
-        _isNavigating = false;
-        showDealBannedBottomSheet(currentContext);
-        ReceiveSharingIntent.instance.reset();
-        _pendingUrl = null;
-        return;
-      }
-
-      // 3. Başarılı Yönlendirme İcrası
+      // 2. Başarılı Yönlendirme İcrası:
+      // DİKKAT: SubmitDealScreen (lib/screens/submit_deal_screen.dart:214-242) initState'inde
+      // _checkDealSharingStatus() metodu ile hem sistem şalterini (isDealSharingEnabled)
+      // hem de kullanıcı engelini (isUserDealBanned) ZATEN tam korumalı biçimde paralel sorgulamakta;
+      // engel durumunda showDealSharingDisabledBottomSheet veya showDealBannedBottomSheet gösterip
+      // ekranı otomatik kapatmaktadır (Navigator.pop).
+      // Yönlendirme öncesinde soğuk ağ üzerinden bu iki Firestore sorgusunu beklemek Cold Start'ta
+      // kullanıcının anasayfada 2-3 saniye takılmasına (UI jank) yol açıyordu.
+      // Bu nedenle SubmitDealScreen ANINDA (0 ms) açılır, kontroller arka planda güvenle işletilir.
       _lastHandledUrl = url;
       _lastHandledTime = DateTime.now();
-      _pendingUrl = null;
 
-      _log('🎉 SubmitDealScreen ekranına yönlendiriliyor: $url');
-      await navState.push(
+      _log('🎉 SubmitDealScreen ekranına anında yönlendiriliyor: $url');
+      navState.push(
         MaterialPageRoute(
           builder: (_) => SubmitDealScreen(initialUrl: url),
         ),
       );
 
-      // Yalnızca işlem başarıyla tamamlandıktan sonra native kuyruğu sıfırla
+      // Yönlendirme icra edildikten hemen sonra native intent kuyruğunu sıfırla
       ReceiveSharingIntent.instance.reset();
     } catch (e) {
       _log('❌ Paylaşım yönlendirme hatası: $e');
@@ -231,7 +227,7 @@ class ShareIntentService {
 
   /// Servisi temizler (Uygulama sonlanırken)
   void dispose() {
-    _pendingCheckTimer?.cancel();
+    _shareCheckToken++;
     _intentSub?.cancel();
     _isInitialized = false;
     _isNavigating = false;

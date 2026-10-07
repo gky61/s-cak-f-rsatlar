@@ -139,6 +139,58 @@ class IdefixScraper extends BaseProductScraper {
     return candidates[0];
   }
 
+  scrapePriceLabel($) {
+    // 1. __NEXT_DATA__
+    const nextScript = $('#__NEXT_DATA__').html();
+    if (nextScript) {
+      try {
+        const json = JSON.parse(nextScript);
+        const cp = json.props?.pageProps?.productDetail?.currentPrice;
+        if (cp) {
+          const premPrice = cp.premiumDiscountedPrice;
+          const premTitle = cp.premiumPromotionTitle;
+          const premDiscount = cp.premiumPromotionDiscount;
+
+          let isPremium = false;
+          if (premPrice != null && parseFloat(premPrice) > 0) {
+            isPremium = true;
+          } else if (premDiscount != null && parseFloat(premDiscount) > 0) {
+            isPremium = true;
+          } else if (premTitle && typeof premTitle === 'string' && premTitle.toLowerCase().includes('premium')) {
+            isPremium = true;
+          }
+
+          if (isPremium) {
+            return "Premium'a Özel";
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Script Regex Fallback
+    const scripts = $('script').map((_, el) => $(el).html()).get().join(' ');
+    if (scripts.includes('premiumDiscountedPrice') || scripts.includes('premiumPromotionTitle') || scripts.includes('premiumPromotionDiscount')) {
+      if (/"premiumDiscountedPrice"\s*:\s*([1-9]\d*(?:\.\d+)?)/.test(scripts)) return "Premium'a Özel";
+      if (/"premiumPromotionDiscount"\s*:\s*([1-9]\d*(?:\.\d+)?)/.test(scripts)) return "Premium'a Özel";
+      if (/"premiumPromotionTitle"\s*:\s*"[^"]*premium[^"]*"/i.test(scripts)) return "Premium'a Özel";
+    }
+
+    // 3. DOM Fallback (False positive önlemleriyle)
+    const premiumRegex = /premium['’]?\s*(?:a\s*özel|lulara\s*özel|fiyatı|indirimi)/i;
+    let foundLabel = null;
+    $('.product-detail span, .product-detail div, .product-price span, .product-price div, span, div').each((_, el) => {
+      if (foundLabel) return;
+      const text = $(el).text().trim();
+      if (!text || text.length > 50) return;
+      if (text.toLowerCase().includes('keşfet') || text.toLowerCase().includes('kesfet')) return;
+      if (premiumRegex.test(text)) {
+        foundLabel = "Premium'a Özel";
+      }
+    });
+
+    return foundLabel;
+  }
+
   scrapeDescription($) {
     // 1. JSON-LD
     const product = this.findProductJsonLd($);

@@ -429,9 +429,11 @@ void main() async {
 /// ana UI thread'ini ve açılış çizimini (runApp) BLOKLAMADAN asenkron başlatır.
 void _initializeBackgroundServices() {
   if (Firebase.apps.isEmpty) return;
-  // Background message handler'ı sadece web dışı platformlarda kaydet
+  // Background message handler'ı ve paylaşım dinleyicisini en erken safhada kaydet
   if (!kIsWeb) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    // Dış mağazalardan (Amazon, Trendyol) paylaşılan ürün linklerini en erken safhada yakala
+    ShareIntentService.instance.initialize();
   }
 
   // Affiliate şalterlerini Firestore settings/app belgesinden gerçek zamanlı dinle
@@ -494,14 +496,15 @@ void _initializeBackgroundServices() {
     }).catchError((e) {
       _log('⚠️ Kanal ve dinleyici önyükleme hatası: $e');
     });
-
-    // Dış mağazalardan (Amazon, Trendyol) paylaşılan ürün linklerini yakala
-    ShareIntentService.instance.initialize();
   }
 }
 
-/// AdMob ve UMP Consent akışını asenkron başlatır (P1-33 / R-PRV-07)
+/// AdMob ve UMP Consent akışını asenkron başlatır (P1-33 / R-PRV-07 / UI Orchestration)
 void _initAdMobAndUmp() {
+  if (kIsWeb) {
+    AdManagerService.instance.markConsentFlowCompleted();
+    return;
+  }
   bool adMobInitialized = false;
 
   Future<void> initAdMob() async {
@@ -520,8 +523,10 @@ void _initAdMobAndUmp() {
     }
   }
 
-  // Güvenlik Kalkanı (P1-33 / App Store 5.1.2 ve Google UMP Sözleşmesi):
-  // Rıza alınmadan veya form ekrandayken AdMob'u zorla başlatan 2.5s zaman aşımı kaldırılmıştır.
+  // Güvenlik Kalkanı & UI Sıralama Orkestrasyonu (P1-33 / App Store 5.1.2 ve Google UMP Sözleşmesi):
+  // Rıza formu ekrandayken uygulamanın tanıtım turu (Tutorial) veya diğer dialoglarıyla
+  // çakışmasını engellemek için form kapatıldığında veya akış sonlandığında
+  // AdManagerService.instance.markConsentFlowCompleted() tetiklenir.
   try {
     final params = ConsentRequestParameters();
     ConsentInformation.instance.requestConsentInfoUpdate(
@@ -532,19 +537,32 @@ void _initAdMobAndUmp() {
             if (error != null) {
               _log('⚠️ UMP ConsentForm hatası: ${error.message}');
             }
-            await initAdMob();
+            try {
+              await initAdMob();
+            } finally {
+              AdManagerService.instance.markConsentFlowCompleted();
+            }
           });
         } else {
-          await initAdMob();
+          try {
+            await initAdMob();
+          } finally {
+            AdManagerService.instance.markConsentFlowCompleted();
+          }
         }
       },
       (FormError error) async {
         _log('⚠️ UMP Consent request hatası: ${error.message}');
-        await initAdMob();
+        try {
+          await initAdMob();
+        } finally {
+          AdManagerService.instance.markConsentFlowCompleted();
+        }
       },
     );
   } catch (e) {
     _log('⚠️ AdMob/UMP başlatma genel hatası: $e');
+    AdManagerService.instance.markConsentFlowCompleted();
   }
 }
 

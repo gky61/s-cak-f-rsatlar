@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/deal.dart';
 import 'amazon_prime_badge.dart';
 import 'hepsiburada_premium_badge.dart';
+import 'idefix_premium_badge.dart';
 import 'migros_money_badge.dart';
 import 'pazarama_plus_badge.dart';
 import 'trendyol_plus_badge.dart';
@@ -60,7 +61,8 @@ class StorePriceBadge extends StatelessWidget {
           TrendyolPlusBadge.isTrendyolPlusDeal(deal) ||
           HepsiburadaPremiumBadge.isHepsiburadaPremiumDeal(deal) ||
           PazaramaPlusBadge.isPazaramaPlusDeal(deal) ||
-          MigrosMoneyBadge.isMigrosMoneyDeal(deal);
+          MigrosMoneyBadge.isMigrosMoneyDeal(deal) ||
+          IdefixPremiumBadge.isIdefixPremiumDeal(deal);
     }
     return false;
   }
@@ -78,6 +80,7 @@ class StorePriceBadge extends StatelessWidget {
       if (HepsiburadaPremiumBadge.isHepsiburadaPremiumDeal(deal)) return 'Premium ile';
       if (PazaramaPlusBadge.isPazaramaPlusDeal(deal)) return 'Plus ile';
       if (MigrosMoneyBadge.isMigrosMoneyDeal(deal)) return 'Money ile';
+      if (IdefixPremiumBadge.isIdefixPremiumDeal(deal)) return "Premium'a Özel";
     }
     return '';
   }

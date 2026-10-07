@@ -89,12 +89,10 @@ FırsatKolik mobil uygulamasının kaynak kodları, manifest dosyaları, plist y
   * [ios/Runner/Info.plist](file:///d:/firsatkolik/ios/Runner/Info.plist#L221-L222)
   * [pubspec.yaml](file:///d:/firsatkolik/pubspec.yaml#L57-L62)
   * [lib/main.dart](file:///d:/firsatkolik/lib/main.dart#L313-L358)
-* **Mevcut Durum:**
-  * `Info.plist` içine `NSUserTrackingUsageDescription` eklenmiştir.
-  * Fakat `pubspec.yaml` içinde `app_tracking_transparency` paketi **yoktur** ve `main.dart` açılışında ATT izin diyaloğu tetiklenmemektedir.
-* **Risk ve Kayıplar:**
-  1. **Apple Review Reddi (Guideline 2.1 / 5.1.2):** Apple inceleme ekibi, `Info.plist` dosyasında ATT açıklaması olup da uygulamada kullanıcının karşısına ATT izin penceresi çıkarmayan uygulamaları reddetmektedir.
-  2. **%70 eCPM Kaybı:** iOS kullanıcılarından IDFA takibi izni alınamadığında reklamlar kişiselleştirilemez (non-personalized) ve AdMob eCPM gelirleri dip yapar.
+* **✅ Giderildi (Prod-Ready & UI Sıralama Orkestrasyonu):**
+  * Google AdMob Konsolu Gizlilik ve Mesajlaşma paneli üzerinden Türkçe IDFA Ön Bilgilendirme Mesajı aktive edildi.
+  * `ios/Runner/Info.plist` dosyasına Apple politikalarına %100 uyumlu `NSUserTrackingUsageDescription` açıklaması tanımlandı.
+  * `lib/main.dart` ve `lib/services/ad_manager_service.dart` üzerinden `waitForConsentFlow` kapısı kurularak UMP formu ile uygulama içi interaktif turun (`HomeScreen` tutorial) çakışması (UI collision) kalıcı olarak önlendi.
 
 ---
 

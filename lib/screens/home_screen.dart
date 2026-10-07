@@ -256,7 +256,14 @@ class _HomeScreenState extends State<HomeScreen> {
       if (widget.initialSearchQuery == null || widget.initialSearchQuery!.trim().isEmpty) {
         final hasSeen = await _tutorialService.hasSeenTutorial();
         if (!hasSeen && mounted) {
-          Future.delayed(const Duration(milliseconds: 800), () {
+          // FS-28: UMP / Reklam Rıza Akışı Sıralaması (UI Orchestration)
+          // iOS'ta Google AdMob UMP IDFA/GDPR formu çıkıyorsa, form ekrandan kapanana kadar
+          // tanıtım turunu (TutorialSpotlightOverlay) bekletir.
+          // Form yoksa (Android veya önceden onaylanmış oturum) anında çözümlenir.
+          await AdManagerService.instance.waitForConsentFlow();
+          if (!mounted) return;
+
+          Future.delayed(const Duration(milliseconds: 600), () {
             if (mounted) {
               _startInAppTutorial();
             }

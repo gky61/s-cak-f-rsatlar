@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../models/deal.dart';
 import '../../../models/category.dart';
@@ -45,17 +46,11 @@ void showAdminEditSheet({
   final imageUrlController = TextEditingController(text: deal.imageUrl);
   
   final priceController = TextEditingController(
-    text: deal.price == deal.price.toInt()
-        ? deal.price.toInt().toString()
-        : deal.price.toStringAsFixed(2),
+    text: PriceFormatUtil.formatForInput(deal.price),
   );
   final origP = deal.originalPrice;
   final originalPriceController = TextEditingController(
-    text: origP != null
-        ? (origP == origP.toInt()
-            ? origP.toInt().toString()
-            : origP.toStringAsFixed(2))
-        : '',
+    text: origP != null ? PriceFormatUtil.formatForInput(origP) : '',
   );
   final effDisc = deal.effectiveDiscountRate;
   final discountController = TextEditingController(
@@ -109,28 +104,7 @@ void showAdminEditSheet({
       return StatefulBuilder(
         builder: (context, setSheetState) {
           double? parseDouble(String input) {
-            String cleaned = input
-                .replaceAll('TL', '')
-                .replaceAll('₺', '')
-                .replaceAll(RegExp(r'\s+'), '')
-                .replaceAll(RegExp('[^0-9,\\.]'), '')
-                .trim();
-            if (cleaned.isEmpty) return null;
-
-            if (cleaned.contains('.') && cleaned.contains(',')) {
-              cleaned = cleaned.replaceAll('.', '').replaceAll(',', '.');
-            } else if (cleaned.contains(',')) {
-              cleaned = cleaned.replaceAll(',', '.');
-            } else if (cleaned.contains('.')) {
-              final parts = cleaned.split('.');
-              if (parts.length == 2 && parts[1].length == 3) {
-                cleaned = cleaned.replaceAll('.', '');
-              } else if (parts.length > 2) {
-                cleaned = cleaned.replaceAll('.', '');
-              }
-            }
-
-            return double.tryParse(cleaned);
+            return PriceFormatUtil.parse(input);
           }
 
           int? parseInt(String input) {
@@ -143,17 +117,8 @@ void showAdminEditSheet({
           void updateDiscountRate() {
             final price = parseDouble(priceController.text);
             final originalPrice = parseDouble(originalPriceController.text);
-
-            if (originalPrice != null && price != null && originalPrice > price && price > 0) {
-              final rate = (((originalPrice - price) / originalPrice) * 100).round();
-              discountController.text = rate > 0 ? rate.toString() : '';
-            } else if (originalPrice != null && price != null && originalPrice <= price) {
-              // Eski fiyat geçerli fiyattan küçük veya eşitse indirim oranı olamaz
-              discountController.text = '';
-            } else if (originalPrice == null) {
-              // Eski fiyat silindiyse veya boşsa indirim oranı sıfırlanmalıdır
-              discountController.text = '';
-            }
+            final rate = PriceFormatUtil.calculateDiscountRate(originalPrice, price);
+            discountController.text = rate != null ? rate.toString() : '';
           }
 
           Future<String> resolveAndConvertToAffiliateLink(String originalUrl) {
@@ -491,7 +456,8 @@ void showAdminEditSheet({
                                     context: context,
                                     label: 'Fiyat (₺)',
                                     controller: priceController,
-                                    placeholder: '0.00',
+                                    placeholder: '0,00',
+                                    inputFormatters: [TurkishCurrencyInputFormatter()],
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     onChanged: (_) {
                                       updateDiscountRate();
@@ -506,6 +472,7 @@ void showAdminEditSheet({
                                     label: 'Eski Fiyat (₺)',
                                     controller: originalPriceController,
                                     placeholder: 'Opsiyonel',
+                                    inputFormatters: [TurkishCurrencyInputFormatter()],
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     onChanged: (_) {
                                       updateDiscountRate();
@@ -1153,6 +1120,7 @@ Widget _buildStyledTextField({
   String? helperText,
   int maxLines = 1,
   TextInputType keyboardType = TextInputType.text,
+  List<TextInputFormatter>? inputFormatters,
   ValueChanged<String>? onChanged,
   Widget? suffixIcon,
 }) {
@@ -1177,6 +1145,7 @@ Widget _buildStyledTextField({
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
           onChanged: onChanged,
           style: TextStyle(
             fontSize: 14,

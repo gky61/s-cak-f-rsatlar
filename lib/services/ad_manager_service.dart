@@ -34,6 +34,36 @@ class AdManagerService extends ChangeNotifier {
       ? Future.value(true)
       : _initCompleter.future;
 
+  // ─── UMP Rıza (Consent & ATT) Akışı Takibi (UI Orchestration) ─────────────
+  final Completer<void> _consentCompleter = Completer<void>();
+  bool _isConsentFlowCompleted = false;
+  bool get isConsentFlowCompleted => _isConsentFlowCompleted;
+
+  /// UMP rıza akışının (varsa IDFA veya GDPR formu) tamamlanmasını bekler.
+  /// Form yoksa veya kullanıcı zaten rıza verdiyse anında çözümlenir.
+  /// Ekranda form varsa kullanıcı formu kapatana kadar bekler.
+  /// Olası ağ gecikmelerinde arayüzü asla kilitlememesi için güvenli emniyet zaman aşımı (timeout) içerir.
+  Future<void> waitForConsentFlow({Duration timeout = const Duration(seconds: 8)}) async {
+    if (_isConsentFlowCompleted || _consentCompleter.isCompleted) return;
+    try {
+      await _consentCompleter.future.timeout(timeout);
+    } catch (_) {
+      // Emniyet zaman aşımı: Tanıtım turu veya arayüz akışı asla askıda kalmaz
+    }
+  }
+
+  /// UMP rıza diyaloğu kapandığında, form gerekmediğinde veya hata durumunda çağrılır
+  void markConsentFlowCompleted() {
+    if (!_isConsentFlowCompleted) {
+      _isConsentFlowCompleted = true;
+      if (!_consentCompleter.isCompleted) {
+        _consentCompleter.complete();
+      }
+      _log('🏁 [UMP-CONSENT] Rıza akışı tamamlandı (isConsentFlowCompleted=true)');
+      notifyListeners();
+    }
+  }
+
   /// Dinamik Reklam Şalteri (Kill-Switch) — Firestore settings/admob üzerinden güncellenir
   bool isAdsEnabled = true;
 
@@ -479,6 +509,9 @@ class AdManagerService extends ChangeNotifier {
     _settingsSubscription = null;
     _rewardedAd?.dispose();
     _rewardedAd = null;
+    if (!_consentCompleter.isCompleted) {
+      _consentCompleter.complete();
+    }
     _log('🧹 AdManagerService temizlendi (dispose)');
     super.dispose();
   }

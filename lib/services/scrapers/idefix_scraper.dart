@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:html/dom.dart' as dom;
 import 'package:http/http.dart' as http;
@@ -235,6 +236,78 @@ class IdefixScraper extends BaseProductScraper {
 
     valid.sort();
     return valid.first;
+  }
+
+  @override
+  FutureOr<String?> scrapePriceLabel(dom.Document document) {
+    // 1. __NEXT_DATA__ JSON (En güvenilir ve birincil kaynak)
+    final nextData = _getIdefixNextData(document);
+    if (nextData != null) {
+      final cp = nextData['props']?['pageProps']?['productDetail']?['currentPrice'];
+      if (cp is Map) {
+        final premPrice = cp['premiumDiscountedPrice'];
+        final premTitle = cp['premiumPromotionTitle'];
+        final premDiscount = cp['premiumPromotionDiscount'];
+
+        bool isPremium = false;
+        if (premPrice != null) {
+          final val = double.tryParse(premPrice.toString());
+          if (val != null && val > 0) {
+            isPremium = true;
+          }
+        }
+        if (!isPremium && premDiscount != null) {
+          final val = double.tryParse(premDiscount.toString());
+          if (val != null && val > 0) {
+            isPremium = true;
+          }
+        }
+        if (!isPremium && premTitle != null && premTitle.toString().trim().isNotEmpty) {
+          if (premTitle.toString().toLowerCase().contains('premium')) {
+            isPremium = true;
+          }
+        }
+
+        if (isPremium) {
+          return "Premium'a Özel";
+        }
+      }
+    }
+
+    // 2. Script Regex Fallback (JSON parse edilemediyse veya partial HTML ise)
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      if (text.contains('premiumDiscountedPrice') ||
+          text.contains('premiumPromotionTitle') ||
+          text.contains('premiumPromotionDiscount')) {
+        final priceMatch = RegExp(r'"premiumDiscountedPrice"\s*:\s*([1-9]\d*(?:\.\d+)?)').firstMatch(text);
+        if (priceMatch != null) return "Premium'a Özel";
+
+        final discMatch = RegExp(r'"premiumPromotionDiscount"\s*:\s*([1-9]\d*(?:\.\d+)?)').firstMatch(text);
+        if (discMatch != null) return "Premium'a Özel";
+
+        final titleMatch = RegExp(r'"premiumPromotionTitle"\s*:\s*"[^"]*premium[^"]*"', caseSensitive: false).firstMatch(text);
+        if (titleMatch != null) return "Premium'a Özel";
+      }
+    }
+
+    // 3. DOM Seçicileri / Metin Kontrolü (Fallback)
+    // SADECE ürün detay / fiyat alanındaki doğrudan Premium indirim metinleri
+    final premiumRegex = RegExp(r"premium['’]?\s*(?:a\s*özel|lulara\s*özel|fiyatı|indirimi)", caseSensitive: false);
+    final elements = document.querySelectorAll('.product-detail span, .product-detail div, .product-price span, .product-price div, span[class*="text-"], div[class*="text-"]');
+    for (final el in elements) {
+      final text = el.text.trim();
+      if (text.isEmpty || text.length > 50) continue;
+      // Header veya navigasyondaki "Premium'u Keşfet" gibi butonları yoksay
+      if (text.toLowerCase().contains('keşfet') || text.toLowerCase().contains('kesfet')) continue;
+
+      if (premiumRegex.hasMatch(text)) {
+        return "Premium'a Özel";
+      }
+    }
+
+    return null;
   }
 
   @override

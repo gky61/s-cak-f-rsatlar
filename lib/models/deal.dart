@@ -1,10 +1,12 @@
 import 'dart:math';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../utils/asset_path_migration.dart';
+import '../utils/price_format_util.dart';
 import 'category.dart';
+
+export '../utils/price_format_util.dart' show PriceFormatUtil, FormattedPriceText, TurkishCurrencyInputFormatter;
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -345,15 +347,7 @@ class Deal {
     double priceValue = 0.0;
     try {
       final priceData = data['price'];
-      if (priceData is String) {
-        // String'den double'a çevir (virgül, nokta, boşluk temizle)
-        final cleaned = priceData.replaceAll(',', '.').replaceAll(' ', '').replaceAll('₺', '').replaceAll('TL', '');
-        priceValue = double.tryParse(cleaned) ?? 0.0;
-      } else if (priceData is num) {
-        priceValue = priceData.toDouble();
-      } else {
-        priceValue = 0.0;
-      }
+      priceValue = PriceFormatUtil.parse(priceData) ?? 0.0;
     } catch (e) {
       _log('⚠️ price parse hatası: $e, değer: ${data['price']}');
       priceValue = 0.0;
@@ -362,12 +356,7 @@ class Deal {
     double? originalPriceValue;
     try {
       final origData = data['originalPrice'] ?? data['original_price'];
-      if (origData is String) {
-        final cleaned = origData.replaceAll(',', '.').replaceAll(' ', '').replaceAll('₺', '').replaceAll('TL', '');
-        originalPriceValue = double.tryParse(cleaned);
-      } else if (origData is num) {
-        originalPriceValue = origData.toDouble();
-      }
+      originalPriceValue = PriceFormatUtil.parse(origData);
     } catch (e) {
       originalPriceValue = null;
     }
@@ -643,79 +632,9 @@ class DynamicCurrencyFormatter {
   DynamicCurrencyFormatter({this.symbol = '₺'});
 
   String format(num? value) {
-    if (value == null) return '';
-
-    final double roundVal = (value.toDouble() * 100).round() / 100;
-    final double absVal = roundVal.abs();
-    final int wholePart = absVal.truncate();
-    final int cents = ((absVal - wholePart) * 100).round();
-
-    // Binlik ayırıcı olarak Nokta (.) kullanılır
-    final String wholeStr = wholePart.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-
-    final String sign = roundVal < 0 ? '-' : '';
-
-    if (cents == 0) {
-      // 1. Tam Sayı Fiyatlar (Kuruşsuz): ₺75, ₺1.500, ₺25.000
-      return '$symbol$sign$wholeStr';
-    } else {
-      // 2. Kuruşlu Fiyatlar (Ondalıklı): ₺75,50, ₺1.999,90, ₺9.509,50, ₺12,99
-      final String centsStr = cents.toString().padLeft(2, '0');
-      return '$symbol$sign$wholeStr,$centsStr';
-    }
+    return PriceFormatUtil.format(value, symbol: symbol);
   }
 }
 
-/// Türk Lirası fiyat gösterimi için özel widget.
-/// ₺ Simgesi rakamın solunda, rakamdan %10 daha küçük boyutta render edilir.
-class FormattedPriceText extends StatelessWidget {
-  final num? value;
-  final TextStyle style;
-  final String symbol;
-  final TextOverflow overflow;
-  final int maxLines;
-
-  const FormattedPriceText({
-    super.key,
-    required this.value,
-    required this.style,
-    this.symbol = '₺',
-    this.overflow = TextOverflow.ellipsis,
-    this.maxLines = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (value == null) return const SizedBox.shrink();
-
-    final formatter = DynamicCurrencyFormatter(symbol: '');
-    final priceStr = formatter.format(value);
-
-    final double baseFontSize = style.fontSize ?? 14.0;
-    final double symbolFontSize = baseFontSize * 0.90; // %10 daha küçük
-
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: symbol,
-            style: style.copyWith(
-              fontSize: symbolFontSize,
-            ),
-          ),
-          TextSpan(
-            text: priceStr,
-            style: style,
-          ),
-        ],
-      ),
-      overflow: overflow,
-      maxLines: maxLines,
-    );
-  }
-}
 
 

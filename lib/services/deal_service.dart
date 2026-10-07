@@ -638,14 +638,7 @@ class DealService {
 
             // 5. Fiyat Düşüşü (Price Drop) Toleransı
             // Eğer yeni girilen fiyat, mevcut aktif fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
-            double existingPrice = 0.0;
-            final rawPrice = dealData['price'];
-            if (rawPrice is num) {
-              existingPrice = rawPrice.toDouble();
-            } else if (rawPrice is String) {
-              final cleaned = rawPrice.replaceAll(',', '.').replaceAll(' ', '').replaceAll('₺', '').replaceAll('TL', '');
-              existingPrice = double.tryParse(cleaned) ?? 0.0;
-            }
+            double existingPrice = PriceFormatUtil.parse(dealData['price']) ?? 0.0;
 
             if (price > 0 && existingPrice > 0 && price <= (existingPrice * 0.95)) {
               _log('🏷️ [DEDUPLICATION] Fiyat düşüşü tespit edildi (Eski: $existingPrice, Yeni: $price). Paylaşıma izin veriliyor.');

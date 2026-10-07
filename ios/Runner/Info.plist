@@ -219,7 +219,7 @@
 		</array>
 		<!-- App Tracking Transparency (ATT) İzni -->
 		<key>NSUserTrackingUsageDescription</key>
-		<string>Size özel indirim ve fırsat bildirimleri ile kişiselleştirilmiş reklam deneyimi sunabilmemiz için izin vermenizi rica ederiz.</string>
+		<string>İlginizi çeken fırsat ve indirimleri size özel sunabilmek ve kişiselleştirilmiş reklam deneyimi sağlayabilmek için verileriniz kullanılır.</string>
 		<!-- Fotoğraf Galerisi Erişimi (Profil fotoğrafı seçimi) -->
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>Profil fotoğrafınızı seçmek ve profilinizi özelleştirmek için fotoğraf galerinize erişim izni gereklidir.</string>

@@ -95,8 +95,32 @@ class _KuponFormPageState extends State<KuponFormPage> {
     );
   }
 
+  Future<void> _pasteKuponKoduFromClipboard() async {
+    HapticFeedback.lightImpact();
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (!mounted) return;
+      if (clipboardData?.text != null && clipboardData!.text!.trim().isNotEmpty) {
+        final text = clipboardData.text!.trim();
+        _kodController.text = text;
+        _kodController.selection = TextSelection.fromPosition(TextPosition(offset: text.length));
+        _formKey.currentState?.validate();
+        FocusScope.of(context).unfocus();
+        setState(() {});
+      } else {
+        _showCustomSnackBar(
+          message: 'Panoda yapıştırılacak kupon kodu bulunamadı.',
+          icon: Icons.content_paste_off_rounded,
+          backgroundColor: Colors.grey[800]!,
+        );
+      }
+    } catch (_) {}
+  }
+
   Future<void> _kuponuPaylas() async {
+    if (_isLoading) return;
     HapticFeedback.mediumImpact();
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) {
       _showCustomSnackBar(
         message: 'Lütfen zorunlu alanları doldurun.',
@@ -121,15 +145,19 @@ class _KuponFormPageState extends State<KuponFormPage> {
           bitisTarihi: _secilenBitisTarihi,
         );
       } else {
-        // Kullanıcı adını Firestore'dan çek
+        // Kullanıcı adını Firestore'dan zaman aşımı korumalı çek
         String kullaniciAdi = '';
         try {
           final userDoc = await FirebaseFirestore.instance
               .collection('users')
               .doc(widget.userId)
-              .get();
+              .get()
+              .timeout(const Duration(seconds: 4));
           if (userDoc.exists) {
-            kullaniciAdi = userDoc.data()?['username'] ?? '';
+            final val = userDoc.data()?['username']?.toString();
+            if (val != null && val.trim().isNotEmpty) {
+              kullaniciAdi = val.trim();
+            }
           }
         } catch (_) {}
 
@@ -180,330 +208,397 @@ class _KuponFormPageState extends State<KuponFormPage> {
 
     return ScaffoldMessenger(
       child: Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(
-          widget.kupon != null ? 'Kupon Düzenle' : 'Kupon Paylaş',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            letterSpacing: -0.3,
-            color: textColor,
-          ),
-        ),
-        centerTitle: true,
         backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 19,
-            color: textColor,
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          title: Text(
+            widget.kupon != null ? 'Kupon Düzenle' : 'Kupon Paylaş',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              letterSpacing: -0.3,
+              color: textColor,
+            ),
           ),
-          onPressed: () => Navigator.of(context).pop(),
-          tooltip: 'Geri',
+          centerTitle: true,
+          backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          leading: IconButton(
+            icon: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 19,
+              color: textColor,
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Geri',
+          ),
         ),
-      ),
-      bottomNavigationBar: _buildStickySubmitBar(isDark),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 36),
-          children: [
-            // 1. KART: MAĞAZA VE KUPON BİLGİLERİ
-            _buildNotchedCardContainer(
-              isDark: isDark,
-              title: 'Mağaza ve Kupon Bilgileri',
-              icon: Icons.storefront_rounded,
-              children: [
-                // Mağaza Dropdown
-                DropdownButtonFormField<String>(
-                  // ignore: deprecated_member_use
-                  value: _secilenMagaza,
-                  menuMaxHeight: 300,
-                  isExpanded: true,
-                  dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
-                  style: TextStyle(color: textColor, fontSize: 13.5, fontWeight: FontWeight.w600),
-                  decoration: InputDecoration(
-                    labelText: 'Mağaza / Satıcı *',
-                    filled: true,
-                    fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    prefixIcon: const Icon(Icons.storefront_rounded, size: 20),
-                  ),
-                  items: _populerMagazalar.map((magaza) {
-                    return DropdownMenuItem<String>(
-                      value: magaza,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+        body: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            children: [
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    physics: const BouncingScrollPhysics(),
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 36),
+                    children: [
+                      // 1. KART: MAĞAZA VE KUPON BİLGİLERİ
+                      _buildNotchedCardContainer(
+                        isDark: isDark,
+                        title: 'Mağaza ve Kupon Bilgileri',
+                        icon: Icons.storefront_rounded,
                         children: [
-                          Image.asset(
-                            StoreAssetHelper.getStoreAsset(magaza),
-                            width: 18,
-                            height: 18,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 18),
+                          // Mağaza Dropdown
+                          DropdownButtonFormField<String>(
+                            // ignore: deprecated_member_use
+                            value: _secilenMagaza,
+                            menuMaxHeight: 300,
+                            isExpanded: true,
+                            dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
+                            style: TextStyle(color: textColor, fontSize: 13.5, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'Mağaza / Satıcı *',
+                              filled: true,
+                              fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                              prefixIcon: const Icon(Icons.storefront_rounded, size: 20),
+                            ),
+                            items: _populerMagazalar.map((magaza) {
+                              return DropdownMenuItem<String>(
+                                value: magaza,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Image.asset(
+                                      StoreAssetHelper.getStoreAsset(magaza),
+                                      width: 18,
+                                      height: 18,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.store, size: 18),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      magaza,
+                                      style: TextStyle(color: textColor, fontSize: 13.5),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                HapticFeedback.selectionClick();
+                                FocusScope.of(context).unfocus();
+                                setState(() {
+                                  _secilenMagaza = val;
+                                });
+                              }
+                            },
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            magaza,
-                            style: TextStyle(color: textColor, fontSize: 13.5),
+
+                          const SizedBox(height: 16),
+
+                          // Kupon Başlığı
+                          TextFormField(
+                            controller: _baslikController,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
+                            style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 13.5),
+                            decoration: InputDecoration(
+                              labelText: 'Kupon Başlığı *',
+                              hintText: 'Örn: 150 TL İndirim veya %20 Sepet İndirimi',
+                              hintStyle: TextStyle(
+                                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                fontSize: 12.5,
+                              ),
+                              filled: true,
+                              fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                              prefixIcon: const Icon(Icons.title_rounded, size: 20),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'Lütfen kupon başlığını girin.';
+                              }
+                              if (val.trim().length < 3) {
+                                return 'Başlık en az 3 karakter olmalıdır.';
+                              }
+                              return null;
+                            },
                           ),
                         ],
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      HapticFeedback.selectionClick();
-                      setState(() {
-                        _secilenMagaza = val;
-                      });
-                    }
-                  },
-                ),
 
-                const SizedBox(height: 16),
+                      const SizedBox(height: 20),
 
-                // Kupon Başlığı
-                TextFormField(
-                  controller: _baslikController,
-                  style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 13.5),
-                  decoration: InputDecoration(
-                    labelText: 'Kupon Başlığı *',
-                    hintText: 'Örn: 150 TL İndirim veya %20 Sepet İndirimi',
-                    hintStyle: TextStyle(
-                      color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                      fontSize: 12.5,
-                    ),
-                    filled: true,
-                    fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    prefixIcon: const Icon(Icons.title_rounded, size: 20),
-                  ),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Lütfen kupon başlığını girin.';
-                    }
-                    if (val.trim().length < 3) {
-                      return 'Başlık en az 3 karakter olmalıdır.';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // 2. KART: KUPON KODU VE GEÇERLİLİK
-            _buildNotchedCardContainer(
-              isDark: isDark,
-              title: 'Kupon Kodu ve Geçerlilik',
-              icon: Icons.vpn_key_rounded,
-              children: [
-                // Kupon Kodu
-                TextFormField(
-                  controller: _kodController,
-                  textCapitalization: TextCapitalization.none,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14.5,
-                    letterSpacing: 0.8,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Kupon Kodu *',
-                    hintText: 'Örn: TREND150 veya SEPET20',
-                    hintStyle: TextStyle(
-                      color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                      fontSize: 12.5,
-                      letterSpacing: 0,
-                    ),
-                    filled: true,
-                    fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    prefixIcon: const Icon(Icons.discount_outlined, size: 20),
-                  ),
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) {
-                      return 'Lütfen kupon kodunu girin.';
-                    }
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Son Kullanma Tarihi Seçici Hücresi
-                InkWell(
-                  onTap: () async {
-                    HapticFeedback.selectionClick();
-                    final secilen = await showDatePicker(
-                      context: context,
-                      initialDate: _secilenBitisTarihi ?? DateTime.now().add(const Duration(days: 7)),
-                      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (secilen != null) {
-                      setState(() {
-                        _secilenBitisTarihi = secilen;
-                      });
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.calendar_today_rounded, size: 18, color: AppTheme.primary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Son Kullanma Tarihi (Opsiyonel)',
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _secilenBitisTarihi == null
-                                    ? 'Belirtilmedi (Süresiz / Bilinmiyor)'
-                                    : '${_secilenBitisTarihi!.day}.${_secilenBitisTarihi!.month}.${_secilenBitisTarihi!.year}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: _secilenBitisTarihi == null
-                                      ? (isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8))
-                                      : textColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (_secilenBitisTarihi != null)
-                          InkWell(
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              setState(() {
-                                _secilenBitisTarihi = null;
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(20),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4.0),
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 16,
-                                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      // 2. KART: KUPON KODU VE GEÇERLİLİK
+                      _buildNotchedCardContainer(
+                        isDark: isDark,
+                        title: 'Kupon Kodu ve Geçerlilik',
+                        icon: Icons.vpn_key_rounded,
+                        trailing: InkWell(
+                          onTap: _pasteKuponKoduFromClipboard,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: isDark ? 0.2 : 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.primary.withValues(alpha: 0.35),
+                                width: 1,
                               ),
                             ),
-                          )
-                        else
-                          const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
-                      ],
-                    ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.content_paste_rounded, size: 12, color: AppTheme.primary),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Panodan Yapıştır',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        children: [
+                          // Kupon Kodu
+                          TextFormField(
+                            controller: _kodController,
+                            textCapitalization: TextCapitalization.characters,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14.5,
+                              letterSpacing: 0.8,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Kupon Kodu *',
+                              hintText: 'Örn: TREND150 veya SEPET20',
+                              hintStyle: TextStyle(
+                                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                fontSize: 12.5,
+                                letterSpacing: 0,
+                              ),
+                              filled: true,
+                              fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                              prefixIcon: const Icon(Icons.discount_outlined, size: 20),
+                              suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: _kodController,
+                                builder: (context, value, _) {
+                                  return value.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear_rounded, size: 18),
+                                          tooltip: 'Temizle',
+                                          onPressed: () {
+                                            HapticFeedback.lightImpact();
+                                            _kodController.clear();
+                                          },
+                                        )
+                                      : IconButton(
+                                          icon: const Icon(Icons.content_paste_rounded, size: 18),
+                                          tooltip: 'Panodan Yapıştır',
+                                          onPressed: _pasteKuponKoduFromClipboard,
+                                        );
+                                },
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return 'Lütfen kupon kodunu girin.';
+                              }
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Son Kullanma Tarihi Seçici Hücresi
+                          InkWell(
+                            onTap: () async {
+                              HapticFeedback.selectionClick();
+                              FocusScope.of(context).unfocus();
+                              final secilen = await showDatePicker(
+                                context: context,
+                                initialDate: _secilenBitisTarihi ?? DateTime.now().add(const Duration(days: 7)),
+                                firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                              );
+                              if (secilen != null) {
+                                setState(() {
+                                  _secilenBitisTarihi = secilen;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                              decoration: BoxDecoration(
+                                color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.calendar_today_rounded, size: 18, color: AppTheme.primary),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Son Kullanma Tarihi (Opsiyonel)',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _secilenBitisTarihi == null
+                                              ? 'Belirtilmedi (Süresiz / Bilinmiyor)'
+                                              : '${_secilenBitisTarihi!.day}.${_secilenBitisTarihi!.month}.${_secilenBitisTarihi!.year}',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: _secilenBitisTarihi == null
+                                                ? (isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8))
+                                                : textColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (_secilenBitisTarihi != null)
+                                    InkWell(
+                                      onTap: () {
+                                        HapticFeedback.lightImpact();
+                                        setState(() {
+                                          _secilenBitisTarihi = null;
+                                        });
+                                      },
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4.0),
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 16,
+                                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 3. KART: KUPON KOŞULLARI VE NOTLAR
+                      _buildNotchedCardContainer(
+                        isDark: isDark,
+                        title: 'Kupon Koşulları & Notlar',
+                        icon: Icons.notes_rounded,
+                        children: [
+                          TextFormField(
+                            controller: _aciklamaController,
+                            style: TextStyle(color: textColor, fontSize: 13, height: 1.45),
+                            maxLines: 4,
+                            minLines: 3,
+                            decoration: InputDecoration(
+                              labelText: 'Kupon Detayları (Opsiyonel)',
+                              hintText: 'Örn: Alt limit 500 TL üzeri alışverişlerde ve seçili kategorilerde geçerlidir...',
+                              hintStyle: TextStyle(
+                                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                fontSize: 12.5,
+                              ),
+                              alignLabelWithHint: true,
+                              filled: true,
+                              fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.all(14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // 3. KART: KUPON KOŞULLARI VE NOTLAR
-            _buildNotchedCardContainer(
-              isDark: isDark,
-              title: 'Kupon Koşulları & Notlar',
-              icon: Icons.notes_rounded,
-              children: [
-                TextFormField(
-                  controller: _aciklamaController,
-                  style: TextStyle(color: textColor, fontSize: 13, height: 1.45),
-                  maxLines: 4,
-                  minLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Kupon Detayları (Opsiyonel)',
-                    hintText: 'Örn: Alt limit 500 TL üzeri alışverişlerde ve seçili kategorilerde geçerlidir...',
-                    hintStyle: TextStyle(
-                      color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                      fontSize: 12.5,
-                    ),
-                    alignLabelWithHint: true,
-                    filled: true,
-                    fillColor: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: isDark ? AppTheme.darkBorder : Colors.transparent),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
-                    ),
-                    contentPadding: const EdgeInsets.all(14),
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+              _buildStickySubmitBar(isDark),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // Helper Notched Card Container (Fieldset Style)
   Widget _buildNotchedCardContainer({
@@ -553,34 +648,43 @@ class _KuponFormPageState extends State<KuponFormPage> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: pageBgColor,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: borderColor.withValues(alpha: 0.85),
-                    width: 1,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: pageBgColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: borderColor.withValues(alpha: 0.85),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 14, color: AppTheme.primary),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 14, color: AppTheme.primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF1E293B),
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-              if (trailing != null) trailing,
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                trailing,
+              ],
             ],
           ),
         ),
@@ -590,10 +694,13 @@ class _KuponFormPageState extends State<KuponFormPage> {
 
   // Sticky Floating Action Bar
   Widget _buildStickySubmitBar(bool isDark) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardOpen = keyboardHeight > 0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, isKeyboardOpen ? 8 : 16),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface.withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95),
+        color: isDark ? AppTheme.darkSurface.withValues(alpha: 0.98) : Colors.white.withValues(alpha: 0.98),
         border: Border(
           top: BorderSide(
             color: isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0),
@@ -602,15 +709,17 @@ class _KuponFormPageState extends State<KuponFormPage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
+        bottom: !isKeyboardOpen,
         child: SizedBox(
+          width: double.infinity,
           height: 46,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _kuponuPaylas,

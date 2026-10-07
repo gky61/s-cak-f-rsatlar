@@ -152,6 +152,9 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
   * **Kaydettiklerim Reklamsızlık İzolasyonu (Fair-Play Prensibi):** Kaydedilenler sayfası Tab 1 ("Kaydettiklerim") kullanıcının satın alma niyetinin en yüksek olduğu şahsi listesidir. Bu sekme **%100 reklamsız** bırakılarak affiliate dönüşüm kayıpları ve kullanıcı terkleri kalıcı olarak engellenmiştir.
   * **Sıfır İhlal & Sıfır Boşluk (House Promo Fallback):** Reklam dolmadığında veya şalter kapalıyken anında yüksek dönüşümlü Kuponlar Keşif Kartı devreye girer.
   * **PlatformView Donma Koruması:** `RepaintBoundary` katman kilitleri kaldırılmış, Android `SurfaceTexture` ilk karesini sorunsuz üreten dünya standardı mimari kurulmuştur.
+* **3.3. Faz 3.5: UMP Consent & ATT UI Sıralama Orkestrasyonu (✅ TAMAMLANDI):**
+  * **Sıfır Çakışma (Zero UI Collision):** İlk açılışta Google AdMob UMP IDFA/GDPR formu açıldığında, FırsatKolik interaktif tanıtım turu (`TutorialSpotlightOverlay`) UMP diyaloğu kapanana kadar `AdManagerService.waitForConsentFlow()` kapısı ile bekletilir.
+  * **Apple ATT Uyumu:** `Info.plist` içine `NSUserTrackingUsageDescription` tanımlanarak Apple App Store Guideline 5.1.2 politikasına %100 uyum sağlandı.
 
 ---
 

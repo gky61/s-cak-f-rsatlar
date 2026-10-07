@@ -208,8 +208,7 @@ class UserService {
         final data = doc.data();
         final dealId = doc.id;
         final baslik = (data['baslik'] ?? data['title'] ?? 'Kaydedilen Fırsat').toString();
-        final fiyatStr = (data['fiyat'] ?? data['price'])?.toString() ?? '0';
-        final fiyat = double.tryParse(fiyatStr) ?? 0.0;
+        final fiyat = PriceFormatUtil.parse(data['fiyat'] ?? data['price']) ?? 0.0;
         final store = (data['magazaAdi'] ?? data['store'] ?? 'Mağaza').toString();
         final link = (data['link'] ?? data['url'] ?? '').toString();
         final imageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'] ?? '').toString();
@@ -273,8 +272,7 @@ class UserService {
         final data = doc.data() as Map<String, dynamic>? ?? {};
         final dealId = doc.id;
         final baslik = (data['baslik'] ?? data['title'] ?? 'Kaydedilen Fırsat').toString();
-        final fiyatStr = (data['fiyat'] ?? data['price'])?.toString() ?? '0';
-        final fiyat = double.tryParse(fiyatStr) ?? 0.0;
+        final fiyat = PriceFormatUtil.parse(data['fiyat'] ?? data['price']) ?? 0.0;
         final store = (data['magazaAdi'] ?? data['store'] ?? 'Mağaza').toString();
         final link = (data['link'] ?? data['url'] ?? '').toString();
         final imageUrl = (data['imageUrl'] ?? data['gorselUrl'] ?? data['image_url'] ?? '').toString();
