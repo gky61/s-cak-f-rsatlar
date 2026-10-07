@@ -89,26 +89,76 @@ class BoynerScraper extends BaseProductScraper {
     return null;
   }
 
-  @override
-  Future<double?> scrapePrice(dom.Document document) async {
-    // 1. DOM selector for main price (e.g. [class*="priceMain"])
-    final mainPriceElements = document.querySelectorAll('[class*="priceMain"]');
-    for (final el in mainPriceElements) {
-      final text = el.text.trim();
-      if (text.isNotEmpty) {
-        final parsed = parsePriceText(text);
-        if (parsed != null && parsed > 0) return parsed;
-      }
-    }
-
-    // 2. Script/JSON regex scan for CampaignPrice > 0
+  Map<String, dynamic>? _extractBoynerPriceInfo(dom.Document document) {
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
-      final matches = RegExp(r'"CampaignPrice"\s*:\s*(\d+(?:\.\d+)?)', caseSensitive: false).allMatches(text);
-      for (final m in matches) {
-        final val = double.tryParse(m.group(1)!);
-        if (val != null && val > 0) return val;
+      if (!text.contains('"PriceInfo"')) continue;
+
+      final match = RegExp(r'"PriceInfo"\s*:\s*\{([^}]+)\}').firstMatch(text);
+      if (match != null) {
+        final content = match.group(1);
+        if (content != null) {
+          final priceMatch = RegExp(r'"Price"\s*:\s*(?:"([^"]+)"|(\d+(?:\.\d+)?))').firstMatch(content);
+          final oldPriceMatch = RegExp(r'"OldPrice"\s*:\s*(?:"([^"]+)"|(\d+(?:\.\d+)?))').firstMatch(content);
+          final campaignMatch = RegExp(r'"CampaignInfo"\s*:\s*"([^"]+)"').firstMatch(content);
+
+          final rawPrice = priceMatch?.group(1) ?? priceMatch?.group(2);
+          final rawOldPrice = oldPriceMatch?.group(1) ?? oldPriceMatch?.group(2);
+          final rawCampaign = campaignMatch?.group(1);
+
+          final parsedPrice = rawPrice != null ? parsePriceText(rawPrice) : null;
+          final parsedOldPrice = rawOldPrice != null ? parsePriceText(rawOldPrice) : null;
+
+          if (parsedPrice != null && parsedPrice > 0) {
+            return {
+              'price': parsedPrice,
+              'originalPrice': parsedOldPrice,
+              'campaignInfo': rawCampaign?.trim(),
+            };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<double?> scrapePrice(dom.Document document) async {
+    // 1. En güvenilir kaynak: Next.js script verisindeki PriceInfo
+    final priceInfo = _extractBoynerPriceInfo(document);
+    if (priceInfo != null && priceInfo['price'] != null) {
+      return priceInfo['price'] as double;
+    }
+
+    // 2. DOM selector for main price: [class*="priceMain"]
+    final mainPriceElements = document.querySelectorAll('[class*="priceMain"]');
+    for (final el in mainPriceElements) {
+      // DOM elemanının kopyasını alıp içindeki "Sepette" rozetini fiyattan ayıklıyoruz
+      final clone = el.clone(true);
+      final badgeElements = clone.querySelectorAll('[class*="priceMainText"], [class*="price_priceMainText"]');
+      for (final badge in badgeElements) {
+        badge.remove();
+      }
+
+      String cleanText = clone.text.trim();
+      if (cleanText.isNotEmpty) {
+        cleanText = cleanText.replaceAll(RegExp(r'^(?:Sepette(?:\s*İndirim)?|Özel\s*Fiyat)\s*', caseSensitive: false), '').trim();
+        final parsed = parsePriceText(cleanText);
+        if (parsed != null && parsed > 0) {
+          // 2.1 Sanity Check: Eğer bulunan fiyat 100 TL altıysa ama JSON-LD fiyatı 100 TL üzerindeyse
+          // (örn. 11.999 TL'nin 11.99 olarak kırpılması anomalisi), JSON-LD teyit edilir
+          if (parsed < 100) {
+            final productJson = findProductJsonLd(document);
+            if (productJson != null) {
+              final priceLd = extractPriceFromProductJson(productJson);
+              if (priceLd != null && priceLd > 100 && (priceLd / parsed) > 50) {
+                return priceLd;
+              }
+            }
+          }
+          return parsed;
+        }
       }
     }
 
@@ -121,24 +171,42 @@ class BoynerScraper extends BaseProductScraper {
       }
     }
 
+    // 4. Legacy Script regex scan for CampaignPrice > 0
+    final scripts = document.querySelectorAll('script');
+    for (final script in scripts) {
+      final text = script.text;
+      final matches = RegExp(r'"CampaignPrice"\s*:\s*(\d+(?:\.\d+)?)', caseSensitive: false).allMatches(text);
+      for (final m in matches) {
+        final val = double.tryParse(m.group(1)!);
+        if (val != null && val > 0) return val;
+      }
+    }
+
     return null;
   }
 
   @override
   FutureOr<double?> scrapeOriginalPrice(dom.Document document, double? currentPrice) {
-    if (currentPrice == null || currentPrice <= 0) return null;
+    if (currentPrice != null && currentPrice <= 0) return null;
 
-    // 1. DOM selector for old price (e.g. [class*="priceOldPrice"])
+    // 1. En güvenilir kaynak: Next.js script verisindeki PriceInfo.OldPrice
+    final priceInfo = _extractBoynerPriceInfo(document);
+    final infoOldPrice = priceInfo?['originalPrice'] as double?;
+    if (infoOldPrice != null && (currentPrice == null || infoOldPrice > currentPrice)) {
+      return infoOldPrice;
+    }
+
+    // 2. DOM selector for old price: [class*="priceOldPrice"]
     final oldPriceElements = document.querySelectorAll('[class*="priceOldPrice"]');
     for (final el in oldPriceElements) {
       final text = el.text.trim();
       if (text.isNotEmpty) {
         final parsed = parsePriceText(text);
-        if (parsed != null && parsed > currentPrice) return parsed;
+        if (parsed != null && (currentPrice == null || parsed > currentPrice)) return parsed;
       }
     }
 
-    // 2. Script/JSON regex scan for StrikeThrough / ActualPrice > currentPrice
+    // 3. Script/JSON regex scan for StrikeThrough / ActualPrice > currentPrice
     final scripts = document.querySelectorAll('script');
     for (final script in scripts) {
       final text = script.text;
@@ -148,7 +216,29 @@ class BoynerScraper extends BaseProductScraper {
       ).allMatches(text);
       for (final m in matches) {
         final val = double.tryParse(m.group(1)!);
-        if (val != null && val > currentPrice) return val;
+        if (val != null && (currentPrice == null || val > currentPrice)) return val;
+      }
+    }
+
+    return null;
+  }
+
+  @override
+  FutureOr<String?> scrapePriceLabel(dom.Document document) {
+    // 1. PriceInfo.CampaignInfo ("Sepette %28 İndirim", "%48 İndirim" vb.)
+    final priceInfo = _extractBoynerPriceInfo(document);
+    final campaign = priceInfo?['campaignInfo'] as String?;
+    if (campaign != null && campaign.isNotEmpty) {
+      return campaign;
+    }
+
+    // 2. DOM selector [class*="priceMainText"]
+    final badgeEl = document.querySelector('[class*="priceMainText"], [class*="price_priceMainText"]');
+    if (badgeEl != null) {
+      final txt = badgeEl.text.trim();
+      if (txt.isNotEmpty) {
+        if (txt.toLowerCase() == 'sepette') return 'Sepette İndirim';
+        return txt;
       }
     }
 

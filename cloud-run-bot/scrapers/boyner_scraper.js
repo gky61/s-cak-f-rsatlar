@@ -34,22 +34,82 @@ class BoynerScraper extends BaseProductScraper {
     return null;
   }
 
+  _extractBoynerPriceInfo($) {
+    const scripts = $('script');
+    for (let i = 0; i < scripts.length; i++) {
+      const text = $(scripts[i]).text();
+      if (!text || !text.includes('"PriceInfo"')) continue;
+
+      const match = text.match(/"PriceInfo"\s*:\s*\{([^}]+)\}/);
+      if (match && match[1]) {
+        const content = match[1];
+        const priceMatch = content.match(/"Price"\s*:\s*(?:"([^"]+)"|(\d+(?:\.\d+)?))/);
+        const oldPriceMatch = content.match(/"OldPrice"\s*:\s*(?:"([^"]+)"|(\d+(?:\.\d+)?))/);
+        const campaignMatch = content.match(/"CampaignInfo"\s*:\s*"([^"]+)"/);
+
+        const rawPrice = priceMatch ? (priceMatch[1] || priceMatch[2]) : null;
+        const rawOldPrice = oldPriceMatch ? (oldPriceMatch[1] || oldPriceMatch[2]) : null;
+        const rawCampaign = campaignMatch ? campaignMatch[1] : null;
+
+        const parsedPrice = rawPrice ? this.parsePriceText(rawPrice) : null;
+        const parsedOldPrice = rawOldPrice ? this.parsePriceText(rawOldPrice) : null;
+
+        if (parsedPrice != null && parsedPrice > 0) {
+          return {
+            price: parsedPrice,
+            originalPrice: parsedOldPrice,
+            campaignInfo: rawCampaign ? rawCampaign.trim() : null,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
   scrapePrice($) {
-    // 1. DOM selector for main price (e.g. [class*="priceMain"])
-    let mainPriceText = '';
+    // 1. En güvenilir kaynak: Next.js script verisindeki PriceInfo
+    const priceInfo = this._extractBoynerPriceInfo($);
+    if (priceInfo && priceInfo.price) {
+      return priceInfo.price;
+    }
+
+    // 2. DOM selector for main price: [class*="priceMain"]
+    let domPrice = null;
     $('[class*="priceMain"]').each((_, el) => {
-      const txt = $(el).text().trim();
-      if (txt && !mainPriceText) {
-        mainPriceText = txt;
+      if (domPrice) return;
+      const clone = $(el).clone();
+      clone.find('[class*="priceMainText"], [class*="price_priceMainText"]').remove();
+      let cleanText = clone.text().trim();
+      if (cleanText) {
+        cleanText = cleanText.replace(/^(?:Sepette(?:\s*İndirim)?|Özel\s*Fiyat)\s*/i, '').trim();
+        const p = this.parsePriceText(cleanText);
+        if (p != null && p > 0) {
+          // 2.1 Sanity Check: Eğer bulunan fiyat 100 TL altıysa ama JSON-LD fiyatı 100 TL üzerindeyse
+          if (p < 100) {
+            const product = this.findProductJsonLd($);
+            if (product) {
+              const priceLd = this.extractPriceFromProductJson(product);
+              if (priceLd != null && priceLd > 100 && (priceLd / p) > 50) {
+                domPrice = priceLd;
+                return;
+              }
+            }
+          }
+          domPrice = p;
+        }
       }
     });
 
-    if (mainPriceText) {
-      const p = this.parsePriceText(mainPriceText);
-      if (p != null && p > 0) return p;
+    if (domPrice) return domPrice;
+
+    // 3. Fallback to JSON-LD price
+    const product = this.findProductJsonLd($);
+    if (product) {
+      const price = this.extractPriceFromProductJson(product);
+      if (price != null && price > 0) return price;
     }
 
-    // 2. Script/JSON regex scan for CampaignPrice > 0
+    // 4. Legacy Script/JSON regex scan for CampaignPrice > 0
     const html = $.html();
     const matches = html.matchAll(/"CampaignPrice":\s*(\d+(?:\.\d+)?)/gi);
     for (const m of matches) {
@@ -59,18 +119,19 @@ class BoynerScraper extends BaseProductScraper {
       }
     }
 
-    // 3. Fallback to JSON-LD price
-    const product = this.findProductJsonLd($);
-    if (product) {
-      const price = this.extractPriceFromProductJson(product);
-      if (price != null && price > 0) return price;
-    }
-
     return null;
   }
 
   scrapeOriginalPrice($, currentPrice) {
-    // 1. DOM selector for old price (e.g. [class*="priceOldPrice"])
+    if (currentPrice != null && currentPrice <= 0) return null;
+
+    // 1. En güvenilir kaynak: Next.js script verisindeki PriceInfo.OldPrice
+    const priceInfo = this._extractBoynerPriceInfo($);
+    if (priceInfo && priceInfo.originalPrice != null && (currentPrice == null || priceInfo.originalPrice > currentPrice)) {
+      return priceInfo.originalPrice;
+    }
+
+    // 2. DOM selector for old price (e.g. [class*="priceOldPrice"])
     let oldPriceText = '';
     $('[class*="priceOldPrice"]').each((_, el) => {
       const txt = $(el).text().trim();
@@ -81,18 +142,38 @@ class BoynerScraper extends BaseProductScraper {
 
     if (oldPriceText) {
       const oldPrice = this.parsePriceText(oldPriceText);
-      if (oldPrice != null && currentPrice != null && oldPrice > currentPrice) {
+      if (oldPrice != null && (currentPrice == null || oldPrice > currentPrice)) {
         return oldPrice;
       }
     }
 
-    // 2. Script/JSON regex scan for StrikeThrough / ActualPrice > currentPrice
+    // 3. Script/JSON regex scan for StrikeThrough / ActualPrice > currentPrice
     const html = $.html();
     const matches = html.matchAll(/"(?:StrikeThroughPriceToShowOnScreen|ActualPriceToShowOnScreen)":\s*(\d+(?:\.\d+)?)/gi);
     for (const m of matches) {
       const val = parseFloat(m[1]);
-      if (!isNaN(val) && currentPrice != null && val > currentPrice) {
+      if (!isNaN(val) && (currentPrice == null || val > currentPrice)) {
         return val;
+      }
+    }
+
+    return null;
+  }
+
+  scrapePriceLabel($) {
+    // 1. PriceInfo.CampaignInfo ("Sepette %28 İndirim", "%48 İndirim" vb.)
+    const priceInfo = this._extractBoynerPriceInfo($);
+    if (priceInfo && priceInfo.campaignInfo) {
+      return priceInfo.campaignInfo;
+    }
+
+    // 2. DOM selector [class*="priceMainText"]
+    const badgeEl = $('[class*="priceMainText"], [class*="price_priceMainText"]').first();
+    if (badgeEl.length > 0) {
+      const txt = badgeEl.text().trim();
+      if (txt) {
+        if (txt.toLowerCase() === 'sepette') return 'Sepette İndirim';
+        return txt;
       }
     }
 
