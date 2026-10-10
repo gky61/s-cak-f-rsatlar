@@ -624,31 +624,162 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
             errLower.contains('yeniden doğrulama') ||
             errLower.contains('yeniden giriş');
         final isPasswordProvider = _authService.currentUser?.providerData.any((p) => p.providerId == 'password') ?? false;
+        final isGoogleProvider = _authService.currentUser?.providerData.any((p) => p.providerId == 'google.com') ?? false;
+        final isAppleProvider = _authService.currentUser?.providerData.any((p) => p.providerId == 'apple.com') ?? false;
 
-        if (isRecentLoginReq && isPasswordProvider && mounted) {
-          // E-posta kullanıcısından şifre isteyerek anında yeniden doğrulama ve silme dene
-          final reauthPassword = await _showReauthPasswordDialog();
-          if (reauthPassword != null && reauthPassword.isNotEmpty) {
-            try {
-              await _authService.deleteAccount(reauthPassword: reauthPassword);
-              if (mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  (route) => false,
-                );
+        if (isRecentLoginReq && mounted) {
+          if (isPasswordProvider) {
+            // E-posta kullanıcısından şifre isteyerek anında yeniden doğrulama ve silme dene
+            final reauthPassword = await _showReauthPasswordDialog();
+            if (reauthPassword != null && reauthPassword.isNotEmpty) {
+              try {
+                await _authService.deleteAccount(reauthPassword: reauthPassword);
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                  return;
+                }
+              } catch (reauthErr) {
+                if (mounted) {
+                  final cleanMsg = reauthErr.toString().replaceAll('AuthException: ', '').replaceAll('Exception: ', '').trim();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Doğrulama başarısız: $cleanMsg'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
                 return;
               }
-            } catch (reauthErr) {
-              if (mounted) {
-                final cleanMsg = reauthErr.toString().replaceAll('AuthException: ', '').replaceAll('Exception: ', '').trim();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Doğrulama başarısız: $cleanMsg'),
-                    backgroundColor: Colors.red,
-                    behavior: SnackBarBehavior.floating,
+            } else {
+              // Kullanıcı re-auth diyaloğunda "Vazgeç" seçti; hata mesajı göstermeden çık
+              return;
+            }
+          } else if (isGoogleProvider || isAppleProvider) {
+            final providerName = isAppleProvider ? 'Apple' : 'Google';
+            final confirmOAuth = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: surfaceColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: borderColor, width: 1),
+                ),
+                titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: isDark ? 0.20 : 0.10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.shield_outlined, color: AppTheme.primary, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '$providerName ile Doğrulama',
+                        style: TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w700,
+                          color: textMain,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                content: Text(
+                  'Güvenlik nedeniyle hesabınızı kalıcı olarak silmeden önce $providerName ile oturumunuzu yeniden doğrulamanız gerekmektedir.',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: textSub,
+                    height: 1.4,
                   ),
-                );
+                ),
+                actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                actions: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: BorderSide(color: borderColor),
+                          ),
+                          child: Text(
+                            'Vazgeç',
+                            style: TextStyle(
+                              color: textSub,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade700,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text(
+                            'Doğrula ve Sil',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+
+            if (confirmOAuth == true) {
+              try {
+                String? appleCode;
+                if (isAppleProvider) {
+                  appleCode = await _authService.reauthenticateWithApple();
+                } else {
+                  await _authService.reauthenticateWithGoogle();
+                }
+                await _authService.deleteAccount(appleAuthorizationCode: appleCode);
+                if (mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                  return;
+                }
+              } catch (oauthErr) {
+                if (mounted) {
+                  final cleanMsg = oauthErr.toString().replaceAll('AuthException: ', '').replaceAll('Exception: ', '').trim();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Doğrulama başarısız: $cleanMsg'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+                return;
               }
+            } else {
               return;
             }
           }
@@ -676,57 +807,120 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
     final passwordController = TextEditingController();
     bool obscure = true;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark ? AppTheme.darkSurface : Colors.white;
+    final borderColor = isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0);
+    final textMain = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
+    final textSub = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
     try {
       return await showDialog<String>(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setDialogState) => AlertDialog(
-            backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Row(
+            backgroundColor: surfaceColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: borderColor, width: 1),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            title: Row(
               children: [
-                Icon(Icons.shield_outlined, color: AppTheme.primary),
-                SizedBox(width: 10),
-                Text('Güvenlik Doğrulaması', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: isDark ? 0.20 : 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.shield_outlined, color: AppTheme.primary, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Güvenlik Doğrulaması',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: textMain,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Hesabınızı güvenle silebilmek için lütfen mevcut şifrenizi girin.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  style: TextStyle(fontSize: 13.5, color: textSub, height: 1.4),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: passwordController,
                   obscureText: obscure,
                   autofocus: true,
+                  style: TextStyle(color: textMain, fontSize: 14),
                   decoration: InputDecoration(
                     labelText: 'Şifreniz',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                    labelStyle: TextStyle(color: textSub),
+                    prefixIcon: Icon(Icons.lock_outline_rounded, size: 20, color: textSub),
                     suffixIcon: IconButton(
-                      icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                      icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20, color: textSub),
                       onPressed: () => setDialogState(() => obscure = !obscure),
                     ),
                     filled: true,
                     fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: borderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: borderColor)),
                   ),
                 ),
               ],
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Vazgeç'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, passwordController.text),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
-                child: const Text('Onayla ve Sil'),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, null),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: borderColor),
+                      ),
+                      child: Text(
+                        'Vazgeç',
+                        style: TextStyle(
+                          color: textSub,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, passwordController.text),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text(
+                        'Onayla ve Sil',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

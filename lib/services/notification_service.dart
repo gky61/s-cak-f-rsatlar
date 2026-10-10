@@ -90,6 +90,11 @@ class NotificationService {
   static String? _lastRegisteredToken;
   static DateTime? _lastDeviceTokenRegisterTime;
   static const Duration _deviceTokenRegisterCooldown = Duration(minutes: 30);
+  static const Duration _deviceTokenRegisterDiskTTL = Duration(hours: 24);
+  static const String _prefFcmDocId = 'fcm_last_registered_doc_id';
+  static const String _prefFcmToken = 'fcm_last_registered_token';
+  static const String _prefFcmTimestamp = 'fcm_last_registered_timestamp';
+  static const int _maxActiveDevicesPerUser = 3;
   static Future<void>? _inFlightTokenSave;
 
   static bool _isAdminTopicSubscribedInSession = false;
@@ -379,6 +384,12 @@ class NotificationService {
       _lastDeviceTokenRegisterTime = null;
       _isAdminTopicSubscribedInSession = false;
       _lastSubscribedAdminUid = null;
+
+      // FS-AUTH-04: Disk üzerindeki FCM önbelleğini de temizle
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefFcmDocId);
+      await prefs.remove(_prefFcmToken);
+      await prefs.remove(_prefFcmTimestamp);
     } catch (e) {
       _log('⚠️ Error clearing device token: $e');
     }
@@ -634,23 +645,50 @@ class NotificationService {
       }
       
       if (token != null && resolvedUserId != null) {
+        final prefs = await SharedPreferences.getInstance();
         final deviceId = await _getOrCreateDeviceId();
         final deviceIdDoc = '${resolvedUserId}_$deviceId';
 
-        // Oturum içi ve süre tabanlı mükerrer kayıt kontrolü (Firestore yazma ve sorgu tasarrufu)
-        if (!forceRefresh &&
-            _lastRegisteredDocId == deviceIdDoc &&
-            _lastRegisteredToken == token &&
-            _lastDeviceTokenRegisterTime != null &&
-            DateTime.now().difference(_lastDeviceTokenRegisterTime!) < _deviceTokenRegisterCooldown) {
-          _log('ℹ️ Cihaz token\'ı güncel, mükerrer Firestore kaydı atlandı: $deviceIdDoc');
-          return;
+        // FS-AUTH-04: Thundering Herd Kalkanı (Bellek + Kalıcı Disk Önbelleği)
+        // 35.000 eşzamanlı push tıklamasında veya soğuk başlatmada disk kontrolüyle 0 Firestore çağrısı
+        if (!forceRefresh) {
+          // 1. RAM Önbellek kontrolü (Aynı oturum içi hızlı baypas)
+          if (_lastRegisteredDocId == deviceIdDoc &&
+              _lastRegisteredToken == token &&
+              _lastDeviceTokenRegisterTime != null &&
+              DateTime.now().difference(_lastDeviceTokenRegisterTime!) < _deviceTokenRegisterCooldown) {
+            _ensureTokenRefreshListener(resolvedUserId, deviceId);
+            _log('ℹ️ Cihaz token\'ı RAM önbelleğinde güncel, mükerrer Firestore kaydı atlandı: $deviceIdDoc');
+            return;
+          }
+
+          // 2. Kalıcı Disk Önbellek kontrolü (Soğuk başlatma / push açılışı sonrası 24 saatlik kalkan)
+          final diskDocId = prefs.getString(_prefFcmDocId);
+          final diskToken = prefs.getString(_prefFcmToken);
+          final diskTimestampMs = prefs.getInt(_prefFcmTimestamp);
+          if (diskDocId == deviceIdDoc &&
+              diskToken == token &&
+              diskTimestampMs != null) {
+            final diskTime = DateTime.fromMillisecondsSinceEpoch(diskTimestampMs);
+            if (DateTime.now().difference(diskTime) < _deviceTokenRegisterDiskTTL) {
+              _lastRegisteredDocId = deviceIdDoc;
+              _lastRegisteredToken = token;
+              _lastDeviceTokenRegisterTime = diskTime;
+              _ensureTokenRefreshListener(resolvedUserId, deviceId);
+              _log('ℹ️ Cihaz token\'ı disk önbelleğinde güncel (son 24 saat), Thundering Herd önlendi: $deviceIdDoc');
+              // Aktif kelime konularını arka planda senkronize et
+              resubscribeAllKeywordTopics().catchError((_) {});
+              return;
+            }
+          }
         }
         
         final permissionStatus = await checkSystemPermissionStatus();
         final platform = kIsWeb ? 'web' : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
 
-        // Mükerrer push bildirimlerini önlemek için kullanıcının eski aktif cihaz kayıtlarını pasife çek
+        // FS-AUTH-06: Sil-Yükle Tekilleştirmesi ve Maksimum 3 Cihaz Tavanı Budama (WriteBatch)
+        final batch = _firestore.batch();
+
         try {
           final existingSnap = await _firestore
               .collection('userDevices')
@@ -658,21 +696,61 @@ class NotificationService {
               .where('active', isEqualTo: true)
               .get();
 
+          final otherActiveDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
           for (final doc in existingSnap.docs) {
-            if (doc.id != deviceIdDoc) {
-              await doc.reference.update({
+            if (doc.id == deviceIdDoc) continue;
+
+            final data = doc.data();
+            final docToken = data['fcmToken'] as String?;
+
+            // A) Aynı FCM Token'ına sahip eski kayıt (Sil-Yükle sonucu oluşan zombi kayıt)
+            if (docToken != null && docToken == token) {
+              batch.update(doc.reference, {
                 'active': false,
-                'deactivatedReason': 'new_device_login',
+                'deactivatedReason': 'reinstalled_duplicate_token',
                 'updatedAt': FieldValue.serverTimestamp(),
               });
-              _log('🧹 Eski cihaz kaydı pasife çekildi: ${doc.id}');
+              _log('🧹 Sil-yükle mükerrer token kaydı budandı: ${doc.id}');
+            } else {
+              // B) Farklı cihaz (tablet, ikinci telefon vb.)
+              otherActiveDocs.add(doc);
+            }
+          }
+
+          // Maksimum 3 aktif cihaz kuralı: Mevcut cihaz (1) + diğer aktif cihazlar (maks 2) = 3
+          // Eğer 2'den fazla aktif cihaz varsa en eskileri pasife çek
+          const maxAllowedOtherDevices = _maxActiveDevicesPerUser - 1; // 2
+          if (otherActiveDocs.length > maxAllowedOtherDevices) {
+            // Tarihe göre sırala: En yeni ilk gelsin
+            otherActiveDocs.sort((a, b) {
+              final aTime = (a.data()['lastSeenAt'] as Timestamp?)?.toDate() ??
+                  (a.data()['updatedAt'] as Timestamp?)?.toDate() ??
+                  DateTime.fromMillisecondsSinceEpoch(0);
+              final bTime = (b.data()['lastSeenAt'] as Timestamp?)?.toDate() ??
+                  (b.data()['updatedAt'] as Timestamp?)?.toDate() ??
+                  DateTime.fromMillisecondsSinceEpoch(0);
+              return bTime.compareTo(aTime);
+            });
+
+            // İlk maxAllowedOtherDevices (2) tanesini koru, geri kalanları buda
+            for (var i = maxAllowedOtherDevices; i < otherActiveDocs.length; i++) {
+              final pruneDoc = otherActiveDocs[i];
+              batch.update(pruneDoc.reference, {
+                'active': false,
+                'deactivatedReason': 'device_limit_exceeded',
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+              _log('✂️ 3 cihaz tavanı aşıldı, eski cihaz budandı: ${pruneDoc.id}');
             }
           }
         } catch (e) {
-          _log('⚠️ Eski cihaz kayıtları temizlenirken hata (devam ediliyor): $e');
+          _log('⚠️ userDevices tarama / budama hatası (devam ediliyor): $e');
         }
 
-        await _firestore.collection('userDevices').doc(deviceIdDoc).set({
+        // Mevcut cihaz kaydını batch'e ekle
+        final currentDeviceRef = _firestore.collection('userDevices').doc(deviceIdDoc);
+        batch.set(currentDeviceRef, {
           'uid': resolvedUserId,
           'deviceId': deviceId,
           'platform': platform,
@@ -682,27 +760,30 @@ class NotificationService {
           'lastSeenAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+
+        // Atomik commit: Tüm budamalar ve mevcut cihaz kaydı tek bir istekte tamamlanır
+        await batch.commit();
         
         _lastRegisteredDocId = deviceIdDoc;
         _lastRegisteredToken = token;
         _lastDeviceTokenRegisterTime = DateTime.now();
+
+        // FS-AUTH-04: Disk önbelleğini güncelle (24 saatlik kalıcı kalkan)
+        try {
+          await prefs.setString(_prefFcmDocId, deviceIdDoc);
+          await prefs.setString(_prefFcmToken, token);
+          await prefs.setInt(_prefFcmTimestamp, _lastDeviceTokenRegisterTime!.millisecondsSinceEpoch);
+        } catch (prefErr) {
+          _log('⚠️ FCM disk önbelleği yazma hatası (tolere edildi): $prefErr');
+        }
 
         _log('✅ User device / FCM Token registered in userDevices: $deviceIdDoc');
         
         // FS-25: Aktif kelime konularını arka planda senkronize et
         resubscribeAllKeywordTopics().catchError((_) {});
         
-        // Tekil token refresh dinleyicisi
-        _tokenRefreshSub?.cancel();
-        _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) async {
-          final currentUserId = _auth.currentUser?.uid ?? resolvedUserId;
-          await _firestore.collection('userDevices').doc('${currentUserId}_$deviceId').set({
-            'fcmToken': newToken,
-            'active': true,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-          _log('✅ User device FCM Token refreshed & re-activated in Firestore');
-        });
+        // Tekil token refresh dinleyicisini garantiye al
+        _ensureTokenRefreshListener(resolvedUserId, deviceId);
       }
     } catch (e) {
       _log('❌ FCM Token kaydetme hatası: $e');
@@ -713,6 +794,36 @@ class NotificationService {
       }
       _inFlightTokenSave = null;
     }
+  }
+
+  /// FCM token yenilendiğinde (onTokenRefresh) Firestore ve yerel önbellekleri senkronize eden güvenli dinleyici
+  void _ensureTokenRefreshListener(String userId, String deviceId) {
+    if (_tokenRefreshSub != null) return;
+    _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) async {
+      try {
+        final currentUserId = _auth.currentUser?.uid ?? userId;
+        final docId = '${currentUserId}_$deviceId';
+        await _firestore.collection('userDevices').doc(docId).set({
+          'fcmToken': newToken,
+          'active': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // Bellek ve disk önbelleğini de derhal senkronize et
+        _lastRegisteredDocId = docId;
+        _lastRegisteredToken = newToken;
+        _lastDeviceTokenRegisterTime = DateTime.now();
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_prefFcmDocId, docId);
+        await prefs.setString(_prefFcmToken, newToken);
+        await prefs.setInt(_prefFcmTimestamp, _lastDeviceTokenRegisterTime!.millisecondsSinceEpoch);
+
+        _log('✅ User device FCM Token refreshed & re-activated in Firestore & cache');
+      } catch (e) {
+        _log('⚠️ onTokenRefresh senkronizasyon hatası: $e');
+      }
+    });
   }
 
   /// iOS ve Android bildirim merkezini ve rozet sayısını temizle

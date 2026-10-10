@@ -7,6 +7,7 @@ import '../models/user.dart';
 import '../models/deal.dart';
 import '../utils/badge_helper.dart';
 import 'deal_service.dart';
+import 'auth_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -627,6 +628,8 @@ class UserService {
 
   Future<bool> toggleUserAdminStatus(String userId, bool makeAdmin) async {
     try {
+      // FS-AUTH-07: Hassas admin rol değişikliğinde canlı yetki doğrulaması
+      await AuthService().verifyAdminPrivilege();
       await _firestore.collection('users').doc(userId).update({
         'isAdmin': makeAdmin,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -643,6 +646,8 @@ class UserService {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) throw Exception('Giriş yapmış admin bulunamadı.');
+      // FS-AUTH-07: Kullanıcı silme işleminde canlı yetki doğrulaması (Fail-Closed)
+      await AuthService().verifyAdminPrivilege();
       final idToken = await currentUser.getIdToken();
       final projectId = _firestore.app.options.projectId;
       final uri = Uri.parse('https://us-central1-$projectId.cloudfunctions.net/adminDeleteUser');

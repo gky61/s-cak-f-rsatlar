@@ -4622,6 +4622,83 @@ exports.deleteMyAccount = functions.https.onCall(wrapCall('deleteMyAccount', asy
 }));
 
 /**
+ * FS-AUTH-08: APPLE TOKEN REVOCATION (Callable) - Apple Guideline 5.1.1(v) Uyumlu
+ * Apple ile oturum açmış kullanıcı hesabını sildiğinde Apple yetkilendirme jetonunu iptal eder.
+ */
+exports.revokeAppleToken = functions.https.onCall(wrapCall('revokeAppleToken', async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
+  }
+
+  const userId = context.auth.uid;
+  functions.logger.info(`🍏 revokeAppleToken çağrıldı: ${userId}`);
+
+  try {
+    const rawPrivateKey = process.env.APPLE_PRIVATE_KEY || functions.config().apple?.private_key;
+    const appleKeyId = process.env.APPLE_KEY_ID || functions.config().apple?.key_id;
+    const appleTeamId = process.env.APPLE_TEAM_ID || functions.config().apple?.team_id;
+    const appleClientId = process.env.APPLE_CLIENT_ID || functions.config().apple?.client_id || 'com.firsatkolik.app';
+    const authCodeOrToken = (data && (data.authorizationCode || data.token)) ? String(data.authorizationCode || data.token).trim() : null;
+
+    if (rawPrivateKey && appleKeyId && appleTeamId && authCodeOrToken) {
+      functions.logger.info(`🍏 Apple API revoke işlemi yürütülüyor (${userId})`);
+      const crypto = require('crypto');
+
+      // Private Key formatı düzeltme (Tek satırlık env değişkenlerindeki \n karakterlerini düzelt)
+      const formattedPrivateKey = rawPrivateKey.includes('-----BEGIN')
+        ? rawPrivateKey.replace(/\\n/g, '\n')
+        : `-----BEGIN PRIVATE KEY-----\n${rawPrivateKey}\n-----END PRIVATE KEY-----`;
+
+      // Apple Client Secret JWT Üretimi (ES256)
+      const header = {
+        alg: 'ES256',
+        kid: appleKeyId,
+        typ: 'JWT'
+      };
+      const now = Math.floor(Date.now() / 1000);
+      const payload = {
+        iss: appleTeamId,
+        iat: now,
+        exp: now + 3600, // 1 saat geçerli
+        aud: 'https://appleid.apple.com',
+        sub: appleClientId
+      };
+
+      const b64Url = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+      const tokenHeaderPayload = `${b64Url(header)}.${b64Url(payload)}`;
+
+      const signer = crypto.createSign('SHA256');
+      signer.update(tokenHeaderPayload);
+      const signature = signer.sign({ key: formattedPrivateKey, dsaEncoding: 'ieee-p1363' }, 'base64url');
+      const clientSecret = `${tokenHeaderPayload}.${signature}`;
+
+      // Apple REST API revoke çağrısı
+      const params = new URLSearchParams();
+      params.append('client_id', appleClientId);
+      params.append('client_secret', clientSecret);
+      params.append('token', authCodeOrToken);
+      params.append('token_type_hint', data?.tokenTypeHint || 'authorization_code');
+
+      const appleResponse = await fetch('https://appleid.apple.com/auth/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      functions.logger.info(`🍏 Apple revoke yanıtı (${userId}): HTTP ${appleResponse.status}`);
+      return { success: appleResponse.ok, status: appleResponse.status, userId };
+    } else {
+      functions.logger.info(`ℹ️ Apple Token Revocation: Ortamda Apple Private Key yapılandırması veya token bekleniyor (Graceful Degrade): ${userId}`);
+      return { success: true, pendingConfiguration: true, userId, timestamp: new Date().toISOString() };
+    }
+  } catch (error) {
+    functions.logger.warn(`⚠️ revokeAppleToken tolere edilen uyarı (${userId}):`, error.message);
+    return { success: false, error: error.message };
+  }
+}));
+
+/**
  * 15. ADMİN TARAFINDAN KULLANICI HESABINI SİLME (Callable) - FAZ 6
  * Sadece adminler tetikleyebilir. Auth ve Firestore verilerini kaskat olarak temizler.
  */

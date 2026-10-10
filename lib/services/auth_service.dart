@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart';
 import 'app_badge_service.dart';
 import 'analytics_service.dart';
@@ -39,7 +41,29 @@ class AuthService {
   static String? _cachedAdminUid;
   static DateTime? _lastAdminCheck;
   static Future<bool>? _inFlightAdminCheck;
-  static const Duration _adminCacheTTL = Duration(minutes: 5);
+  // FS-AUTH-07: Yetki iptali sızıntısını önlemek için TTL 1 dakikaya düşürüldü
+  static const Duration _adminCacheTTL = Duration(minutes: 1);
+
+  // FS-AUTH-09: Giriş sonrası kullanıcı senkronizasyonunda yarış durumunu (Race Condition) önleyen Single-Flight kilidi
+  static final Map<String, Future<app_user.AppUser>> _inFlightUserHandling = {};
+
+  // FS-AUTH-10: Şifre sıfırlama rate-limit / spam kalkanı (60 saniyelik yerel cooldown)
+  static final Map<String, DateTime> _lastPasswordResetTimes = {};
+  static const Duration passwordResetCooldown = Duration(seconds: 60);
+
+  /// Verilen e-posta adresi için kalan şifre sıfırlama bekleme süresini saniye cinsinden döndürür
+  static int getPasswordResetCooldownRemaining(String email) {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return 0;
+    final lastTime = _lastPasswordResetTimes[cleanEmail];
+    if (lastTime == null) return 0;
+    final elapsed = DateTime.now().difference(lastTime);
+    if (elapsed >= passwordResetCooldown) {
+      _lastPasswordResetTimes.remove(cleanEmail);
+      return 0;
+    }
+    return (passwordResetCooldown.inSeconds - elapsed.inSeconds).clamp(0, passwordResetCooldown.inSeconds);
+  }
 
   /// Admin önbelleğini sıfırla (Çıkışta veya rol güncellendiğinde çağrılır)
   static void clearAdminCache() {
@@ -392,7 +416,11 @@ class AuthService {
 
     if (errorString.contains('too_many_requests') || 
         errorString.contains('too-many-requests')) {
-      return AuthException('Çok fazla başarısız deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.');
+      return AuthException(
+        'Ağınızdan çok fazla deneme yapıldı (Mobil operatör yoğunluğu). '
+        'Mobil verinizi veya Wi-Fi\'yi kapatıp açarak IP adresinizi yenileyebilir ya da '
+        'Google / Apple ile tek tıkla hemen giriş yapabilirsiniz.',
+      );
     }
     
     if (errorString.contains('sign_in_failed')) {
@@ -402,8 +430,43 @@ class AuthService {
     return AuthException('İşlem gerçekleştirilemedi. Lütfen tekrar deneyin.');
   }
 
-  // Kullanıcı giriş sonrası işlemleri (ortak metod)
+  // Kullanıcı giriş sonrası işlemleri (ortak metod - FS-AUTH-09: Single-Flight Concurrency Korumalı)
   Future<app_user.AppUser> _handleUserAfterSignIn(User firebaseUser, {String? initialDisplayName}) async {
+    final uid = firebaseUser.uid;
+    if (_inFlightUserHandling.containsKey(uid)) {
+      _log('ℹ️ Eşzamanlı _handleUserAfterSignIn çağrısı yakalandı, mevcut operasyona bağlanılıyor: $uid');
+      final appUser = await _inFlightUserHandling[uid]!;
+      // FS-AUTH-09: Eğer mevcut operasyonda isim placeholder kalmışsa ve bu çağrıda yeni/gerçek isim iletildiyse ismi güvenle benimse
+      if (initialDisplayName != null && initialDisplayName.trim().isNotEmpty) {
+        final cleanName = initialDisplayName.trim();
+        final isPlaceholder = appUser.username == 'Kullanıcı' || 
+            appUser.username.isEmpty || 
+            appUser.username.contains('@') ||
+            (firebaseUser.email != null && appUser.username == firebaseUser.email!.split('@')[0]);
+        if (isPlaceholder) {
+          try {
+            await _firestore.collection('users').doc(uid).update({
+              'username': cleanName,
+              'displayName': cleanName,
+            });
+            _log('✨ [FS-AUTH-09] Geciken auth ad-soyad bilgisi kullanıcı profiline başarıyla uygulandı: $cleanName');
+            return appUser.copyWith(username: cleanName);
+          } catch (_) {}
+        }
+      }
+      return appUser;
+    }
+
+    final future = _handleUserAfterSignInCore(firebaseUser, initialDisplayName: initialDisplayName);
+    _inFlightUserHandling[uid] = future;
+    try {
+      return await future;
+    } finally {
+      _inFlightUserHandling.remove(uid);
+    }
+  }
+
+  Future<app_user.AppUser> _handleUserAfterSignInCore(User firebaseUser, {String? initialDisplayName}) async {
     try {
       // Yeni oturumda admin önbelleğini sıfırla (güvenlik ve tutarlılık)
       clearAdminCache();
@@ -411,7 +474,14 @@ class AuthService {
       final existingUserDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
       app_user.AppUser appUser;
       
-      final effectiveName = initialDisplayName ?? firebaseUser.displayName;
+      String? effectiveName = initialDisplayName ?? firebaseUser.displayName;
+      if (effectiveName == null || effectiveName.trim().isEmpty) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          effectiveName = prefs.getString('apple_pending_display_name_${firebaseUser.uid}') ??
+              prefs.getString('apple_pending_display_name_last');
+        } catch (_) {}
+      }
 
       if (existingUserDoc.exists) {
         try {
@@ -424,21 +494,27 @@ class AuthService {
               ? existingUser.profileImageUrl
               : (firebaseUser.photoURL ?? '');
 
+          final isUsernamePlaceholder = existingUser.username == 'Kullanıcı' || 
+              existingUser.username.isEmpty || 
+              existingUser.username.contains('@') ||
+              (firebaseUser.email != null && existingUser.username == firebaseUser.email!.split('@')[0]);
+
+          final shouldAdoptEffectiveName = effectiveName != null && 
+              effectiveName.isNotEmpty && 
+              isUsernamePlaceholder;
+
           appUser = existingUser.copyWith(
-            username: (effectiveName != null && effectiveName.isNotEmpty && (existingUser.username == 'Kullanıcı' || existingUser.username.isEmpty))
+            username: shouldAdoptEffectiveName
                 ? effectiveName
-                : (firebaseUser.displayName ?? existingUser.username),
+                : existingUser.username,
             profileImageUrl: effectiveProfileImage,
           );
           
           // Mevcut kullanıcı varsa, sadece değişen alanları güncelle (takip verileri korunur)
           final updateData = <String, dynamic>{};
-          if (effectiveName != null && effectiveName.isNotEmpty && existingUser.username != effectiveName) {
+          if (shouldAdoptEffectiveName) {
             updateData['username'] = effectiveName;
             updateData['displayName'] = effectiveName;
-          } else if (firebaseUser.displayName != null && firebaseUser.displayName != existingUser.username) {
-            updateData['username'] = firebaseUser.displayName;
-            updateData['displayName'] = firebaseUser.displayName;
           }
           // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
           if (!hasCustomAvatar && firebaseUser.photoURL != null && firebaseUser.photoURL!.isNotEmpty) {
@@ -579,8 +655,10 @@ class AuthService {
 
       if (userCredential.user != null) {
         final user = userCredential.user!;
+        final appleUserId = appleCredential.userIdentifier;
+        final prefs = await SharedPreferences.getInstance();
         
-        // Apple yalnızca ilk girişte ad-soyad iletir
+        // Apple yalnızca ilk yetkilendirmede ad-soyad iletir
         String? appleFullName;
         if (appleCredential.givenName != null || appleCredential.familyName != null) {
           final given = appleCredential.givenName ?? '';
@@ -588,6 +666,24 @@ class AuthService {
           final combined = '$given $family'.trim();
           if (combined.isNotEmpty) {
             appleFullName = combined;
+            // FS-AUTH-02 Kalkanı: İlk yetkilendirmede gelen adı yerel diskte mühürle!
+            // Ağ kopması, app crash veya sonraki girişlerde Apple bir daha asla ad göndermez.
+            if (appleUserId != null && appleUserId.isNotEmpty) {
+              await prefs.setString('apple_pending_display_name_$appleUserId', appleFullName);
+            }
+            await prefs.setString('apple_pending_display_name_last', appleFullName);
+            _log('💾 [FS-AUTH-02] Apple ad-soyad yerel önbelleğe mühürlendi: $appleFullName');
+          }
+        }
+
+        // Eğer Apple bu girişte ad göndermediyse (sonraki girişler), yerel önbellekten kurtar:
+        if (appleFullName == null || appleFullName.isEmpty) {
+          if (appleUserId != null && appleUserId.isNotEmpty) {
+            appleFullName = prefs.getString('apple_pending_display_name_$appleUserId');
+          }
+          appleFullName ??= prefs.getString('apple_pending_display_name_last');
+          if (appleFullName != null && appleFullName.isNotEmpty) {
+            _log('🔄 [FS-AUTH-02] Apple ad-soyad yerel önbellekten başarıyla kurtarıldı: $appleFullName');
           }
         }
 
@@ -601,6 +697,15 @@ class AuthService {
 
         // Ortak pipeline: Firestore kullanıcı dokümanı, takip listesi koruma, FCM token
         final appUser = await _handleUserAfterSignIn(user, initialDisplayName: appleFullName);
+
+        // Firestore'a başarıyla yazıldığı kesinleşti; yerel beklemedeki Apple adını temizle
+        try {
+          if (appleUserId != null && appleUserId.isNotEmpty) {
+            await prefs.remove('apple_pending_display_name_$appleUserId');
+          }
+          await prefs.remove('apple_pending_display_name_last');
+        } catch (_) {}
+
         _log('✅ Apple ile giriş başarılı: ${user.email ?? user.uid}');
         return appUser;
       }
@@ -727,7 +832,7 @@ class AuthService {
     }
   }
 
-  // Şifre sıfırlama e-postası gönder
+  // Şifre sıfırlama e-postası gönder (FS-AUTH-10: 60s cooldown kalkanlı)
   Future<void> sendPasswordResetEmail({required String email}) async {
     try {
       final cleanEmail = email.trim();
@@ -735,7 +840,16 @@ class AuthService {
         throw AuthException('Geçerli bir e-posta adresi girin.');
       }
 
+      // FS-AUTH-10: Cooldown kontrolü (Mail bombing ve Firebase kota tükenmesi koruması)
+      final remaining = getPasswordResetCooldownRemaining(cleanEmail);
+      if (remaining > 0) {
+        throw AuthException(
+          'Şifre sıfırlama bağlantısı kısa süre önce gönderildi. Lütfen $remaining saniye bekleyin.',
+        );
+      }
+
       await _auth.sendPasswordResetEmail(email: cleanEmail);
+      _lastPasswordResetTimes[cleanEmail.toLowerCase()] = DateTime.now();
       _log('✅ Şifre sıfırlama e-postası gönderildi: $cleanEmail');
     } catch (e, stackTrace) {
       _log('❌ Şifre sıfırlama hatası: $e');
@@ -761,6 +875,64 @@ class AuthService {
       _log('✅ E-posta yeniden kimlik doğrulama başarılı: ${user.email}');
     } catch (e, stackTrace) {
       _log('❌ Yeniden doğrulama hatası: $e');
+      _log('Stack trace: $stackTrace');
+      throw _convertToUserFriendlyError(e);
+    }
+  }
+
+  /// Google ile yeniden kimlik doğrulama (Hesap silme ve hassas işlemler için)
+  Future<void> reauthenticateWithGoogle() async {
+    try {
+      final user = currentUser;
+      if (user == null) {
+        throw AuthException('Oturum açık değil.');
+      }
+      final GoogleSignInAccount? googleUser = await _googleSignInInstance.signIn();
+      if (googleUser == null) {
+        throw AuthException('Google ile yeniden doğrulama kullanıcı tarafından iptal edildi.');
+      }
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await user.reauthenticateWithCredential(credential);
+      _log('✅ Google ile yeniden kimlik doğrulama başarılı: ${user.email}');
+    } catch (e, stackTrace) {
+      _log('❌ Google yeniden doğrulama hatası: $e');
+      _log('Stack trace: $stackTrace');
+      throw _convertToUserFriendlyError(e);
+    }
+  }
+
+  /// Apple ile yeniden kimlik doğrulama (Hesap silme ve token revocation için)
+  Future<String?> reauthenticateWithApple() async {
+    try {
+      final user = currentUser;
+      if (user == null) {
+        throw AuthException('Oturum açık değil.');
+      }
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+      );
+
+      await user.reauthenticateWithCredential(oauthCredential);
+      _log('✅ Apple ile yeniden kimlik doğrulama başarılı: ${user.uid}');
+      return appleCredential.authorizationCode;
+    } catch (e, stackTrace) {
+      _log('❌ Apple yeniden doğrulama hatası: $e');
       _log('Stack trace: $stackTrace');
       throw _convertToUserFriendlyError(e);
     }
@@ -801,7 +973,6 @@ class AuthService {
         _log('Analytics clear user: $e');
       }
 
-      clearAdminCache();
       _log('✅ Çıkış başarılı');
     } catch (e) {
       _log('Sign-Out hatası: $e');
@@ -809,6 +980,8 @@ class AuthService {
       try {
         await _auth.signOut();
       } catch (_) {}
+    } finally {
+      clearAdminCache();
     }
   }
 
@@ -893,6 +1066,17 @@ class AuthService {
     }
   }
 
+  /// FS-AUTH-07: Hassas yönetici işlemleri (silme, ban, kill-switch vb.) öncesinde zorunlu canlı yetki doğrulaması
+  /// Önbelleği baypas eder (forceRefresh: true), yetki iptal edilmişse derhal AuthException fırlatır (Fail-Closed).
+  Future<bool> verifyAdminPrivilege() async {
+    final isAuthorized = await isAdmin(forceRefresh: true);
+    if (!isAuthorized) {
+      clearAdminCache();
+      throw AuthException('Yönetici yetkiniz bulunmamaktadır veya oturumunuz sonlandırılmıştır.');
+    }
+    return true;
+  }
+
   Future<bool> _fetchAdminStatus(String uid) async {
     DocumentSnapshot<Map<String, dynamic>> userDoc;
     try {
@@ -936,19 +1120,42 @@ class AuthService {
     return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email.trim());
   }
 
-  // Hesap silme (Opsiyonel şifre ile anında re-auth destekli)
-  Future<void> deleteAccount({String? reauthPassword}) async {
+  // Hesap silme (Opsiyonel şifre veya Apple auth code ile anında re-auth destekli)
+  Future<void> deleteAccount({
+    String? reauthPassword,
+    String? appleAuthorizationCode,
+  }) async {
+    final user = currentUser;
+    if (user == null) {
+      throw AuthException('Oturum açık değil.');
+    }
+    final uid = user.uid;
+
     try {
-      final user = currentUser;
-      if (user == null) {
-        throw AuthException('Oturum açık değil.');
-      }
-
-      final uid = user.uid;
-
       // Eğer kullanıcı şifre ile yeniden doğrulama talep ettiyse
       if (reauthPassword != null && reauthPassword.isNotEmpty) {
         await reauthenticateWithEmailPassword(password: reauthPassword);
+      }
+
+      // FS-AUTH-03 Kalkanı: Hesap silinmeden önce istemci seviyesinde cihaz token'ını ve rozetleri temizle
+      try {
+        await NotificationService().clearDeviceToken();
+      } catch (tokenErr) {
+        _log('NotificationService clearDeviceToken hatası (tolere edildi): $tokenErr');
+      }
+
+      try {
+        AppBadgeService.instance.stopRealtimeBadgeSync();
+        await AppBadgeService.instance.clearBadge();
+      } catch (badgeErr) {
+        _log('AppBadgeService clearBadge hatası (tolere edildi): $badgeErr');
+      }
+
+      // FS-AUTH-08: Apple Guideline 5.1.1(v) Token Revocation Uyumu
+      // Eğer kullanıcı Apple ile giriş yapmışsa, Apple yetkilendirme jetonunu iptal et
+      final isAppleUser = user.providerData.any((p) => p.providerId == 'apple.com');
+      if (isAppleUser) {
+        await _requestAppleTokenRevocation(user, authorizationCode: appleAuthorizationCode);
       }
 
       // P0-12 (R-PRV-08): 1. Önce Firebase Auth'dan kullanıcıyı sil.
@@ -968,11 +1175,22 @@ class AuthService {
         } catch (_) {}
       }
 
+      // Yerel önbellekleri temizle
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('apple_pending_display_name_last');
+      } catch (_) {}
+
+      clearAdminCache();
       _log('✅ Hesap ve veriler başarıyla silindi.');
     } catch (e) {
       _log('Hesap silme hatası: $e');
       final errorString = e.toString().toLowerCase();
       if (errorString.contains('requires-recent-login')) {
+        // Oturum yenilemesi gerektiğinde (kullanıcı silmekten vazgeçebileceği için) cihaz kaydını güvenle geri yükle
+        try {
+          NotificationService().saveFCMToken(userId: uid);
+        } catch (_) {}
         throw AuthException(
             'Güvenlik nedeniyle hesabınızı silmeden önce yeniden doğrulama yapmanız gerekmektedir.');
       }
@@ -980,6 +1198,35 @@ class AuthService {
         rethrow;
       }
       throw AuthException('Hesap silinirken bir hata oluştu: ${e.toString()}');
+    }
+  }
+
+  /// FS-AUTH-08: Apple Sign-In token iptali (Apple Guideline 5.1.1(v) Store Uyumu)
+  Future<void> _requestAppleTokenRevocation(User user, {String? authorizationCode}) async {
+    try {
+      final idToken = await user.getIdToken();
+      final rawProjectId = _firestore.app.options.projectId;
+      final projectId = rawProjectId.isNotEmpty ? rawProjectId : DefaultFirebaseOptions.flavorProjectId;
+      final uri = Uri.parse('https://us-central1-$projectId.cloudfunctions.net/revokeAppleToken');
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (idToken != null) 'Authorization': 'Bearer $idToken',
+        },
+        body: jsonEncode({
+          'data': {
+            'uid': user.uid,
+            if (authorizationCode != null) 'authorizationCode': authorizationCode,
+          },
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      _log('🍏 Apple Sign-In token revocation isteği iletildi (HTTP ${response.statusCode})');
+    } catch (e) {
+      // Best-effort & Graceful: Ağ gecikmesi veya backend yapılandırması olsa bile ana hesap silmeyi engelleme
+      _log('⚠️ Apple token revocation isteği tolere edildi: $e');
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
@@ -43,6 +44,10 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
   String? _errorMessage;
   String? _successMessage;
 
+  // FS-AUTH-10: Şifre sıfırlama için 60s cooldown ticker'ı
+  Timer? _cooldownTimer;
+  int _cooldownSeconds = 0;
+
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
@@ -52,7 +57,25 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
   final FocusNode _usernameFocus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(_onEmailChanged);
+  }
+
+  void _onEmailChanged() {
+    if (_mode == _AuthMode.forgotPassword) {
+      final email = _emailController.text.trim();
+      final remaining = AuthService.getPasswordResetCooldownRemaining(email);
+      if (remaining != _cooldownSeconds) {
+        _startCooldownTimer(remaining);
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    _emailController.removeListener(_onEmailChanged);
+    _cooldownTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     _usernameController.dispose();
@@ -60,6 +83,31 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
     _passwordFocus.dispose();
     _usernameFocus.dispose();
     super.dispose();
+  }
+
+  void _startCooldownTimer(int seconds) {
+    _cooldownTimer?.cancel();
+    if (seconds <= 0) {
+      if (_cooldownSeconds != 0 && mounted) {
+        setState(() => _cooldownSeconds = 0);
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() => _cooldownSeconds = seconds);
+    }
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_cooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() => _cooldownSeconds = 0);
+      } else {
+        setState(() => _cooldownSeconds--);
+      }
+    });
   }
 
   void _clearInlineMessages() {
@@ -80,6 +128,15 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
       _successMessage = null;
       _formKey.currentState?.reset();
     });
+
+    // FS-AUTH-10: Şifremi unuttum moduna geçildiğinde mevcut e-posta için kalan süreyi kontrol et
+    if (newMode == _AuthMode.forgotPassword) {
+      final email = _emailController.text.trim();
+      final remaining = AuthService.getPasswordResetCooldownRemaining(email);
+      if (remaining > 0) {
+        _startCooldownTimer(remaining);
+      }
+    }
   }
 
   Future<void> _handleSubmit() async {
@@ -107,6 +164,7 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
     try {
       if (_mode == _AuthMode.forgotPassword) {
         await _authService.sendPasswordResetEmail(email: email);
+        _startCooldownTimer(AuthService.passwordResetCooldown.inSeconds);
         if (mounted) {
           setState(() {
             _successMessage = 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi. Lütfen gelen kutunuzu kontrol edin.';
@@ -115,7 +173,6 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
             'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.',
             isError: false,
           );
-          _switchMode(_AuthMode.signIn);
         }
       } else if (_mode == _AuthMode.signUp) {
         final user = await _authService.signUpWithEmail(
@@ -584,39 +641,78 @@ class _EmailAuthBottomSheetState extends State<EmailAuthBottomSheet> {
                 const SizedBox(height: 12),
 
                 // Ana Aksiyon Butonu
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 2,
-                      shadowColor: AppTheme.primary.withValues(alpha: 0.35),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : Text(
-                            _mode == _AuthMode.forgotPassword
-                                ? 'Sıfırlama Bağlantısı Gönder'
-                                : (_mode == _AuthMode.signUp ? 'Kayıt Ol ve Başla' : 'Giriş Yap'),
-                            style: const TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
+                Builder(
+                  builder: (context) {
+                    final isForgotMode = _mode == _AuthMode.forgotPassword;
+                    final isCooldownActive = isForgotMode && _cooldownSeconds > 0;
+                    final isButtonDisabled = _isLoading || isCooldownActive;
+
+                    String buttonText;
+                    if (isForgotMode) {
+                      buttonText = isCooldownActive
+                          ? 'Tekrar Gönder ($_cooldownSeconds sn)'
+                          : 'Sıfırlama Bağlantısı Gönder';
+                    } else if (_mode == _AuthMode.signUp) {
+                      buttonText = 'Kayıt Ol ve Başla';
+                    } else {
+                      buttonText = 'Giriş Yap';
+                    }
+
+                    return SizedBox(
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isButtonDisabled ? null : _handleSubmit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isCooldownActive
+                              ? (isDark ? Colors.white12 : Colors.black12)
+                              : AppTheme.primary,
+                          foregroundColor: isCooldownActive
+                              ? (isDark ? Colors.white54 : Colors.black54)
+                              : Colors.white,
+                          disabledBackgroundColor: isCooldownActive
+                              ? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
+                              : (isDark ? Colors.white10 : Colors.black12),
+                          disabledForegroundColor: isCooldownActive
+                              ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                              : (isDark ? Colors.white38 : Colors.black38),
+                          elevation: isCooldownActive ? 0 : 2,
+                          shadowColor: AppTheme.primary.withValues(alpha: 0.35),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                  ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (isCooldownActive) ...[
+                                    const Icon(Icons.timer_outlined, size: 18),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text(
+                                    buttonText,
+                                    style: TextStyle(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
+                                      color: isCooldownActive
+                                          ? (isDark ? Colors.white60 : Colors.black54)
+                                          : Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    );
+                  },
                 ),
 
                 // Şifremi unuttum modundayken "Giriş Yap'a Dön" butonu

@@ -1,7 +1,7 @@
 name: sicak_firsatlar
 description: Sıcak Fırsatlar - Topluluk temelli indirim ve kampanya paylaşım uygulaması
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.1.0+45
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

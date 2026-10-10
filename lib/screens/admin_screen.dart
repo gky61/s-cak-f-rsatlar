@@ -154,7 +154,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   /// Admin yetkisini doğrula; yetkisiz ise Firestore stream'lerini başlatmadan sayfayı kapat
   Future<void> _verifyAdminAccess() async {
-    final isAdmin = await AuthService().isAdmin();
+    // FS-AUTH-07: Admin paneline girişte önbelleği baypas edip canlı yetkiyi sorgula (forceRefresh: true)
+    final isAdmin = await AuthService().isAdmin(forceRefresh: true);
     if (!mounted) return;
     if (!isAdmin) {
       _log('🚫 AdminScreen: Yetkisiz erişim teşebbüsü engellendi.');
