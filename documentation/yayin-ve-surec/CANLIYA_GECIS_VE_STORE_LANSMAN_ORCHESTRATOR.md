@@ -192,9 +192,9 @@ graph TD
 
 ## 🛡️ FAZ 4 — Android Google Play Console & Kapalı Test (🟡 AKTİF AŞAMA)
 
-* 🟢 **Adım 4.1: Shorebird ile İmzalı PROD AAB Üretimi [TAMAMLANDI]**  
-  *Release Versiyonu:* `1.1.0+45` (App ID: `289726d1-81cb-4fdf-97f7-5c2c07f033cc`) Shorebird sunucularına başarıyla yüklendi ✅  
-  *İmzalı AAB Çıktı Yolu:* `d:\firsatkolik\build\app\outputs\bundle\prodRelease\app-prod-release.aab` (154.0 MB)  
+* 🟢 **Adım 4.1: Shorebird ile İmzalı PROD AAB & APK Üretimi [GÜNCELLENDİ]**  
+  *Release Versiyonu:* `1.1.0+46` (App ID: `289726d1-81cb-4fdf-97f7-5c2c07f033cc`) ✅  
+  *İmzalı AAB Çıktı Yolu:* `d:\firsatkolik\build\app\outputs\bundle\prodRelease\app-prod-release.aab`  
   *Cihaz Doğrudan Kurulum APK Yolu:* `d:\firsatkolik\build\app\outputs\flutter-apk\app-prod-release.apk`  
 * 🟢 **Adım 4.2: Play Console'da Uygulama Oluşturuldu**  
   *Uygulama Adı:* `FırsatKolik` (App ID: `4975320169857069569`, Paket: `com.firsatkolik.app`, Dil: Türkçe, Ücretsiz).  
