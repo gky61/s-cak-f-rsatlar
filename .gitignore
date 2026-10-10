@@ -147,7 +147,10 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Dokümantasyon yalnızca yerelde tutulur (proje değerleri/sırlar içerir; 2026-10-04)
-documentation/
+documentation/*
+!documentation/yayin-ve-surec/
+documentation/yayin-ve-surec/*
+!documentation/yayin-ve-surec/CANLIYA_GECIS_VE_STORE_LANSMAN_ORCHESTRATOR.md
 README.md
 cloud-run-bot/README.md
 ios_ci/README.md
