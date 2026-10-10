@@ -262,15 +262,19 @@ class AuthService {
           }
           
           if (updateData.isNotEmpty) {
-            await _firestore
-                .collection('users')
-                .doc(currentUser.uid)
-                .update(updateData);
+            try {
+              await _firestore
+                  .collection('users')
+                  .doc(currentUser.uid)
+                  .update(updateData);
+            } catch (writeErr) {
+              _log('⚠️ Mevcut kullanıcı alan güncelleme hatası (tolere edildi): $writeErr');
+            }
           }
           
           _log('✅ Kullanıcı verileri düzeltildi. Following listesi korunuyor: ${appUser.following.length} kişi');
         } catch (parseError) {
-          _log('Parse hatası, yeni kullanıcı oluşturuluyor: $parseError');
+          _log('Parse hatası, mevcut profil güvenli alanları güncelleniyor: $parseError');
           appUser = app_user.AppUser(
             uid: currentUser.uid,
             username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
@@ -281,13 +285,22 @@ class AuthService {
             totalLikes: 0,
           );
           
-          await _firestore
-              .collection('users')
-              .doc(currentUser.uid)
-              .set(appUser.toFirestore(), SetOptions(merge: true));
+          try {
+            await _firestore
+                .collection('users')
+                .doc(currentUser.uid)
+                .update({
+              'username': appUser.username,
+              'displayName': appUser.username,
+              if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
+              if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
+            });
+          } catch (updateErr) {
+            _log('⚠️ Kurtarma sonrası güvenli profil güncelleme hatası: $updateErr');
+          }
         }
       } else {
-        // Yeni kullanıcı ise tam veriyi oluştur
+        // Yeni kullanıcı ise tam veriyi oluştur (create kuralı ile uyumlu)
         appUser = app_user.AppUser(
           uid: currentUser.uid,
           username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
@@ -301,7 +314,10 @@ class AuthService {
         await _firestore
             .collection('users')
             .doc(currentUser.uid)
-            .set(appUser.toFirestore(), SetOptions(merge: true));
+            .set({
+          ...appUser.toFirestore(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
       
       try {
@@ -319,6 +335,10 @@ class AuthService {
 
   /// Hatayı kullanıcı dostu mesaja çevir
   AuthException _convertToUserFriendlyError(dynamic e) {
+    if (e is AuthException) {
+      return e;
+    }
+
     final errorString = e.toString().toLowerCase();
     
     if (errorString.contains('network_error') || 
@@ -334,26 +354,60 @@ class AuthService {
       return AuthException('Giriş iptal edildi.');
     }
     
-    if (errorString.contains('sign_in_failed') || 
-        errorString.contains('sign_in')) {
+    if (errorString.contains('user-not-found')) {
+      return AuthException('Bu e-posta adresiyle kayıtlı bir hesap bulunamadı.');
+    }
+
+    if (errorString.contains('wrong-password')) {
+      return AuthException('Hatalı şifre girdiniz. Lütfen tekrar deneyin.');
+    }
+
+    if (errorString.contains('invalid-credential')) {
+      return AuthException('E-posta adresi veya şifre hatalı. Lütfen bilgilerinizi kontrol edin.');
+    }
+
+    if (errorString.contains('email-already-in-use')) {
+      return AuthException('Bu e-posta adresi zaten kullanımda. Lütfen giriş yapmayı deneyin.');
+    }
+
+    if (errorString.contains('invalid-email')) {
+      return AuthException('Lütfen geçerli bir e-posta adresi girin.');
+    }
+
+    if (errorString.contains('weak-password')) {
+      return AuthException('Şifre çok zayıf. En az 6 karakterden oluşan bir şifre belirleyin.');
+    }
+
+    if (errorString.contains('user-disabled')) {
+      return AuthException('Bu hesap devre dışı bırakılmıştır. Destek ekibiyle iletişime geçin.');
+    }
+
+    if (errorString.contains('requires-recent-login')) {
+      return AuthException('Güvenlik nedeniyle bu işlem için yeniden giriş yapmanız gerekmektedir.');
+    }
+
+    if (errorString.contains('operation-not-allowed')) {
+      return AuthException('Bu giriş yöntemi şu anda etkin değil.');
+    }
+
+    if (errorString.contains('too_many_requests') || 
+        errorString.contains('too-many-requests')) {
+      return AuthException('Çok fazla başarısız deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.');
+    }
+    
+    if (errorString.contains('sign_in_failed')) {
       return AuthException('Giriş başarısız oldu. Lütfen tekrar deneyin.');
     }
     
-    if (errorString.contains('too_many_requests') || 
-        errorString.contains('too-many-requests')) {
-      return AuthException('Çok fazla deneme. Lütfen biraz bekleyin.');
-    }
-    
-    if (e is AuthException) {
-      return e;
-    }
-    
-    return AuthException('Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+    return AuthException('İşlem gerçekleştirilemedi. Lütfen tekrar deneyin.');
   }
 
   // Kullanıcı giriş sonrası işlemleri (ortak metod)
   Future<app_user.AppUser> _handleUserAfterSignIn(User firebaseUser, {String? initialDisplayName}) async {
     try {
+      // Yeni oturumda admin önbelleğini sıfırla (güvenlik ve tutarlılık)
+      clearAdminCache();
+
       final existingUserDoc = await _firestore.collection('users').doc(firebaseUser.uid).get();
       app_user.AppUser appUser;
       
@@ -403,32 +457,38 @@ class AuthService {
           
           // Sadece değişen alanlar varsa güncelle (following listesi korunur çünkü update() sadece belirtilen alanları günceller)
           if (updateData.isNotEmpty) {
-            await _firestore
-                .collection('users')
-                .doc(firebaseUser.uid)
-                .update(updateData);
-            _log('✅ Kullanıcı güncellendi. Following listesi korunuyor: ${appUser.following.length} kişi');
+            try {
+              await _firestore
+                  .collection('users')
+                  .doc(firebaseUser.uid)
+                  .update(updateData);
+              _log('✅ Kullanıcı güncellendi. Following listesi korunuyor: ${appUser.following.length} kişi');
+            } catch (updateErr) {
+              _log('⚠️ Giriş sonrası kullanıcı verileri senkronizasyon hatası (tolere edildi): $updateErr');
+            }
           } else {
             _log('ℹ️ Güncellenecek alan yok. Following listesi korunuyor: ${appUser.following.length} kişi');
           }
         } catch (parseError) {
-          _log('Kullanıcı parse hatası, yeni oluşturuluyor: $parseError');
+          _log('Kullanıcı parse hatası, mevcut profil güvenli alanları güncelleniyor: $parseError');
           appUser = _createDefaultUser(firebaseUser, displayName: effectiveName);
-          await _firestore
-              .collection('users')
-              .doc(firebaseUser.uid)
-              .set({
-            ...appUser.toFirestore(),
-            'username': appUser.username,
-            'displayName': appUser.username,
-            'profileImageUrl': appUser.profileImageUrl,
-            'photoURL': appUser.profileImageUrl,
-            if (firebaseUser.email != null) 'email': firebaseUser.email,
-            'createdAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          try {
+            await _firestore
+                .collection('users')
+                .doc(firebaseUser.uid)
+                .update({
+              'username': appUser.username,
+              'displayName': appUser.username,
+              if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
+              if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
+              if (firebaseUser.email != null) 'email': firebaseUser.email,
+            });
+          } catch (updateErr) {
+            _log('⚠️ Parse hatası sonrası güvenli profil güncelleme hatası: $updateErr');
+          }
         }
       } else {
-        // Yeni kullanıcı ise tam veriyi oluştur
+        // Yeni kullanıcı ise tam veriyi oluştur (create kuralı ile uyumlu)
         appUser = _createDefaultUser(firebaseUser, displayName: effectiveName);
         await _firestore
             .collection('users')
@@ -441,7 +501,7 @@ class AuthService {
           'photoURL': appUser.profileImageUrl,
           if (firebaseUser.email != null) 'email': firebaseUser.email,
           'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        });
       }
 
       _log('✅ Giriş başarılı: ${firebaseUser.email ?? firebaseUser.uid}');
@@ -565,115 +625,144 @@ class AuthService {
     }
   }
 
-  // Email ve şifre ile kayıt - Production Ready
+  // Email ve şifre ile kayıt - Production Ready (Ortak Boru Hattı Entegre)
   Future<app_user.AppUser?> signUpWithEmail({
     required String email,
     required String password,
     required String username,
   }) async {
     try {
+      final cleanEmail = email.trim();
+      final cleanUsername = username.trim();
+
       // Email validasyonu
-      if (!_isValidEmail(email)) {
+      if (!_isValidEmail(cleanEmail)) {
         throw AuthException('Geçersiz e-posta adresi.');
       }
       
+      // Kullanıcı adı validasyonu
+      if (cleanUsername.length < 3) {
+        throw AuthException('Kullanıcı adı en az 3 karakter olmalıdır.');
+      }
+
       // Şifre validasyonu
       if (password.length < 6) {
         throw AuthException('Şifre en az 6 karakter olmalıdır.');
       }
       
       final credential = await _auth.createUserWithEmailAndPassword(
-        email: email,
+        email: cleanEmail,
         password: password,
       );
 
       if (credential.user != null) {
         try {
-          await credential.user!.updateDisplayName(username);
+          await credential.user!.updateDisplayName(cleanUsername);
           await credential.user!.reload();
         } catch (_) {}
 
-        final appUser = app_user.AppUser(
-          uid: credential.user!.uid,
-          username: username,
-          profileImageUrl: '',
-          badges: [],
-          points: 0,
-          dealCount: 0,
-          totalLikes: 0,
+        // Ortak boru hattı: Firestore users/{uid} oluşturma/koruma, FCM token, Analytics setUser
+        final appUser = await _handleUserAfterSignIn(
+          credential.user!,
+          initialDisplayName: cleanUsername,
         );
 
-        await _firestore
-            .collection('users')
-            .doc(credential.user!.uid)
-            .set({
-          ...appUser.toFirestore(),
-          'username': username,
-          'displayName': username,
-          'email': email,
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        _log('✅ Kayıt başarılı: $email');
+        _log('✅ Email ile kayıt ve boru hattı başarılı: $cleanEmail');
         return appUser;
       }
       return null;
-    } catch (e) {
-      _log('Kayıt hatası: $e');
+    } catch (e, stackTrace) {
+      _log('❌ Email kayıt hatası: $e');
+      _log('Stack trace: $stackTrace');
       
-      final errorString = e.toString().toLowerCase();
-      if (errorString.contains('email-already-in-use')) {
-        throw AuthException('Bu e-posta adresi zaten kullanımda.');
-      } else if (errorString.contains('invalid-email')) {
-        throw AuthException('Geçersiz e-posta adresi.');
-      } else if (errorString.contains('weak-password')) {
-        throw AuthException('Şifre çok zayıf. Daha güçlü bir şifre seçin.');
-      } else if (e is AuthException) {
-        rethrow;
+      if (_isDataTypeError(e.toString())) {
+        final recovered = await _tryRecoverUserData();
+        if (recovered != null) return recovered;
+        throw AuthException('Kullanıcı verileri okunurken bir hata oluştu. Lütfen tekrar deneyin.');
       }
       
-      throw AuthException('Kayıt yapılamadı. Lütfen tekrar deneyin.');
+      throw _convertToUserFriendlyError(e);
     }
   }
 
-  // Email ve şifre ile giriş - Production Ready
-  Future<User?> signInWithEmail({
+  // Email ve şifre ile giriş - Production Ready (Ortak Boru Hattı Entegre)
+  Future<app_user.AppUser?> signInWithEmail({
     required String email,
     required String password,
   }) async {
     try {
+      final cleanEmail = email.trim();
+
+      if (!_isValidEmail(cleanEmail)) {
+        throw AuthException('Geçersiz e-posta adresi.');
+      }
+
+      if (password.isEmpty) {
+        throw AuthException('Şifre alanı boş bırakılamaz.');
+      }
+
       final credential = await _auth.signInWithEmailAndPassword(
-        email: email,
+        email: cleanEmail,
         password: password,
       );
-      _log('✅ Email ile giriş başarılı: $email');
       
       if (credential.user != null) {
-        try {
-          await NotificationService().saveFCMToken(userId: credential.user!.uid);
-        } catch (tokenErr) {
-          _log('⚠️ Login sonrası FCM Token kaydetme hatası: $tokenErr');
-        }
+        // Ortak boru hattı: Firestore kullanıcı kontrolü, takip verileri koruma, FCM token, Analytics setUser
+        final appUser = await _handleUserAfterSignIn(credential.user!);
+        _log('✅ Email ile giriş ve boru hattı başarılı: $cleanEmail');
+        return appUser;
+      }
+      return null;
+    } catch (e, stackTrace) {
+      _log('❌ Email giriş hatası: $e');
+      _log('Stack trace: $stackTrace');
+      
+      if (_isDataTypeError(e.toString())) {
+        final recovered = await _tryRecoverUserData();
+        if (recovered != null) return recovered;
+        throw AuthException('Kullanıcı verileri okunurken bir hata oluştu. Lütfen tekrar deneyin.');
       }
       
-      return credential.user;
-    } catch (e) {
-      _log('Giriş hatası: $e');
-      
-      final errorString = e.toString().toLowerCase();
-      if (errorString.contains('user-not-found')) {
-        throw AuthException('Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı.');
-      } else if (errorString.contains('wrong-password')) {
-        throw AuthException('Hatalı şifre.');
-      } else if (errorString.contains('invalid-email')) {
-        throw AuthException('Geçersiz e-posta adresi.');
-      } else if (errorString.contains('user-disabled')) {
-        throw AuthException('Bu hesap devre dışı bırakılmış.');
-      } else if (errorString.contains('too-many-requests')) {
-        throw AuthException('Çok fazla başarısız deneme. Lütfen biraz bekleyin.');
+      throw _convertToUserFriendlyError(e);
+    }
+  }
+
+  // Şifre sıfırlama e-postası gönder
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    try {
+      final cleanEmail = email.trim();
+      if (!_isValidEmail(cleanEmail)) {
+        throw AuthException('Geçerli bir e-posta adresi girin.');
       }
-      
-      throw AuthException('Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.');
+
+      await _auth.sendPasswordResetEmail(email: cleanEmail);
+      _log('✅ Şifre sıfırlama e-postası gönderildi: $cleanEmail');
+    } catch (e, stackTrace) {
+      _log('❌ Şifre sıfırlama hatası: $e');
+      _log('Stack trace: $stackTrace');
+      throw _convertToUserFriendlyError(e);
+    }
+  }
+
+  // Email ve şifre ile yeniden kimlik doğrulama (Hesap silme koruması)
+  Future<void> reauthenticateWithEmailPassword({required String password}) async {
+    try {
+      final user = currentUser;
+      if (user == null || user.email == null) {
+        throw AuthException('Oturum açık değil veya e-posta adresi bulunamadı.');
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      _log('✅ E-posta yeniden kimlik doğrulama başarılı: ${user.email}');
+    } catch (e, stackTrace) {
+      _log('❌ Yeniden doğrulama hatası: $e');
+      _log('Stack trace: $stackTrace');
+      throw _convertToUserFriendlyError(e);
     }
   }
 
@@ -754,6 +843,11 @@ class AuthService {
         return false;
       }
 
+      // Farklı bir kullanıcının önbelleği kalmışsa derhal temizle (Fail-Closed Güvenlik)
+      if (_cachedAdminUid != null && _cachedAdminUid != user.uid) {
+        clearAdminCache();
+      }
+
       // TTL ve bellek önbelleği kontrolü (Firestore maliyeti ve latency optimizasyonu)
       if (!forceRefresh &&
           _cachedAdminUid == user.uid &&
@@ -772,21 +866,49 @@ class AuthService {
       return await _inFlightAdminCheck!;
     } catch (e, stack) {
       _log('Admin kontrolü hatası: $e');
-      SystemLogService.instance.logError(
-        category: 'auth',
-        errorType: 'AdminCheckException',
-        message: 'Admin yetki kontrolü başarısız: $e',
-        stack: stack,
-        severity: SystemErrorSeverity.error,
-      );
-      return _cachedIsAdmin ?? false;
+      final errLower = e.toString().toLowerCase();
+      final isTransient = errLower.contains('unavailable') ||
+                          errLower.contains('network') ||
+                          errLower.contains('socketexception') ||
+                          errLower.contains('timeout') ||
+                          errLower.contains('deadline-exceeded');
+      if (!isTransient) {
+        SystemLogService.instance.logError(
+          category: 'auth',
+          errorType: 'AdminCheckException',
+          message: 'Admin yetki kontrolü başarısız: $e',
+          stack: stack,
+          severity: SystemErrorSeverity.error,
+        );
+      } else {
+        _log('ℹ️ Admin yetki kontrolü geçici ağ kesintisinde önbellek ile tolere edildi');
+      }
+      // Kesinlikle yalnızca doğrulanmış mevcut UID ile eşleşen önbellek dönebilir
+      if (currentUser?.uid != null && _cachedAdminUid == currentUser!.uid && _cachedIsAdmin != null) {
+        return _cachedIsAdmin!;
+      }
+      return false;
     } finally {
       _inFlightAdminCheck = null;
     }
   }
 
   Future<bool> _fetchAdminStatus(String uid) async {
-    final userDoc = await _firestore.collection('users').doc(uid).get();
+    DocumentSnapshot<Map<String, dynamic>> userDoc;
+    try {
+      userDoc = await _firestore.collection('users').doc(uid).get();
+    } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      // Geçici ağ kesintisi / socket gecikmesinde 400ms bekleyip tek seferlik retry
+      if (errStr.contains('unavailable') || errStr.contains('network') || errStr.contains('deadline-exceeded')) {
+        _log('⏳ Firestore admin kontrolü geçici ağ kesintisi, yeniden deneniyor...');
+        await Future.delayed(const Duration(milliseconds: 400));
+        userDoc = await _firestore.collection('users').doc(uid).get();
+      } else {
+        rethrow;
+      }
+    }
+
     if (userDoc.exists) {
       final data = userDoc.data();
       
@@ -809,13 +931,13 @@ class AuthService {
     return false;
   }
 
-  /// Email formatı kontrolü
+  /// Email formatı kontrolü (Modern TLD'ler ve alt etiketleri tam destekler)
   bool _isValidEmail(String email) {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
+    return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email.trim());
   }
 
-  // Hesap silme
-  Future<void> deleteAccount() async {
+  // Hesap silme (Opsiyonel şifre ile anında re-auth destekli)
+  Future<void> deleteAccount({String? reauthPassword}) async {
     try {
       final user = currentUser;
       if (user == null) {
@@ -823,6 +945,11 @@ class AuthService {
       }
 
       final uid = user.uid;
+
+      // Eğer kullanıcı şifre ile yeniden doğrulama talep ettiyse
+      if (reauthPassword != null && reauthPassword.isNotEmpty) {
+        await reauthenticateWithEmailPassword(password: reauthPassword);
+      }
 
       // P0-12 (R-PRV-08): 1. Önce Firebase Auth'dan kullanıcıyı sil.
       // Eğer oturum eski ise 'requires-recent-login' fırlatır; Firestore dokümanı zombileşmez!
@@ -847,7 +974,10 @@ class AuthService {
       final errorString = e.toString().toLowerCase();
       if (errorString.contains('requires-recent-login')) {
         throw AuthException(
-            'Güvenlik nedeniyle hesabınızı silmeden önce yeniden giriş yapmanız gerekmektedir. Lütfen çıkış yapıp tekrar giriş yaptıktan sonra tekrar deneyin.');
+            'Güvenlik nedeniyle hesabınızı silmeden önce yeniden doğrulama yapmanız gerekmektedir.');
+      }
+      if (e is AuthException) {
+        rethrow;
       }
       throw AuthException('Hesap silinirken bir hata oluştu: ${e.toString()}');
     }

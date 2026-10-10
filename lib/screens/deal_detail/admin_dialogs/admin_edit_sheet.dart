@@ -79,7 +79,7 @@ void showAdminEditSheet({
   String? selectedSubCategory = deal.subCategory;
   bool isEditorPick = deal.isEditorPick;
   String selectedStatus;
-  if (deal.isExpired) {
+  if (deal.isArchived) {
     selectedStatus = 'expired';
   } else if (deal.isRejected) {
     selectedStatus = 'rejected';
@@ -302,8 +302,13 @@ void showAdminEditSheet({
               updates['imageUrls'] = [finalImageUrl];
             }
 
-            if (isApproved && (deal.isApproved != true || deal.isExpired)) {
+            if (isApproved && (deal.isApproved != true || deal.isArchived)) {
               updates['approvedAt'] = FieldValue.serverTimestamp();
+              if (deal.isArchived) {
+                updates['createdAt'] = FieldValue.serverTimestamp();
+                updates['timestamp'] = FieldValue.serverTimestamp();
+                updates['expiredVotes'] = 0;
+              }
             }
 
             final success = await firestoreService.updateDeal(deal.id, updates);

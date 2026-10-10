@@ -98,8 +98,23 @@ class Deal {
       postedBy.startsWith('telegram_') ||
       postedBy.isEmpty;
 
+  /// Fırsatın arşiv / süresi dolmuş olup olmadığını belirten kanonik ve reaktif getter.
+  /// 
+  /// Tek kaynak (Single Source of Truth) prensibiyle 3 şartı birleştirir:
+  /// 1. Veritabanı Statik Bayrağı: [isExpired] == true veya status == 'expired'
+  /// 2. Topluluk Oylaması Eşiği: [expiredVotes] >= 15
+  /// 3. Dinamik Yaş Penceresi: [createdAt] üzerinden 48 saat geçmişse (gece cron'u
+  ///    henüz çalışmamış olsa dahi) anasayfa akışıyla tam tutarlı olarak fırsat ARŞİV sayılır.
+  bool get isArchived =>
+      isExpired ||
+      expiredVotes >= 15 ||
+      createdAt.isBefore(DateTime.now().subtract(const Duration(hours: 48)));
+
+  /// Geriye dönük tam uyumluluk ve UI bileşenleri için alias.
+  bool get effectiveIsExpired => isArchived;
+
   /// Fırsatın onay bekleyip beklemediğini (inceleme durumunda olup olmadığını) döner
-  bool get isPending => isApproved == false && !isRejected && !isExpired;
+  bool get isPending => isApproved == false && !isRejected && !isArchived;
 
   /// Fırsatın onaylanmış ve yayında olup olmadığını döner
   bool get isApprovedClean => isApproved == true;
@@ -554,7 +569,7 @@ class Deal {
 
     // 4. ExpiredFOMODemotion (Süresi Biten Fırsatlara Yumuşak Düşüş - FOMO)
     double expiredFOMODemotion = 0.0;
-    if (isExpired) {
+    if (isArchived) {
       expiredFOMODemotion = 25.0; // Puanı 25.0 kırılır; böylece en üstteki 3-5 taze aktif ürünün hemen altında yer alır.
     }
 

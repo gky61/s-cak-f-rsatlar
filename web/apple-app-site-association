@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAMID.com.firsatkolik.app",
+        "appID": "973W9DTDY9.com.firsatkolik.app",
         "paths": [
           "/deal/*",
           "/katalog/*",
@@ -11,7 +11,7 @@
         ]
       },
       {
-        "appID": "TEAMID.com.sicakfirsatlar.sicakFirsatlar",
+        "appID": "973W9DTDY9.com.sicakfirsatlar.sicakFirsatlar",
         "paths": [
           "/deal/*",
           "/katalog/*",
@@ -22,7 +22,7 @@
   },
   "webcredentials": {
     "apps": [
-      "TEAMID.com.firsatkolik.app"
+      "973W9DTDY9.com.firsatkolik.app"
     ]
   }
 }

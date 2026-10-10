@@ -316,7 +316,7 @@ Future<void> reactivateDeal({
 
   if (confirm != true || !context.mounted) return;
 
-  final success = await firestoreService.unexpireDeal(dealId);
+  final success = await firestoreService.unexpireDeal(dealId, refreshTimestamp: true);
   if (context.mounted) {
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(

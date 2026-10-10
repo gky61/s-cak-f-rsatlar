@@ -84,7 +84,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
   @override
   Widget build(BuildContext context) {
     final deal = widget.deal;
-    final isExpired = deal.isExpired;
+    final isExpired = deal.isArchived;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
 

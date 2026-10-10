@@ -131,5 +131,94 @@ void main() {
       expect(searchResults.length, 1);
       expect(searchResults.first.title, contains('iPad'));
     });
+
+    test('Deal.isArchived properly reflects 48h dynamic window, expired flag and vote threshold', () {
+      final now = DateTime.now();
+
+      // 1. Taze ve aktif fırsat (<48h, isExpired: false, expiredVotes: 0)
+      final freshDeal = Deal(
+        id: 'fresh_1',
+        title: 'Taze Aktif Fırsat',
+        price: 100,
+        store: 'Amazon',
+        category: 'elektronik',
+        link: 'https://amazon.com.tr',
+        imageUrl: '',
+        hotVotes: 10,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'bot',
+        createdAt: now.subtract(const Duration(hours: 5)),
+        isApproved: true,
+        isExpired: false,
+        isEditorPick: false,
+      );
+      expect(freshDeal.isArchived, isFalse);
+      expect(freshDeal.isPending, isFalse);
+
+      // 2. 48 saati geçmiş fırsat (Cron henüz çalışmamış, isExpired: false)
+      final oldUnmarkedDeal = Deal(
+        id: 'old_1',
+        title: 'BRITA Marella XL Su Arıtmalı Sürahi',
+        price: 499,
+        store: 'Amazon',
+        category: 'ev_yasam',
+        link: 'https://amazon.com.tr',
+        imageUrl: '',
+        hotVotes: 5,
+        coldVotes: 0,
+        expiredVotes: 2,
+        commentCount: 1,
+        postedBy: 'bot',
+        createdAt: now.subtract(const Duration(hours: 50)), // 50 saat önce
+        isApproved: true,
+        isExpired: false, // Cron henüz çalışmadı
+        isEditorPick: false,
+      );
+      expect(oldUnmarkedDeal.isArchived, isTrue);
+      expect(oldUnmarkedDeal.effectiveIsExpired, isTrue);
+
+      // 3. Topluluk oyuyla süresi biten taze fırsat (5 saatlik ama expiredVotes >= 15)
+      final votedExpiredDeal = Deal(
+        id: 'voted_1',
+        title: 'Stoğu Biten Taze Fırsat',
+        price: 200,
+        store: 'Trendyol',
+        category: 'moda',
+        link: 'https://trendyol.com',
+        imageUrl: '',
+        hotVotes: 8,
+        coldVotes: 2,
+        expiredVotes: 15,
+        commentCount: 3,
+        postedBy: 'user_1',
+        createdAt: now.subtract(const Duration(hours: 4)),
+        isApproved: true,
+        isExpired: false,
+        isEditorPick: false,
+      );
+      expect(votedExpiredDeal.isArchived, isTrue);
+
+      // 4. Onaysız bekleyen ama 48 saati geçmiş fırsat (Artık pending sayılmamalı)
+      final expiredPendingDeal = Deal(
+        id: 'pending_old',
+        title: 'Eski Onaysız Fırsat',
+        price: 150,
+        store: 'N11',
+        category: 'elektronik',
+        link: 'https://n11.com',
+        imageUrl: '',
+        hotVotes: 0,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'user_2',
+        createdAt: now.subtract(const Duration(hours: 52)),
+        isApproved: false,
+        isExpired: false,
+        isEditorPick: false,
+      );
+      expect(expiredPendingDeal.isArchived, isTrue);
+      expect(expiredPendingDeal.isPending, isFalse);
+    });
   });
 }

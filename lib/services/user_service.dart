@@ -151,8 +151,18 @@ class UserService {
             if (finalStore.isEmpty) finalStore = (data['store'] ?? data['magazaAdi'] ?? '').toString();
             if (finalLink.isEmpty) finalLink = (data['link'] ?? data['url'] ?? '').toString();
             if (finalImageUrl.isEmpty) finalImageUrl = (data['imageUrl'] ?? data['image_url'] ?? data['gorselUrl'] ?? '').toString();
-            if (finalCategory == 'tumu') finalCategory = (data['category'] ?? 'tumu').toString();
-            finalIsExpired = data['isExpired'] == true;
+            final createdAtVal = data['createdAt'] ?? data['timestamp'];
+            DateTime? cDate;
+            if (createdAtVal is Timestamp) {
+              cDate = createdAtVal.toDate();
+            } else if (createdAtVal is DateTime) {
+              cDate = createdAtVal;
+            } else if (createdAtVal is String) {
+              cDate = DateTime.tryParse(createdAtVal);
+            }
+            final isOlderThan48h = cDate != null && cDate.isBefore(DateTime.now().subtract(const Duration(hours: 48)));
+            final isVotesExpired = ((data['expiredVotes'] as num?)?.toInt() ?? 0) >= 15;
+            finalIsExpired = data['isExpired'] == true || data['status'] == 'expired' || isVotesExpired || isOlderThan48h;
           }
         }
       }

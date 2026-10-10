@@ -77,7 +77,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
   @override
   Widget build(BuildContext context) {
     final deal = widget.deal;
-    final isExpired = deal.isExpired;
+    final isExpired = deal.isArchived;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBgColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
     final cardBorderColor = deal.isRejected

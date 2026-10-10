@@ -11,6 +11,7 @@ import '../widgets/morphing_sun_moon_button.dart';
 import 'faq_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'category_preferences_screen.dart';
+import '../widgets/email_auth_bottom_sheet.dart';
 
 /// Misafir (oturum açmamış) kullanıcılar için modern, modüler ve zengin profil ekranı.
 class GuestProfileScreen extends StatefulWidget {
@@ -33,6 +34,15 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
   final GlobalKey _themeButtonKey = GlobalKey();
   bool _isSigningIn = false;
   bool _isSigningInApple = false;
+
+  Future<void> _handleEmailSignIn() async {
+    if (_isSigningIn || _isSigningInApple) return;
+    HapticFeedback.mediumImpact();
+    final loggedIn = await showEmailAuthBottomSheet(context);
+    if (loggedIn == true && mounted) {
+      widget.onLoginSuccess?.call();
+    }
+  }
 
   @override
   void initState() {
@@ -447,6 +457,39 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                     ),
             ),
           ),
+          const SizedBox(height: 12),
+
+          // 3. E-posta ile Giriş / Kayıt Butonu
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              onPressed: (_isSigningIn || _isSigningInApple) ? null : _handleEmailSignIn,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: textMain,
+                side: BorderSide(color: borderColor, width: 1.2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.alternate_email_rounded, size: 20, color: AppTheme.primary),
+                  SizedBox(width: 8),
+                  Text(
+                    'E-posta ile Giriş Yap / Kayıt Ol',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -732,7 +775,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('E-posta uygulaması başlatılamadı. Lütfen $email adresine yazın.'),
+                          content: const Text('E-posta uygulaması başlatılamadı. Lütfen $email adresine yazın.'),
                           backgroundColor: Colors.orange[800],
                           behavior: SnackBarBehavior.floating,
                           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10))),

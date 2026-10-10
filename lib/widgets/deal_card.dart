@@ -31,7 +31,7 @@ class _DealCardState extends State<DealCard> {
   final LinkPreviewService _linkPreviewService = LinkPreviewService();
 
   void _handleOnTap() {
-    if (widget.deal.isExpired) {
+    if (widget.deal.isArchived) {
       showExpiredBottomSheet(context, widget.deal);
     } else {
       widget.onTap?.call();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import 'email_auth_bottom_sheet.dart';
 
 /// Misafir kullanıcılar kısıtlı bir özelliğe tıkladığında açılan şık ve kullanıcı dostu giriş penceresi
 Future<bool?> showGuestLoginBottomSheet(
@@ -46,6 +47,15 @@ class _GuestLoginBottomSheetState extends State<GuestLoginBottomSheet> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
   bool _isLoadingApple = false;
+
+  Future<void> _handleEmailSignIn() async {
+    if (_isLoading || _isLoadingApple) return;
+    final loggedIn = await showEmailAuthBottomSheet(context);
+    if (loggedIn == true && mounted) {
+      Navigator.of(context).pop(true);
+      widget.onLoginSuccess?.call();
+    }
+  }
 
   Future<void> _handleAppleSignIn() async {
     if (_isLoading || _isLoadingApple) return;
@@ -314,6 +324,41 @@ class _GuestLoginBottomSheetState extends State<GuestLoginBottomSheet> {
                         ),
                       ],
                     ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // E-posta ile Devam Et Butonu
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              onPressed: (_isLoading || _isLoadingApple) ? null : _handleEmailSignIn,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                side: BorderSide(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                  width: 1.2,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.alternate_email_rounded, size: 20, color: AppTheme.primary),
+                  SizedBox(width: 8),
+                  Text(
+                    'E-posta ile Devam Et',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 12),

@@ -59,6 +59,32 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
     return StreamBuilder<List<Deal>>(
       stream: _firestoreService.getExpiredDealsStream(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 48),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Süresi biten fırsatlar yüklenirken bir sorun oluştu.',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${snapshot.error}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return ListView.separated(
             padding: const EdgeInsets.all(16),

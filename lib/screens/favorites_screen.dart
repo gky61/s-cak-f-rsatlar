@@ -580,8 +580,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         }
 
         final totalCount = deals.length;
-        final activeDeals = deals.where((d) => !d.isExpired).toList();
-        final expiredDeals = deals.where((d) => d.isExpired).toList();
+        final activeDeals = deals.where((d) => !d.isArchived).toList();
+        final expiredDeals = deals.where((d) => d.isArchived).toList();
         final activeCount = activeDeals.length;
         final expiredCount = expiredDeals.length;
 

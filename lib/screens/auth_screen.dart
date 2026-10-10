@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'admin_screen.dart';
 import 'privacy_policy_screen.dart';
+import '../widgets/email_auth_bottom_sheet.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -34,48 +35,6 @@ class _AuthScreenState extends State<AuthScreen> {
     _passwordController.dispose();
     _usernameController.dispose();
     super.dispose();
-  }
-
-  Future<void> _signInWithGoogleWeb() async {
-    if (_isLoading) return; // Double-tap koruması
-    
-    setState(() => _isLoading = true);
-    try {
-      final user = await _authService.signInWithGoogle();
-      if (user != null && mounted) {
-        final isAdmin = await _authService.isAdmin();
-        if (isAdmin) {
-          _showSuccess('Admin paneline yönlendiriliyorsunuz...');
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const AdminScreen()),
-            );
-          }
-        } else {
-          await _authService.signOut();
-          _showError('Bu hesap admin yetkisine sahip değil.');
-        }
-      }
-    } on AuthException catch (e) {
-      if (mounted && !e.message.contains('iptal')) {
-        _showError(e.message);
-      }
-    } catch (e) {
-      if (mounted) {
-        String errorMessage = 'Beklenmeyen bir hata oluştu.';
-        if (e.toString().contains('People API')) {
-          errorMessage = 'People API etkinleştirilmeli. Email/Şifre ile giriş yapın.';
-        } else if (e.toString().contains('popup')) {
-          errorMessage = 'Popup engelleyiciyi kapatıp tekrar deneyin.';
-        }
-        _showError(errorMessage);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 
   Future<void> _signInWithGoogle() async {
@@ -147,21 +106,37 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         
         if (user != null) {
-          final isAdmin = await _authService.isAdmin();
-          if (isAdmin) {
-            if (mounted) {
-              _showSuccess('Admin paneline yönlendiriliyorsunuz...');
-              await Future.delayed(const Duration(milliseconds: 500));
+          if (kIsWeb) {
+            final isAdmin = await _authService.isAdmin();
+            if (isAdmin) {
               if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const AdminScreen()),
-                );
+                _showSuccess('Admin paneline yönlendiriliyorsunuz...');
+                await Future.delayed(const Duration(milliseconds: 500));
+                if (mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const AdminScreen()),
+                  );
+                }
+              }
+            } else {
+              if (mounted) {
+                await _authService.signOut();
+                _showError('Bu hesap admin yetkisine sahip değil.');
               }
             }
           } else {
             if (mounted) {
-              await _authService.signOut();
-              _showError('Bu hesap admin yetkisine sahip değil.');
+              _showSuccess('Hoş geldiniz, ${user.username}!');
+              await Future.delayed(const Duration(milliseconds: 500));
+              if (mounted) {
+                if (Navigator.canPop(context)) {
+                  Navigator.of(context).pop(true);
+                } else {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  );
+                }
+              }
             }
           }
         }
@@ -425,7 +400,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 16),
                     
                     // Apple ile Giriş Butonu (sadece iOS)
-                    if (defaultTargetPlatform == TargetPlatform.iOS)
+                    if (defaultTargetPlatform == TargetPlatform.iOS) ...[
                       _buildSocialButton(
                         onPressed: _isLoading ? null : _signInWithApple,
                         icon: Icons.apple,
@@ -434,6 +409,31 @@ class _AuthScreenState extends State<AuthScreen> {
                         textColor: Colors.white,
                         borderColor: Colors.black,
                       ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // E-posta ile Giriş Butonu (Mobil)
+                    _buildSocialButton(
+                      onPressed: _isLoading ? null : () async {
+                        final nav = Navigator.of(context);
+                        final loggedIn = await showEmailAuthBottomSheet(context);
+                        if (!mounted) return;
+                        if (loggedIn == true) {
+                          if (nav.canPop()) {
+                            nav.pop(true);
+                          } else {
+                            nav.pushReplacement(
+                              MaterialPageRoute(builder: (_) => const HomeScreen()),
+                            );
+                          }
+                        }
+                      },
+                      icon: Icons.alternate_email_rounded,
+                      label: 'E-posta ile Devam Et',
+                      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      textColor: isDark ? Colors.white : const Color(0xFF0F172A),
+                      borderColor: isDark ? const Color(0xFF334155) : Colors.grey[300]!,
+                    ),
                   ],
                   
                   if (_isLoading) ...[

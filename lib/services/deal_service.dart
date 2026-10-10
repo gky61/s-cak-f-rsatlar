@@ -212,7 +212,7 @@ class DealService {
         final deal = _safeParseDeal(doc);
         if (deal == null) continue;
         if (deal.isTest == true) continue;
-        if (deal.isExpired == true) continue;
+        if (deal.isArchived) continue;
         if (deal.hotVotes < minHotVotes) continue;
         if (deal.netScore <= 0) continue;
         if (deal.createdAt.isBefore(cutoffTime)) continue;
@@ -474,11 +474,9 @@ class DealService {
         .limit(100)
         .snapshots()
         .map((snapshot) {
-      final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(hours: 48));
       final deals = snapshot.docs
           .map((doc) => _safeParseDeal(doc))
-          .where((deal) => deal != null && deal.isApproved == true && deal.isExpired != true && !deal.createdAt.isBefore(cutoffTime) && deal.isTest != true)
+          .where((deal) => deal != null && deal.isApproved == true && !deal.isArchived && deal.isTest != true)
           .cast<Deal>()
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -502,6 +500,17 @@ class DealService {
           .toList();
       deals.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return deals;
+    }).handleError((error, stackTrace) {
+      _log('⚠️ getExpiredDealsStream akış hatası: $error');
+      SystemLogService.instance.logError(
+        category: 'mobile',
+        subCategory: 'admin_feed',
+        errorType: 'ExpiredDealsStreamError',
+        message: 'getExpiredDealsStream akış hatası: $error',
+        stack: stackTrace,
+        severity: SystemErrorSeverity.warning,
+      );
+      throw error;
     });
   }
 

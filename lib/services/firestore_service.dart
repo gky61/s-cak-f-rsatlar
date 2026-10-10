@@ -100,6 +100,7 @@ class FirestoreService {
   Stream<List<Deal>> getApprovedDealsStream() => _dealService.getApprovedDealsStream();
   
   Future<Deal?> getDeal(String dealId) => _dealService.getDeal(dealId);
+  Future<bool> markDealAsExpired(String dealId) => _dealService.markDealAsExpired(dealId);
   
   Future<String?> addDeal(Deal deal) async {
     // Legacy support: createDeal tercih edilmeli
@@ -150,8 +151,6 @@ class FirestoreService {
   Future<bool> updateDeal(String dealId, Map<String, dynamic> updates) => _dealService.updateDeal(dealId, updates);
   
   Future<bool> deleteDeal(String dealId) => _dealService.deleteDeal(dealId);
-  
-  Future<bool> markDealAsExpired(String dealId) => _dealService.markDealAsExpired(dealId);
   
   Future<bool> unexpireDeal(
     String dealId, {

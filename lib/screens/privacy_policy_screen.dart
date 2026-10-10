@@ -122,7 +122,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   _buildParagraph(
-                    '6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK"), Google Play Geliştirici Politikaları ve Apple App Store İnceleme Kılavuzları uyarınca kişisel verilerinizin gizliliği en üst önceliğimizdir. Platformumuzdaki veri sorumlusu Gökay Alemdar / FırsatKolik ekibidir.',
+                    '6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK"), Google Play Geliştirici Politikaları ve Apple App Store İnceleme Kılavuzları uyarınca kişisel verilerinizin gizliliği en üst önceliğimizdir. Platformumuzdaki veri sorumlusu Muratcan Gökyokuş / FırsatKolik ekibidir.',
                     textSub,
                   ),
                 ],

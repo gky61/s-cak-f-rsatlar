@@ -285,7 +285,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
         }
       } else {
-        // Eğer kendi profilimizse yeni kullanıcı oluştur
+        // Eğer kendi profilimizse ve Firestore'da henüz belge yoksa başlangıç dokümanı oluştur
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
@@ -298,7 +298,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               totalLikes: 0,
               badges: [],
             );
-            _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore(), SetOptions(merge: true));
+            try {
+              _firestore.collection('users').doc(currentUser.uid).set({
+                ...newUser.toFirestore(),
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+            } catch (e) {
+              _log('Profil başlangıç kaydı oluşturulamadı: $e');
+            }
             if (mounted) {
               setState(() {
                 _user = newUser;
@@ -330,11 +337,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
         } catch (parseError) {
           _log('Kullanıcı verisi parse hatası: $parseError');
-          // Parse hatası durumunda varsayılan kullanıcı oluştur
+          // Parse hatası durumunda mevcut belgeyi asla ezme (güvenlik kuralı ve veri kaybı kalkanı)
           if (_isOwnProfile) {
             final currentUser = _authService.currentUser;
             if (currentUser != null) {
-              final newUser = AppUser(
+              final fallbackUser = AppUser(
                 uid: currentUser.uid,
                 username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
                 profileImageUrl: currentUser.photoURL ?? '',
@@ -343,10 +350,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 totalLikes: 0,
                 badges: [],
               );
-              await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore(), SetOptions(merge: true));
               if (mounted) {
                 setState(() {
-                  _user = newUser;
+                  _user = fallbackUser;
                   _isLoading = false;
                 });
               }
@@ -369,7 +375,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               totalLikes: 0,
               badges: [],
             );
-            await _firestore.collection('users').doc(currentUser.uid).set(newUser.toFirestore(), SetOptions(merge: true));
+            try {
+              await _firestore.collection('users').doc(currentUser.uid).set({
+                ...newUser.toFirestore(),
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+            } catch (e) {
+              _log('Kullanıcı dokümanı oluşturma hatası: $e');
+            }
             if (mounted) {
               setState(() {
                 _user = newUser;

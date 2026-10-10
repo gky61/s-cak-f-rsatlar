@@ -233,6 +233,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _pendingCount = deals.length;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ Onay bekleyen fırsatlar dinleyici hatası: $e');
     });
     
     // Paylaşılanlar (kullanıcı fırsatları)
@@ -242,6 +244,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _userSubmittedCount = deals.length;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ Paylaşılanlar dinleyici hatası: $e');
     });
 
     // Onay bekleyen topluluk kuponları
@@ -251,6 +255,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _pendingCouponsCount = kuponlar.length;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ Onay bekleyen kuponlar dinleyici hatası: $e');
     });
     
     // Süresi bitenler
@@ -260,6 +266,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _expiredCount = deals.length;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ Süresi biten fırsatlar dinleyici hatası: $e');
     });
     
     // Kullanıcılar (OOM ve kota patlaması kalkanı: count agregasyonu ile sıfır doküman yükü)
@@ -366,6 +374,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _pendingReportsCount = _pendingComplaintsCount + _unreadAutoModCount;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ Raporlar dinleyici hatası: $e');
     });
 
     _autoModSubscription = FirebaseFirestore.instance
@@ -380,6 +390,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           _pendingReportsCount = _pendingComplaintsCount + _unreadAutoModCount;
         });
       }
+    }, onError: (e) {
+      _log('⚠️ Otomatik moderasyon dinleyici hatası: $e');
     });
   }
 
@@ -396,6 +408,32 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
       },
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 48),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Fırsatlar yüklenirken bir sorun oluştu.',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${snapshot.error}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return ListView.separated(
             padding: const EdgeInsets.all(16),

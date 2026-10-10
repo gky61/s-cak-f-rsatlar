@@ -103,6 +103,47 @@ void main() {
       // User clears price -> discount is null
       expect(calculateDiscount(null, 100), isNull);
     });
+
+    test('Reactivating an archived deal in admin sheet prepares refresh timestamps and resets expired votes', () {
+      final oldArchivedDeal = Deal(
+        id: 'archived_1',
+        title: 'Eski Süresi Dolan Fırsat',
+        price: 50,
+        store: 'Amazon',
+        category: 'elektronik',
+        link: 'https://amazon.com.tr',
+        imageUrl: '',
+        hotVotes: 5,
+        coldVotes: 0,
+        expiredVotes: 15,
+        commentCount: 0,
+        postedBy: 'bot',
+        createdAt: DateTime.now().subtract(const Duration(hours: 60)),
+        isApproved: true,
+        isExpired: true,
+        isEditorPick: false,
+      );
+
+      expect(oldArchivedDeal.isArchived, isTrue);
+
+      // Simüle edilen admin güncelleme mantığı
+      const bool isApproved = true;
+      final Map<String, dynamic> updates = {};
+
+      if (isApproved && (oldArchivedDeal.isApproved != true || oldArchivedDeal.isArchived)) {
+        updates['approvedAt'] = 'serverTimestamp';
+        if (oldArchivedDeal.isArchived) {
+          updates['createdAt'] = 'serverTimestamp';
+          updates['timestamp'] = 'serverTimestamp';
+          updates['expiredVotes'] = 0;
+        }
+      }
+
+      expect(updates['approvedAt'], 'serverTimestamp');
+      expect(updates['createdAt'], 'serverTimestamp');
+      expect(updates['timestamp'], 'serverTimestamp');
+      expect(updates['expiredVotes'], 0);
+    });
   });
 }
 

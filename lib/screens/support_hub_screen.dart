@@ -619,8 +619,43 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
           );
         }
       } catch (e) {
+        final errLower = e.toString().toLowerCase();
+        final isRecentLoginReq = errLower.contains('requires-recent-login') ||
+            errLower.contains('yeniden doğrulama') ||
+            errLower.contains('yeniden giriş');
+        final isPasswordProvider = _authService.currentUser?.providerData.any((p) => p.providerId == 'password') ?? false;
+
+        if (isRecentLoginReq && isPasswordProvider && mounted) {
+          // E-posta kullanıcısından şifre isteyerek anında yeniden doğrulama ve silme dene
+          final reauthPassword = await _showReauthPasswordDialog();
+          if (reauthPassword != null && reauthPassword.isNotEmpty) {
+            try {
+              await _authService.deleteAccount(reauthPassword: reauthPassword);
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  (route) => false,
+                );
+                return;
+              }
+            } catch (reauthErr) {
+              if (mounted) {
+                final cleanMsg = reauthErr.toString().replaceAll('AuthException: ', '').replaceAll('Exception: ', '').trim();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Doğrulama başarısız: $cleanMsg'),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+        }
+
         if (mounted) {
-          final cleanMsg = e.toString().replaceAll('Exception: ', '').trim();
+          final cleanMsg = e.toString().replaceAll('AuthException: ', '').replaceAll('Exception: ', '').trim();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Hesap silinirken hata oluştu: $cleanMsg'),
@@ -634,6 +669,71 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
           setState(() => _isLoading = false);
         }
       }
+    }
+  }
+
+  Future<String?> _showReauthPasswordDialog() async {
+    final passwordController = TextEditingController();
+    bool obscure = true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.shield_outlined, color: AppTheme.primary),
+                SizedBox(width: 10),
+                Text('Güvenlik Doğrulaması', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Hesabınızı güvenle silebilmek için lütfen mevcut şifrenizi girin.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: passwordController,
+                  obscureText: obscure,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Şifreniz',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
+                      onPressed: () => setDialogState(() => obscure = !obscure),
+                    ),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('Vazgeç'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, passwordController.text),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+                child: const Text('Onayla ve Sil'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      passwordController.dispose();
     }
   }
 

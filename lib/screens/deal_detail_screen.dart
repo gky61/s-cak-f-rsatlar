@@ -164,7 +164,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         link: _currentDeal!.link,
         imageUrl: _currentDeal!.imageUrl,
         category: _currentDeal!.category,
-        isExpired: _currentDeal!.isExpired,
+        isExpired: _currentDeal!.isArchived,
       );
     } else {
       success = await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);
@@ -441,9 +441,25 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
             }
           });
         }
+
+        // Self-Healing: Eğer fırsat 48 saati doldurmuşsa ancak Firestore'da hala isExpired: false kalmışsa,
+        // giriş yapmış kullanıcı oturumunda dokümanı sessizce güncelleyerek veritabanı tutarlılığını onar
+        if (deal.isArchived && !deal.isExpired) {
+          _autoHealExpiredStatus(deal.id);
+        }
       }
     } catch (e) {
       _log('Deal yükleme hatası: $e');
+    }
+  }
+
+  Future<void> _autoHealExpiredStatus(String dealId) async {
+    try {
+      if (_authService.currentUser == null) return;
+      await _firestoreService.markDealAsExpired(dealId);
+      _log('🩹 [Self-Healing] Süresi dolan fırsat Firestore üzerinde isExpired: true olarak güncellendi: $dealId');
+    } catch (e) {
+      _log('⚠️ [Self-Healing] isExpired güncelleme atlandı: $e');
     }
   }
 
@@ -765,7 +781,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             ),
                           ),
                         // Floating Archival Sticker (Bottom Left over Image)
-                        if (deal.isExpired)
+                        if (deal.isArchived)
                           Positioned(
                             bottom: 30,
                             left: 16,
@@ -868,7 +884,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
 
                               // 48 Saat Arşiv Bilgilendirme Şeridi (Informational Banner)
-                              if (deal.isExpired)
+                              if (deal.isArchived)
                                 DealDetailHelpers.buildArchivedCampaignBanner(
                                   context: context,
                                   isDark: isDark,
@@ -1503,7 +1519,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
                                 gradient: LinearGradient(
-                                  colors: deal.isExpired 
+                                  colors: deal.isArchived 
                                       ? [Colors.grey[700]!, Colors.grey[800]!]
                                       : [const Color(0xFFFF6B35), const Color(0xFFFF8E53)],
                                   begin: Alignment.centerLeft,
@@ -1511,7 +1527,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (deal.isExpired ? Colors.black : const Color(0xFFFF6B35)).withValues(alpha: 0.35),
+                                    color: (deal.isArchived ? Colors.black : const Color(0xFFFF6B35)).withValues(alpha: 0.35),
                                     blurRadius: 12,
                                     offset: const Offset(0, 4),
                                   ),
@@ -1526,7 +1542,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 label: FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
-                                    deal.isExpired ? 'Şansını Dene' : 'Mağazaya Git',
+                                    deal.isArchived ? 'Şansını Dene' : 'Mağazaya Git',
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w800,
@@ -1551,7 +1567,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
                         // Admin approval / rejection / reactivation controls
                         if (_isAdmin) ...[
-                          if (deal.isApproved != true && !deal.isExpired)
+                          if (deal.isApproved != true && !deal.isArchived)
                             Padding(
                               padding: const EdgeInsets.only(top: 14),
                               child: Row(
@@ -1597,7 +1613,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                 ],
                               ),
                             )
-                          else if (deal.isExpired)
+                          else if (deal.isArchived)
                             Padding(
                               padding: const EdgeInsets.only(top: 14),
                               child: SizedBox(
@@ -1794,7 +1810,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                           color: const Color(0xFFFF9800),
                           onTap: () => _showAdminEditDialog(deal),
                         ),
-                        if (deal.isApproved == true && !deal.isExpired) ...[
+                        if (deal.isApproved == true && !deal.isArchived) ...[
                           const SizedBox(width: 8),
                           _buildGlassCircleButton(
                             icon: Icons.visibility_off_rounded,
@@ -1802,7 +1818,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                             color: Colors.orangeAccent,
                             onTap: () => _unpublishDeal(deal.id),
                           ),
-                        ] else if (deal.isExpired) ...[
+                        ] else if (deal.isArchived) ...[
                           const SizedBox(width: 8),
                           _buildGlassCircleButton(
                             icon: Icons.play_circle_outline_rounded,

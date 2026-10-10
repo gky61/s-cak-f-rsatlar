@@ -146,9 +146,11 @@ class AdManagerService extends ChangeNotifier {
     _lastFailedTime[adUnitId] = DateTime.now();
     _log('❌ Reklam yüklenemedi: $adUnitId | Kod: ${error.code} | Mesaj: ${error.message}');
 
-    // Kod 3 (ERROR_CODE_NO_FILL) doluluk oranına bağlı beklenen durumdur (gürültü önlenir).
+    // Kod 3 (ERROR_CODE_NO_FILL), Kod 2 (ERROR_CODE_NETWORK_ERROR) ve Kod 5 (GADErrorTimeout)
+    // geçici ağ gecikmeleri veya stok yokluğu kaynaklıdır (kod hatası değildir, sahte alarmlar önlenir).
     // Ancak Kod 0 (INTERNAL_ERROR) veya Kod 1 (INVALID_REQUEST / Yanlış AdUnitId) kritik konfigürasyon hatalarıdır!
-    if (error.code != 3) {
+    final isTransientAdCondition = error.code == 3 || error.code == 2 || error.code == 5;
+    if (!isTransientAdCondition) {
       SystemLogService.instance.logError(
         category: 'admob',
         subCategory: 'ad_load_failure',
