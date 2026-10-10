@@ -47,6 +47,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   bool _isFirstLoadFollowed = true;
   bool _hasMoreFollowed = true;
   String? _followedErrorMessage;
+  bool _isRefreshingFollowed = false;
 
   int _favoriteFilterIndex = 0; // 0: Tümü, 1: Aktif, 2: Süresi Dolanlar
 
@@ -159,7 +160,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   /// FS-18: Followed Categories SWR + Cache-First ilk yükleme
   Future<void> _loadFollowedFirstPage() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || !mounted) return;
+    if (user == null || !mounted || _isRefreshingFollowed) return;
+    _isRefreshingFollowed = true;
     setState(() {
       _isLoadingFollowed = true;
       _followedErrorMessage = null;
@@ -209,6 +211,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           }
         });
       }
+    } finally {
+      _isRefreshingFollowed = false;
     }
   }
 
@@ -513,25 +517,65 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         }
 
         if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 56,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Bir hata oluştu',
-                  style: TextStyle(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w800,
-                    color: textColor,
+          return RefreshIndicator(
+            color: AppTheme.primary,
+            onRefresh: () async {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
+              });
+            },
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 56,
+                            color: isDark ? Colors.grey[600] : Colors.grey[400],
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            'Bir hata oluştu',
+                            style: TextStyle(
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              HapticFeedback.lightImpact();
+                              setState(() {
+                                _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
+                              });
+                            },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Tekrar Dene'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
           );
         }
@@ -539,42 +583,62 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         final deals = snapshot.data ?? [];
 
         if (deals.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.bookmark_border_rounded,
-                    size: 34,
-                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+          return RefreshIndicator(
+            color: AppTheme.primary,
+            onRefresh: () async {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
+              });
+            },
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 68,
+                            height: 68,
+                            decoration: BoxDecoration(
+                              color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.bookmark_border_rounded,
+                              size: 34,
+                              color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Henüz kaydettiğiniz fırsat yok',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Kaydettiğiniz fırsatlar burada düzenli olarak listelenir',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: secondaryTextColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Henüz kaydettiğiniz fırsat yok',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: textColor,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Kaydettiğiniz fırsatlar burada düzenli olarak listelenir',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: secondaryTextColor,
-                  ),
-                ),
-              ],
+              ),
             ),
           );
         }
@@ -1111,47 +1175,67 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     final textColor = isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A);
     final secondaryTextColor = isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B);
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 52, color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8)),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16.5,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-                letterSpacing: -0.2,
+    return RefreshIndicator(
+      color: AppTheme.primary,
+      onRefresh: () async {
+        HapticFeedback.lightImpact();
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          setState(() {
+            _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
+          });
+        }
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 52, color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8)),
+                    const SizedBox(height: 14),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: secondaryTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _favoriteFilterIndex = 0);
+                      },
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('Tüm Kayıtları Göster'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.primary,
+                        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: secondaryTextColor,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                setState(() => _favoriteFilterIndex = 0);
-              },
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('Tüm Kayıtları Göster'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.primary,
-                textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1289,51 +1373,56 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       return RefreshIndicator(
         color: AppTheme.primary,
         onRefresh: _loadFollowedFirstPage,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.7,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 56,
-                  color: isDark ? Colors.grey[600] : Colors.grey[400],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  _followedErrorMessage ?? 'Bir hata oluştu',
-                  style: TextStyle(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w800,
-                    color: textColor,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 56,
+                        color: isDark ? Colors.grey[600] : Colors.grey[400],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _followedErrorMessage ?? 'Bir hata oluştu',
+                        style: TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _loadFollowedFirstPage();
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text(
+                          'Tekrar Dene',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    _loadFollowedFirstPage();
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text(
-                    'Tekrar Dene',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1346,77 +1435,82 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       return RefreshIndicator(
         color: AppTheme.primary,
         onRefresh: _loadFollowedFirstPage,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.7,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.category_outlined,
-                    size: 34,
-                    color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Henüz Fırsat Bulunamadı',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: textColor,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Takip ettiğiniz kategorilerde son 48 saatte paylaşılan yeni bir fırsat bulunmuyor veya henüz kategori seçmediniz.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: secondaryTextColor,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const CategoryPreferencesScreen(),
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 68,
+                        height: 68,
+                        decoration: BoxDecoration(
+                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.category_outlined,
+                          size: 34,
+                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                        ),
                       ),
-                    ).then((_) {
-                      _loadFollowedFirstPage();
-                    });
-                  },
-                  icon: const Icon(Icons.tune_rounded, size: 18),
-                  label: const Text(
-                    'Kategorileri Yönet & Takip Et',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Henüz Fırsat Bulunamadı',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Takip ettiğiniz kategorilerde son 48 saatte paylaşılan yeni bir fırsat bulunmuyor veya henüz kategori seçmediniz.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CategoryPreferencesScreen(),
+                            ),
+                          ).then((_) {
+                            _loadFollowedFirstPage();
+                          });
+                        },
+                        icon: const Icon(Icons.tune_rounded, size: 18),
+                        label: const Text(
+                          'Kategorileri Yönet & Takip Et',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),

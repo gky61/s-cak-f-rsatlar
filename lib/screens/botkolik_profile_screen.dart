@@ -49,10 +49,18 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
   StreamSubscription<dynamic>? _authSub;
 
   Future<void>? _inFlightFollowLoad;
+  late Stream<List<Deal>> _botkolikDealsStream;
+
+  void _initBotkolikDealsStream() {
+    _botkolikDealsStream = _firestoreService.getBotkolikDealsStream(
+      categoryId: _selectedCategory == 'all' ? null : _selectedCategory,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
+    _initBotkolikDealsStream();
     // _authSub dinleyicisi ilk karesinde anında tetiklenerek _loadFollowStatus() çağrısını yapar.
     _authSub = _authService.authStateChanges.listen((user) {
       if (mounted) {
@@ -83,8 +91,11 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     }
 
     _inFlightFollowLoad = _fetchFollowStatus(currentUserId);
-    await _inFlightFollowLoad;
-    _inFlightFollowLoad = null;
+    try {
+      await _inFlightFollowLoad;
+    } finally {
+      _inFlightFollowLoad = null;
+    }
   }
 
   Future<void> _fetchFollowStatus(String currentUserId) async {
@@ -262,62 +273,77 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
           // 2. ANA İÇERİK (Sliver Scroll)
           SafeArea(
             bottom: false,
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                // Top App Bar
-                SliverToBoxAdapter(
-                  child: _buildTopBar(context, isDark),
+            child: RefreshIndicator(
+              color: cyberCyan,
+              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+              onRefresh: () async {
+                HapticFeedback.lightImpact();
+                await _loadFollowStatus();
+                if (mounted) {
+                  setState(() {
+                    _initBotkolikDealsStream();
+                  });
+                }
+              },
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
+                slivers: [
+                  // Top App Bar
+                  SliverToBoxAdapter(
+                    child: _buildTopBar(context, isDark),
+                  ),
 
-                // Hero Identity & Integrated Actions
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: _buildHeroProfileCard(
+                  // Hero Identity & Integrated Actions
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: _buildHeroProfileCard(
+                        isDark: isDark,
+                        cardBg: cardBg,
+                        borderColor: borderColor,
+                      ),
+                    ),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 14)),
+
+                  // Botkolik Akıllı Özellikleri & Yetenekler Bölümü
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: _buildFeaturesSection(
+                        isDark: isDark,
+                        cardBg: cardBg,
+                        borderColor: borderColor,
+                      ),
+                    ),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 18)),
+
+                  // Keşfedilen Fırsatlar Başlığı ve Filtreler
+                  SliverToBoxAdapter(
+                    child: _buildDealsHeaderAndFilters(
                       isDark: isDark,
                       cardBg: cardBg,
                       borderColor: borderColor,
                     ),
                   ),
-                ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 14)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
-                // Botkolik Akıllı Özellikleri & Yetenekler Bölümü
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: _buildFeaturesSection(
-                      isDark: isDark,
-                      cardBg: cardBg,
-                      borderColor: borderColor,
-                    ),
-                  ),
-                ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 18)),
-
-                // Keşfedilen Fırsatlar Başlığı ve Filtreler
-                SliverToBoxAdapter(
-                  child: _buildDealsHeaderAndFilters(
+                  // Canlı Fırsatlar Listesi
+                  _buildLiveDealsStream(
                     isDark: isDark,
                     cardBg: cardBg,
                     borderColor: borderColor,
                   ),
-                ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-                // Canlı Fırsatlar Listesi
-                _buildLiveDealsStream(
-                  isDark: isDark,
-                  cardBg: cardBg,
-                  borderColor: borderColor,
-                ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 48)),
-              ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 48)),
+                ],
+              ),
             ),
           ),
         ],
@@ -1186,8 +1212,12 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
                 padding: const EdgeInsets.only(right: 8.0),
                 child: InkWell(
                   onTap: () {
+                    if (_selectedCategory == catId) return;
                     HapticFeedback.selectionClick();
-                    setState(() => _selectedCategory = catId);
+                    setState(() {
+                      _selectedCategory = catId;
+                      _initBotkolikDealsStream();
+                    });
                   },
                   borderRadius: BorderRadius.circular(10),
                   child: AnimatedContainer(
@@ -1243,9 +1273,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
     required Color borderColor,
   }) {
     return StreamBuilder<List<Deal>>(
-      stream: _firestoreService.getBotkolikDealsStream(
-        categoryId: _selectedCategory == 'all' ? null : _selectedCategory,
-      ),
+      stream: _botkolikDealsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return SliverPadding(

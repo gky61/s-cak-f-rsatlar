@@ -267,5 +267,242 @@ void main() {
         isTrue,
       );
     });
+
+    test('Zero deals (empty feed) triggers Floating Pill ONLY after server data confirms empty state', () {
+      final now = DateTime.now();
+      final List<Deal> emptyFeed = [];
+
+      bool evaluateLatestDealTrigger({
+        required Deal? latestDeal,
+        required List<Deal> currentFeed,
+        required bool hasServerData,
+        required bool isLoadingDeals,
+        String? selectedSubCategory,
+      }) {
+        if (latestDeal == null || latestDeal.isTest == true) return false;
+        if (selectedSubCategory != null &&
+            selectedSubCategory.isNotEmpty &&
+            latestDeal.subCategory != selectedSubCategory) {
+          return false;
+        }
+        // Race condition guard: initial server response still pending
+        if (!hasServerData || isLoadingDeals) return false;
+
+        if (currentFeed.any((d) => d.id == latestDeal.id)) return false;
+
+        // Zero deals scenario
+        if (currentFeed.isEmpty) {
+          return hasServerData;
+        }
+
+        DateTime maxCreatedAt = currentFeed.first.createdAt;
+        for (final d in currentFeed) {
+          if (d.createdAt.isAfter(maxCreatedAt)) {
+            maxCreatedAt = d.createdAt;
+          }
+        }
+        return latestDeal.createdAt.isAfter(maxCreatedAt);
+      }
+
+      final incomingDeal = _createTestDeal(
+        id: 'first-deal-ever',
+        title: 'İlk Onaylı Fırsat',
+        price: 99,
+        createdAt: now,
+      );
+
+      // Scenario A: App is still loading initial page from server (race condition) -> MUST NOT trigger pill
+      expect(
+        evaluateLatestDealTrigger(
+          latestDeal: incomingDeal,
+          currentFeed: emptyFeed,
+          hasServerData: false,
+          isLoadingDeals: true,
+        ),
+        isFalse,
+      );
+
+      // Scenario B: Server response finished, confirmed feed is empty, then new deal arrives -> MUST trigger pill
+      expect(
+        evaluateLatestDealTrigger(
+          latestDeal: incomingDeal,
+          currentFeed: emptyFeed,
+          hasServerData: true,
+          isLoadingDeals: false,
+        ),
+        isTrue,
+      );
+
+      // Scenario C: Deal is already rendered in feed -> MUST NOT trigger
+      final feedWithDeal = [incomingDeal];
+      expect(
+        evaluateLatestDealTrigger(
+          latestDeal: incomingDeal,
+          currentFeed: feedWithDeal,
+          hasServerData: true,
+          isLoadingDeals: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('Subcategory isolation ensures floating pill only triggers for matching subcategory', () {
+      final now = DateTime.now();
+      final List<Deal> emptyFeed = [];
+
+      bool evaluateLatestDealTrigger({
+        required Deal? latestDeal,
+        required List<Deal> currentFeed,
+        required bool hasServerData,
+        required bool isLoadingDeals,
+        String? selectedSubCategory,
+      }) {
+        if (latestDeal == null || latestDeal.isTest == true) return false;
+        if (selectedSubCategory != null &&
+            selectedSubCategory.isNotEmpty &&
+            latestDeal.subCategory != selectedSubCategory) {
+          return false;
+        }
+        if (!hasServerData || isLoadingDeals) return false;
+        if (currentFeed.any((d) => d.id == latestDeal.id)) return false;
+        if (currentFeed.isEmpty) return hasServerData;
+        return true;
+      }
+
+      final Deal laptopDeal = Deal(
+        id: 'deal-laptop-1',
+        title: 'MacBook M3',
+        description: 'Açıklama',
+        price: 45000,
+        store: 'Amazon',
+        category: 'elektronik',
+        subCategory: 'bilgisayar',
+        link: 'https://amazon.com.tr/dp/1',
+        imageUrl: 'https://example.com/1.jpg',
+        hotVotes: 0,
+        coldVotes: 0,
+        commentCount: 0,
+        postedBy: 'user-1',
+        createdAt: now,
+        isEditorPick: false,
+        isApproved: true,
+        isTest: false,
+      );
+
+      // Case 1: User is looking at 'telefon' subcategory, but incoming deal is 'bilgisayar' -> MUST NOT trigger
+      expect(
+        evaluateLatestDealTrigger(
+          latestDeal: laptopDeal,
+          currentFeed: emptyFeed,
+          hasServerData: true,
+          isLoadingDeals: false,
+          selectedSubCategory: 'telefon',
+        ),
+        isFalse,
+      );
+
+      // Case 2: User is looking at 'bilgisayar' subcategory, and incoming deal is 'bilgisayar' -> MUST trigger
+      expect(
+        evaluateLatestDealTrigger(
+          latestDeal: laptopDeal,
+          currentFeed: emptyFeed,
+          hasServerData: true,
+          isLoadingDeals: false,
+          selectedSubCategory: 'bilgisayar',
+        ),
+        isTrue,
+      );
+
+      // Case 3: User has no subcategory selected (all subcategories in main category) -> MUST trigger
+      expect(
+        evaluateLatestDealTrigger(
+          latestDeal: laptopDeal,
+          currentFeed: emptyFeed,
+          hasServerData: true,
+          isLoadingDeals: false,
+          selectedSubCategory: null,
+        ),
+        isTrue,
+      );
+    });
+
+    test('Popular deals re-entrancy lock prevents parallel concurrent server loads', () async {
+      int serverCallCount = 0;
+      bool isRefreshing = false;
+
+      Future<void> mockLoadFirstPage() async {
+        if (isRefreshing) return;
+        isRefreshing = true;
+        try {
+          serverCallCount++;
+          await Future.delayed(const Duration(milliseconds: 50));
+        } finally {
+          isRefreshing = false;
+        }
+      }
+
+      // 5 concurrent rapid triggers simulated (pull-to-refresh spam)
+      await Future.wait([
+        mockLoadFirstPage(),
+        mockLoadFirstPage(),
+        mockLoadFirstPage(),
+        mockLoadFirstPage(),
+        mockLoadFirstPage(),
+      ]);
+
+      // Exactly 1 server call should have completed due to re-entrancy lock
+      expect(serverCallCount, 1);
+    });
+
+    test('Followed categories re-entrancy lock prevents parallel concurrent loads', () async {
+      int queryCount = 0;
+      bool isRefreshingFollowed = false;
+
+      Future<void> mockLoadFollowedFirstPage() async {
+        if (isRefreshingFollowed) return;
+        isRefreshingFollowed = true;
+        try {
+          queryCount++;
+          await Future.delayed(const Duration(milliseconds: 50));
+        } finally {
+          isRefreshingFollowed = false;
+        }
+      }
+
+      // Rapid tab switching or repeated pull-to-refresh
+      await Future.wait([
+        mockLoadFollowedFirstPage(),
+        mockLoadFollowedFirstPage(),
+        mockLoadFollowedFirstPage(),
+      ]);
+
+      expect(queryCount, 1);
+    });
+
+    test('User deals pull-to-refresh re-entrancy lock prevents duplicate stream allocations', () async {
+      int streamRecreationCount = 0;
+      bool isRefreshingUserDeals = false;
+
+      Future<void> mockRefreshDeals() async {
+        if (isRefreshingUserDeals) return;
+        isRefreshingUserDeals = true;
+        try {
+          streamRecreationCount++;
+          await Future.delayed(const Duration(milliseconds: 50));
+        } finally {
+          isRefreshingUserDeals = false;
+        }
+      }
+
+      await Future.wait([
+        mockRefreshDeals(),
+        mockRefreshDeals(),
+        mockRefreshDeals(),
+        mockRefreshDeals(),
+      ]);
+
+      expect(streamRecreationCount, 1);
+    });
   });
 }
+

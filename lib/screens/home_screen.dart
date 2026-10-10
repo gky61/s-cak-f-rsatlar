@@ -141,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingMore = false;
   bool _hasMore = true;
   bool _hasServerData = false;
+  bool _isRefreshingDeals = false;
   bool _initialLoadingTimedOut = false;
   Timer? _initialLoadingTimeoutTimer;
   String? _dealsError;
@@ -588,77 +589,88 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // FS-09: SWR (Stale-While-Revalidate) & Cache-First İlk Yükleme
   Future<void> _fetchInitialDeals({bool isRefresh = false}) async {
+    if (isRefresh) {
+      if (_isRefreshingDeals) return;
+      _isRefreshingDeals = true;
+    }
+
     final requestedCategory = _selectedCategory;
     final requestedSubCategory = _selectedSubCategory;
 
-    if (!isRefresh && _dealsList.isEmpty) {
-      setState(() {
-        _isLoadingDeals = true;
-        _dealsError = null;
-      });
-      _startInitialLoadingTimeout();
-    }
+    try {
+      if (!isRefresh && _dealsList.isEmpty) {
+        setState(() {
+          _isLoadingDeals = true;
+          _dealsError = null;
+        });
+        _startInitialLoadingTimeout();
+      }
 
-    // 1. SWR / Cache-First Adımı (0ms yerel bellek / önbellek açılışı)
-    if (!isRefresh && _dealsList.isEmpty) {
+      // 1. SWR / Cache-First Adımı (0ms yerel bellek / önbellek açılışı)
+      if (!isRefresh && _dealsList.isEmpty) {
+        try {
+          final cacheResult = await _firestoreService.getDealsPaginated(
+            limit: 20,
+            category: requestedCategory,
+            subCategory: requestedSubCategory,
+            source: Source.cache,
+          );
+          if (cacheResult.deals.isNotEmpty &&
+              mounted &&
+              _selectedCategory == requestedCategory &&
+              _selectedSubCategory == requestedSubCategory) {
+            setState(() {
+              _dealsList = cacheResult.deals;
+              _lastDealDocument = cacheResult.lastDocument;
+              _hasMore = cacheResult.hasMore;
+              _isLoadingDeals = false;
+            });
+          }
+        } catch (_) {
+          // Cache boş veya ilk kurulum, sunucu isteğine devam et
+        }
+      }
+
+      // 2. Sunucudan taze veri çekimi (Revalidation)
       try {
-        final cacheResult = await _firestoreService.getDealsPaginated(
+        final serverResult = await _firestoreService.getDealsPaginated(
           limit: 20,
           category: requestedCategory,
           subCategory: requestedSubCategory,
-          source: Source.cache,
+          source: Source.server,
         );
-        if (cacheResult.deals.isNotEmpty &&
-            mounted &&
+
+        if (mounted &&
             _selectedCategory == requestedCategory &&
             _selectedSubCategory == requestedSubCategory) {
           setState(() {
-            _dealsList = cacheResult.deals;
-            _lastDealDocument = cacheResult.lastDocument;
-            _hasMore = cacheResult.hasMore;
+            _dealsList = serverResult.deals;
+            _lastDealDocument = serverResult.lastDocument;
+            _hasMore = serverResult.hasMore;
+            _isLoadingDeals = false;
+            _hasServerData = true;
+            _dealsError = null;
+            _hasNewDealsPill = false;
+            _newDealsCount = 0;
+          });
+          _initialLoadingTimeoutTimer?.cancel();
+        }
+      } catch (e) {
+        if (mounted &&
+            _selectedCategory == requestedCategory &&
+            _selectedSubCategory == requestedSubCategory) {
+          setState(() {
+            // Eğer önceden cache'ten veri geldiyse kullanıcıya hata gösterme
+            if (_dealsList.isEmpty) {
+              _dealsError = e.toString();
+            }
             _isLoadingDeals = false;
           });
         }
-      } catch (_) {
-        // Cache boş veya ilk kurulum, sunucu isteğine devam et
       }
-    }
-
-    // 2. Sunucudan taze veri çekimi (Revalidation)
-    try {
-      final serverResult = await _firestoreService.getDealsPaginated(
-        limit: 20,
-        category: requestedCategory,
-        subCategory: requestedSubCategory,
-        source: Source.server,
-      );
-
-      if (mounted &&
-          _selectedCategory == requestedCategory &&
-          _selectedSubCategory == requestedSubCategory) {
-        setState(() {
-          _dealsList = serverResult.deals;
-          _lastDealDocument = serverResult.lastDocument;
-          _hasMore = serverResult.hasMore;
-          _isLoadingDeals = false;
-          _hasServerData = true;
-          _dealsError = null;
-          _hasNewDealsPill = false;
-          _newDealsCount = 0;
-        });
-        _initialLoadingTimeoutTimer?.cancel();
-      }
-    } catch (e) {
-      if (mounted &&
-          _selectedCategory == requestedCategory &&
-          _selectedSubCategory == requestedSubCategory) {
-        setState(() {
-          // Eğer önceden cache'ten veri geldiyse kullanıcıya hata gösterme
-          if (_dealsList.isEmpty) {
-            _dealsError = e.toString();
-          }
-          _isLoadingDeals = false;
-        });
+    } finally {
+      if (isRefresh) {
+        _isRefreshingDeals = false;
       }
     }
   }
@@ -672,13 +684,37 @@ class _HomeScreenState extends State<HomeScreen> {
     ).listen((latestDeal) {
       if (!mounted || latestDeal == null) return;
       if (latestDeal.isTest == true) return;
-      if (_dealsList.isEmpty) return;
 
+      // 1. Alt kategori filtresi aktifse ve fırsat uyuşmuyorsa dikkate alma
+      if (_selectedSubCategory != null &&
+          _selectedSubCategory!.isNotEmpty &&
+          latestDeal.subCategory != _selectedSubCategory) {
+        return;
+      }
+
+      // 2. İlk sayfa sunucudan gelene kadar yarış durumunu (Race Condition) önle.
+      // Açılışta veya kategori değişiminde ilk yükleme devam ederken sahte bildirim çıkarma.
+      if (!_hasServerData || _isLoadingDeals) {
+        return;
+      }
+
+      // 3. Fırsat zaten mevcut ekrandaki listede varsa gösterme
+      if (_dealsList.any((d) => d.id == latestDeal.id)) return;
+
+      // 4. Liste BOŞ ise ve sunucu verisi taze ise (Sıfır fırsat senaryosu)
+      if (_dealsList.isEmpty) {
+        if (_hasServerData) {
+          setState(() {
+            _newDealsCount = 1;
+            _hasNewDealsPill = true;
+          });
+        }
+        return;
+      }
+
+      // 5. Liste DOLU ise:
       // Eğer en üstteki fırsat zaten bu fırsatsa, yeni fırsat yok
       if (_dealsList.first.id == latestDeal.id) return;
-
-      // Eğer fırsat zaten listede mevcutsa, gösterme
-      if (_dealsList.any((d) => d.id == latestDeal.id)) return;
 
       // Fırsat mevcut listedeki herhangi bir elemandan daha yeni ise (feedScore sıralamasından bağımsız garanti kontrol)
       DateTime maxCreatedAt = _dealsList.first.createdAt;
@@ -709,6 +745,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _lastDealDocument = null;
       _dealsList.clear();
       _isLoadingDeals = true;
+      _hasServerData = false;
       _hasMore = true;
       _hasNewDealsPill = false;
       _newDealsCount = 0;
@@ -980,6 +1017,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _lastDealDocument = null;
         _dealsList.clear();
         _isLoadingDeals = true;
+        _hasServerData = false;
         _hasMore = true;
       }
     });
@@ -1739,39 +1777,67 @@ class _HomeScreenState extends State<HomeScreen> {
     // 1. Hata veya Zaman Aşımı Durumu
     if ((_dealsError != null || _initialLoadingTimedOut) && _dealsList.isEmpty) {
       final isTimeout = _initialLoadingTimedOut && _dealsError == null;
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isTimeout ? Icons.wifi_off_rounded : Icons.error_outline,
-              size: 64,
-              color: isTimeout ? Colors.orange[300] : Colors.red[300],
+      return RefreshIndicator(
+        color: AppTheme.primary,
+        onRefresh: () async {
+          HapticFeedback.mediumImpact();
+          setState(() {
+            _initialLoadingTimedOut = false;
+            _dealsError = null;
+          });
+          await _fetchInitialDeals(isRefresh: true);
+        },
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
-            const SizedBox(height: 16),
-            Text(
-              isTimeout
-                  ? 'Sunucuya bağlanılamadı veya internet yavaş.'
-                  : 'Bir hata oluştu: $_dealsError',
-              style: TextStyle(
-                color: isTimeout ? (isDark ? Colors.grey[300] : Colors.grey[800]) : Colors.red[500],
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight,
               ),
-              textAlign: TextAlign.center,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isTimeout ? Icons.wifi_off_rounded : Icons.error_outline,
+                        size: 64,
+                        color: isTimeout ? Colors.orange[300] : Colors.red[300],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        isTimeout
+                            ? 'Sunucuya bağlanılamadı veya internet yavaş.'
+                            : 'Bir hata oluştu: $_dealsError',
+                        style: TextStyle(
+                          color: isTimeout ? (isDark ? Colors.grey[300] : Colors.grey[800]) : Colors.red[500],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          setState(() {
+                            _initialLoadingTimedOut = false;
+                            _dealsError = null;
+                          });
+                          _fetchInitialDeals();
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Yeniden Dene'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _initialLoadingTimedOut = false;
-                  _dealsError = null;
-                });
-                _fetchInitialDeals();
-              },
-              child: const Text('Yeniden Dene'),
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -1810,154 +1876,175 @@ class _HomeScreenState extends State<HomeScreen> {
       final normalizedQuery = _notificationService.normalizeKeyword(cleanQuery);
       final isFollowed = _followedKeywords.contains(normalizedQuery);
 
-      return SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: primaryColor.withValues(alpha: 0.25),
-                  width: 1.5,
+      return RefreshIndicator(
+        onRefresh: () async {
+          HapticFeedback.mediumImpact();
+          await _fetchInitialDeals(isRefresh: true);
+        },
+        color: AppTheme.primary,
+        strokeWidth: 3.0,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
                 ),
-              ),
-              child: Icon(
-                _searchQuery.isNotEmpty ? Icons.radar_rounded : Icons.inbox_rounded,
-                size: 54,
-                color: primaryColor,
-              ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'Aradığın "$cleanQuery" ile ilgili taze fırsat bulamadık'
-                  : 'Henüz fırsat eklenmemiş',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isDark ? Colors.white : AppTheme.textPrimary,
-                fontSize: 16.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'Yeni bir fırsat paylaşıldığında anında bildirim almak ister misin? Radara al, fırsatı ilk sen yakala!'
-                  : 'Daha sonra tekrar kontrol edebilirsiniz.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
-                fontSize: 13.5,
-                height: 1.45,
-              ),
-            ),
-            if (_searchQuery.isNotEmpty) ...[
-              const SizedBox(height: 22),
-              // Primary Radar CTA Button
-              ElevatedButton.icon(
-                onPressed: _isAddingKeywordFromSearch
-                    ? null
-                    : () => _toggleKeywordSubscriptionFromSearch(cleanQuery),
-                icon: _isAddingKeywordFromSearch
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : Icon(
-                        isFollowed ? Icons.check_circle_rounded : Icons.radar_rounded,
-                        size: 18,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: primaryColor.withValues(alpha: 0.25),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Icon(
+                          _searchQuery.isNotEmpty ? Icons.radar_rounded : Icons.inbox_rounded,
+                          size: 54,
+                          color: primaryColor,
+                        ),
                       ),
-                label: Text(
-                  isFollowed
-                      ? '✅ "$cleanQuery" Radarda (Takip Ediliyor)'
-                      : '🚀 "$cleanQuery" Kelimesini Radara Al',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isFollowed ? const Color(0xFF16A34A) : primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-              const SizedBox(height: 14),
-              // Secondary Flow Link to KeywordTrackingScreen
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    'Takip ettiğin kelimeleri ',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
-                      ).then((_) => _loadFollowedKeywords());
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Kelime Takibi',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                              color: primaryColor,
-                              decoration: TextDecoration.underline,
-                              decorationColor: primaryColor,
+                      const SizedBox(height: 18),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'Aradığın "$cleanQuery" ile ilgili taze fırsat bulamadık'
+                            : 'Henüz fırsat eklenmemiş',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : AppTheme.textPrimary,
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'Yeni bir fırsat paylaşıldığında anında bildirim almak ister misin? Radara al, fırsatı ilk sen yakala!'
+                            : 'Daha sonra tekrar kontrol edebilirsiniz.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                          fontSize: 13.5,
+                          height: 1.45,
+                        ),
+                      ),
+                      if (_searchQuery.isNotEmpty) ...[
+                        const SizedBox(height: 22),
+                        // Primary Radar CTA Button
+                        ElevatedButton.icon(
+                          onPressed: _isAddingKeywordFromSearch
+                              ? null
+                              : () => _toggleKeywordSubscriptionFromSearch(cleanQuery),
+                          icon: _isAddingKeywordFromSearch
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Icon(
+                                  isFollowed ? Icons.check_circle_rounded : Icons.radar_rounded,
+                                  size: 18,
+                                ),
+                          label: Text(
+                            isFollowed
+                                ? '✅ "$cleanQuery" Radarda (Takip Ediliyor)'
+                                : '🚀 "$cleanQuery" Kelimesini Radara Al',
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isFollowed ? const Color(0xFF16A34A) : primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        // Secondary Flow Link to KeywordTrackingScreen
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Takip ettiğin kelimeleri ',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const KeywordTrackingScreen()),
+                                ).then((_) => _loadFollowedKeywords());
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Kelime Takibi',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: primaryColor,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: primaryColor,
+                                      ),
+                                    ),
+                                    Icon(Icons.arrow_outward_rounded, size: 12, color: primaryColor),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Text(
+                              ' sayfasından yönetebilirsin.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        // Reset Search Button
+                        OutlinedButton.icon(
+                          onPressed: _clearSearch,
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Aramayı Sıfırla'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isDark ? Colors.grey[300] : AppTheme.textPrimary,
+                            side: BorderSide(
+                              color: isDark ? Colors.white24 : Colors.grey[300]!,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          Icon(Icons.arrow_outward_rounded, size: 12, color: primaryColor),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Text(
-                    ' sayfasından yönetebilirsin.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: isDark ? Colors.grey[400] : AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // Reset Search Button
-              OutlinedButton.icon(
-                onPressed: _clearSearch,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Aramayı Sıfırla'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: isDark ? Colors.grey[300] : AppTheme.textPrimary,
-                  side: BorderSide(
-                    color: isDark ? Colors.white24 : Colors.grey[300]!,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
-            ],
-          ],
+            );
+          },
         ),
       );
     }

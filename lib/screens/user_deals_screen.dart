@@ -34,6 +34,27 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
   String _filterStatus = 'all'; // 'all', 'active', 'pending'
   bool _dealApprovalRequired = true;
   StreamSubscription? _settingsSub;
+  bool _isRefreshing = false;
+
+  Future<void> _refreshDeals() async {
+    if (_isRefreshing || !mounted) return;
+    _isRefreshing = true;
+    HapticFeedback.lightImpact();
+    try {
+      setState(() {
+        _userDealsStream = _firestoreService.getUserDealsStream(
+          widget.userId,
+          limit: widget.limit,
+          onlyApproved: !widget.isOwnProfile,
+        );
+      });
+      await Future.delayed(const Duration(milliseconds: 300));
+    } finally {
+      if (mounted) {
+        _isRefreshing = false;
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -107,25 +128,55 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
                 }
 
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: isDark ? Colors.grey[600] : Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Fırsatlar yüklenirken bir hata oluştu',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                  return RefreshIndicator(
+                    color: AppTheme.primary,
+                    onRefresh: _refreshDeals,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: 64,
+                                    color: isDark ? Colors.grey[600] : Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Fırsatlar yüklenirken bir hata oluştu',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    onPressed: _refreshDeals,
+                                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                                    label: const Text('Tekrar Dene'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   );
                 }
@@ -133,37 +184,52 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
                 final allDeals = snapshot.data ?? [];
 
                 if (allDeals.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.local_offer_outlined,
-                          size: 64,
-                          color: isDark ? Colors.grey[600] : Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.isOwnProfile
-                              ? 'Henüz hiçbir fırsat paylaşmadınız'
-                              : '${widget.username} henüz fırsat paylaşmamış',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (widget.isOwnProfile)
-                          Text(
-                            'Fırsat paylaşarak topluluğa katkıda bulunabilirsiniz!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                  return RefreshIndicator(
+                    color: AppTheme.primary,
+                    onRefresh: _refreshDeals,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.local_offer_outlined,
+                                    size: 64,
+                                    color: isDark ? Colors.grey[600] : Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    widget.isOwnProfile
+                                        ? 'Henüz hiçbir fırsat paylaşmadınız'
+                                        : '${widget.username} henüz fırsat paylaşmamış',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (widget.isOwnProfile)
+                                    Text(
+                                      'Fırsat paylaşarak topluluğa katkıda bulunabilirsiniz!',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.textSecondary,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
-                      ],
+                        ),
+                      ),
                     ),
                   );
                 }
@@ -193,16 +259,12 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
                       child: filteredDeals.isEmpty
                           ? _buildFilterEmptyState(isDark)
                           : RefreshIndicator(
-                              onRefresh: () async {
-                                setState(() {
-                                  _userDealsStream = _firestoreService.getUserDealsStream(
-                                    widget.userId,
-                                    limit: widget.limit,
-                                    onlyApproved: !widget.isOwnProfile,
-                                  );
-                                });
-                              },
+                              color: AppTheme.primary,
+                              onRefresh: _refreshDeals,
                               child: GridView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
                                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2,
@@ -318,29 +380,44 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
   }
 
   Widget _buildFilterEmptyState(bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            _filterStatus == 'pending'
-                ? Icons.verified_outlined
-                : Icons.hourglass_empty_rounded,
-            size: 52,
-            color: isDark ? Colors.grey[600] : Colors.grey[400],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _filterStatus == 'pending'
-                ? 'İnceleme bekleyen fırsatınız yok'
-                : 'Bu filtreye uygun fırsat bulunamadı',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+    return RefreshIndicator(
+      color: AppTheme.primary,
+      onRefresh: _refreshDeals,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _filterStatus == 'pending'
+                          ? Icons.verified_outlined
+                          : Icons.hourglass_empty_rounded,
+                      size: 52,
+                      color: isDark ? Colors.grey[600] : Colors.grey[400],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _filterStatus == 'pending'
+                          ? 'İnceleme bekleyen fırsatınız yok'
+                          : 'Bu filtreye uygun fırsat bulunamadı',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

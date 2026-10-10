@@ -41,6 +41,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   bool _isFirstLoad = true;
   bool _hasMore = true;
   String? _errorMessage;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -62,7 +63,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
 
   /// SWR + Cache-First ilk yükleme
   Future<void> _loadFirstPage() async {
-    if (!mounted) return;
+    if (!mounted || _isRefreshing) return;
+    _isRefreshing = true;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -112,6 +114,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           }
         });
       }
+    } finally {
+      _isRefreshing = false;
     }
   }
 
@@ -526,33 +530,50 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     }
 
     if (_errorMessage != null && _dealsList.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline_rounded,
-                size: 56,
-                color: isDark ? Colors.grey[600] : Colors.grey[400],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                _errorMessage!,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+      return RefreshIndicator(
+        color: primaryColor,
+        onRefresh: () async {
+          HapticFeedback.lightImpact();
+          await _loadFirstPage();
+        },
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 56,
+                        color: isDark ? Colors.grey[600] : Colors.grey[400],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadFirstPage,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Tekrar Dene'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadFirstPage,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Tekrar Dene'),
-              ),
-            ],
+            ),
           ),
         ),
       );
@@ -562,18 +583,18 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
 
     if (deals.isEmpty) {
       return RefreshIndicator(
+        color: primaryColor,
         onRefresh: () async {
           HapticFeedback.lightImpact();
           await _loadFirstPage();
         },
-        color: primaryColor,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
-          children: [
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.5,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
@@ -619,7 +640,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                 ),
               ),
             ),
-          ],
+          ),
         ),
       );
     }
