@@ -110,9 +110,11 @@ graph TD
   *Konteynerler & Portlar:* `dev-bot` (Port 8081, DEV Firestore), `prod-bot` (Port 8082, PROD Firestore).  
   *Ortam İzolasyonu:* `/home/murat/app/prod-bot/.env` dosyasında `PROJECT_ID=firsatkolik-prod-e6eae` ve `GOOGLE_APPLICATION_CREDENTIALS=/app/prod_firebase_key.json` tanımlıdır; `dev-bot`'un PROD'a yazması engellenmiştir. Test araçları (`create_test_data.js`, `/simulate`) PROD çalışma ortamında kilitlenmiştir.  
   *SRE & VM Bellek Kalkanı:* 969 MB RAM'li e2-micro VM'de bellek sızıntısı ve Docker log şişmesini önlemek için her gece 04:00 TSİ'de `clean_vm.sh` Linux Crontab otonom bakım görevi çalışmaktadır; Web Admin üzerinden V8 GC tetiklenebilir (`CLEAN_VM_MIMARISI.md`).
-* 🟢 **Adım 2.7: Firestore Bileşik İndeksleri (`deals` ve `comments`)**  
+* 🟢 **Adım 2.7: Firestore Bileşik İndeksleri (`deals`, `comments`, `kuponlar`)**  
   1. `deals` İndeksi: `isExpired ASCENDING` + `createdAt DESCENDING` (İstemcinin anasayfa akışındaki `failed-precondition` hatası için eklendi).  
-  2. `comments` Koleksiyon Grubu İndeksi: `collectionGroup: comments` (COLLECTION_GROUP scope) `userId ASCENDING` + `createdAt DESCENDING` (Web Admin paneli kullanıcı bazlı yorum listesi sorgusu için `firestore.indexes.json` dosyasına eklendi).
+  2. `comments` Koleksiyon Grubu İndeksi: `collectionGroup: comments` (COLLECTION_GROUP scope) `userId ASCENDING` + `createdAt DESCENDING` (Web Admin paneli kullanıcı bazlı yorum listesi sorgusu için `firestore.indexes.json` dosyasına eklendi).  
+  3. `kuponlar` İndeksi: `durum ASCENDING` + `kaynakTipi ASCENDING` + `olusturulmaTarihi DESCENDING` (Kupon Radarı ve Topluluk Kuponları'nın 100k kullanıcıda O(1) maliyetle bağımsız ve hatasız sayfalanması için `firestore.indexes.json` dosyasına eklendi).  
+  4. `deals` Sıralı Arama İndeksi: `isApproved ASCENDING` + `searchKeywords CONTAINS` + `createdAt DESCENDING` (100k kullanıcıda en taze onaylı fırsatların 0-sonuç hatası olmadan O(1) maliyetle aranabilmesi için `firestore.indexes.json` dosyasına eklendi).
 * 🟢 **Adım 2.8: Apple Universal Links (AASA) Team ID Enjeksiyonu**  
   *Problem:* `web/.well-known/apple-app-site-association` ve `web/apple-app-site-association` dosyalarında `appID` değerleri `TEAMID.com.firsatkolik.app` olarak kalmıştı.  
   *Çözüm:* Gerçek Apple Team ID (`973W9DTDY9`) her iki dosyaya da enjekte edildi (`973W9DTDY9.com.firsatkolik.app`).

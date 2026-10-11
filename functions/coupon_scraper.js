@@ -1,7 +1,29 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const cheerio = require('cheerio');
+const crypto = require('crypto');
 const { logErrorToFirestore } = require('./error_logger');
+
+// FS-KUP-02: Deterministik Doküman Kimliği Üreticisi
+// Rastgele ID yerine mağaza adı ve koddan benzersiz, stabil ID üretir.
+// Böylece her cron çalışmasında oylar sıfırlanmaz, kullanıcı kilitleri bozulmaz ve yetim votes alt dokümanları oluşmaz.
+function generateCouponDocId(coupon) {
+  const store = (coupon.magazaAdi || 'magaza')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '_');
+  const code = (coupon.kuponKodu || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '_');
+  if (code.length > 0) {
+    return `web_${store}_${code}`;
+  }
+  const hash = crypto.createHash('md5').update((coupon.baslik || '').trim().toLowerCase()).digest('hex').substring(0, 10);
+  return `web_${store}_${hash}`;
+}
 
 // ─── Ortak Sabitler ──────────────────────────────────────────────────────────
 
@@ -474,62 +496,106 @@ async function scrapeAndSaveCoupons() {
     return { success: false, count: 0, message: 'Hiç kupon çekilemedi. Mevcut kuponlar korunuyor.' };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // SIRALAMA DÜZELTMESİ: Sitelerdeki Orijinal Sırayı Birebir Korumak
-  // 
-  // Sitede en üstte duran kupon dizinin en başındadır (index = 0).
-  // Uygulama (Flutter) kuponları `olusturulmaTarihi DESC` (en yeni tarih en üstte)
-  // şeklinde sıralar.
-  // Sitede en üstteki kuponun uygulamada da EN ÜSTTE görünmesi için,
-  // index 0'a en yeni (en büyük) tarihi veriyoruz. Sonraki kuponlara 1'er saniye
-  // daha eski tarihler veriyoruz.
-  // ─────────────────────────────────────────────────────────────────────────────
-  const baseNow = Date.now();
-  for (let i = 0; i < allScrapedCoupons.length; i++) {
-    const customDate = new Date(baseNow - (i * 1000));
-    allScrapedCoupons[i].olusturulmaTarihi = admin.firestore.Timestamp.fromDate(customDate);
-  }
-
   const db = admin.firestore();
-  
-  // 1. ADIM: Önce yeni taranan kuponları Firestore'a yaz (Downtime ve veri kaybı riskini sıfırlar)
-  functions.logger.info('📝 Writing newly scraped coupons to Firestore...');
-  const writeChunks = [];
-  for (let i = 0; i < allScrapedCoupons.length; i += 400) {
-    writeChunks.push(allScrapedCoupons.slice(i, i + 400));
+
+  // 1. ADIM: Mevcut web kuponlarını çekip oy sayılarını ve oluşturulma tarihlerini hafızaya al
+  // FS-KUP-02: Böylece deterministik ID ile güncellenen kuponların oyları ve orijinal tarihleri korunur!
+  functions.logger.info('🔍 Fetching existing web coupons to preserve votes and timestamps...');
+  const existingDocsSnapshot = await db.collection('kuponlar').where('kaynakTipi', '==', 'web').get();
+  const existingDocsMap = new Map();
+  for (const doc of existingDocsSnapshot.docs) {
+    const data = doc.data();
+    existingDocsMap.set(doc.id, {
+      ref: doc.ref,
+      sicakOySayisi: data.sicakOySayisi || 0,
+      sogukOySayisi: data.sogukOySayisi || 0,
+      olusturulmaTarihi: data.olusturulmaTarihi,
+      durum: data.durum || 'aktif',
+    });
   }
 
-  const newDocRefs = [];
+  // 2. ADIM: Deterministik ID ve Upsert mimarisiyle kuponları hazırla
+  const baseNow = Date.now();
+  const couponsToUpsert = [];
+  const newDocIdSet = new Set();
+
+  for (let i = 0; i < allScrapedCoupons.length; i++) {
+    const couponData = allScrapedCoupons[i];
+    const docId = generateCouponDocId(couponData);
+
+    // Aynı kaynaklar arası tekil ID kuralı
+    if (newDocIdSet.has(docId)) continue;
+    newDocIdSet.add(docId);
+
+    const existing = existingDocsMap.get(docId);
+    if (existing) {
+      // Mevcut kuponun oylarını ve orijinal oluşturulma tarihini koru
+      couponData.sicakOySayisi = existing.sicakOySayisi;
+      couponData.sogukOySayisi = existing.sogukOySayisi;
+      if (existing.olusturulmaTarihi) {
+        couponData.olusturulmaTarihi = existing.olusturulmaTarihi;
+      } else {
+        couponData.olusturulmaTarihi = admin.firestore.Timestamp.fromDate(new Date(baseNow - (i * 1000)));
+      }
+    } else {
+      // Yeni eklenen kupon
+      couponData.sicakOySayisi = 0;
+      couponData.sogukOySayisi = 0;
+      couponData.olusturulmaTarihi = admin.firestore.Timestamp.fromDate(new Date(baseNow - (i * 1000)));
+    }
+
+    couponsToUpsert.push({ docId, data: couponData });
+  }
+
+  // 3. ADIM: Chunks halinde batch.set(..., { merge: true }) ile yaz
+  functions.logger.info(`📝 Upserting ${couponsToUpsert.length} deterministic coupons to Firestore...`);
+  const writeChunks = [];
+  for (let i = 0; i < couponsToUpsert.length; i += 400) {
+    writeChunks.push(couponsToUpsert.slice(i, i + 400));
+  }
+
   for (const chunk of writeChunks) {
     const batch = db.batch();
-    chunk.forEach((couponData) => {
-      const docRef = db.collection('kuponlar').doc();
-      newDocRefs.push(docRef.id);
-      batch.set(docRef, couponData);
+    chunk.forEach(({ docId, data }) => {
+      const docRef = db.collection('kuponlar').doc(docId);
+      batch.set(docRef, data, { merge: true });
     });
     await batch.commit();
   }
-  const newDocIdSet = new Set(newDocRefs);
-  functions.logger.info(`Successfully saved ${allScrapedCoupons.length} coupons.`);
+  functions.logger.info(`Successfully upserted ${couponsToUpsert.length} coupons.`);
 
-  // 2. ADIM: Başarılı yazımın ardından, bu çalışmadan önceki eski web kuponlarını güvenle temizle
-  functions.logger.info('🧹 Cleaning up old web-scraped coupons from Firestore...');
-  const querySnapshot = await db.collection('kuponlar').where('kaynakTipi', '==', 'web').limit(500).get();
-  const deleteDocs = querySnapshot.docs.filter(doc => !newDocIdSet.has(doc.id));
-  
-  const deleteChunks = [];
-  for (let i = 0; i < deleteDocs.length; i += 400) {
-    deleteChunks.push(deleteDocs.slice(i, i + 400));
+  // 4. ADIM: Siteden tamamen kalkan eski kuponları güvenle temizle veya geçersiz işaretle
+  // FS-KUP-02: Kullanıcı oyu olan kuponlar silinmez, 'gecersiz' yapılarak oyları ve votes alt koleksiyonu korunur.
+  // Sıfır oyu olanlar ise veritabanını temiz tutmak için silinir.
+  functions.logger.info('🧹 Cleaning up stale web-scraped coupons from Firestore...');
+  const staleDocs = [];
+  for (const [id, info] of existingDocsMap.entries()) {
+    if (!newDocIdSet.has(id)) {
+      staleDocs.push({ id, ...info });
+    }
   }
 
-  for (const chunk of deleteChunks) {
+  const cleanupChunks = [];
+  for (let i = 0; i < staleDocs.length; i += 400) {
+    cleanupChunks.push(staleDocs.slice(i, i + 400));
+  }
+
+  for (const chunk of cleanupChunks) {
     const batch = db.batch();
-    chunk.forEach((doc) => {
-      batch.delete(doc.ref);
+    chunk.forEach((item) => {
+      if (item.sicakOySayisi > 0 || item.sogukOySayisi > 0) {
+        // Kullanıcı oyu varsa dokümanı silme; sadece henüz aktifse durumunu geçersiz yap (mükerrer yazma engeli)
+        if (item.durum !== 'gecersiz') {
+          batch.update(item.ref, { durum: 'gecersiz', sonlanmaTarihi: admin.firestore.FieldValue.serverTimestamp() });
+        }
+      } else {
+        // Hiç oyu olmayan çöp dokümanı güvenle sil
+        batch.delete(item.ref);
+      }
     });
     await batch.commit();
   }
-  functions.logger.info(`Cleaned up ${deleteDocs.length} stale web-scraped coupons.`);
+  functions.logger.info(`Processed ${staleDocs.length} stale coupons (preserved voted, removed unvoted).`);
 
   const bySource = {};
   for (const c of allScrapedCoupons) {

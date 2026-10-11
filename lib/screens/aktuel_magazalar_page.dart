@@ -46,7 +46,9 @@ class AktuelMagazalarPage extends StatefulWidget {
 class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  late final Stream<QuerySnapshot> _kataloglarStream;
+  Map<String, int> _activeStoreCatalogCounts = {};
+  int _totalActiveCatalogs = 0;
+  bool _isLoading = true;
   String _searchQuery = '';
   MagazaKategori _selectedCategory = MagazaKategori.tumu;
   bool _hideHeroBanner = false;
@@ -103,7 +105,61 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     super.initState();
     AnalyticsService.instance.logScreenView(screenName: 'AktuelMagazalarPage');
     _scrollController.addListener(_onScroll);
-    _kataloglarStream = FirebaseFirestore.instance.collection('kataloglar').limit(150).snapshots();
+    _loadActiveCatalogs();
+  }
+
+  /// FS-AKT-01: 150 Dokümanlık limitsiz WebSocket yerine 'bitisTarihi >= today' filtreli SWR okuma
+  /// 100k kullanıcıda 15 milyon okuma maliyetini ve mağaza kayıplarını sıfırlar.
+  Future<void> _loadActiveCatalogs() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final todayTimestamp = Timestamp.fromDate(today);
+
+    // 1. Aşama: Cache-First (0ms önbellekten okuma)
+    try {
+      final cacheSnap = await FirebaseFirestore.instance
+          .collection('kataloglar')
+          .where('bitisTarihi', isGreaterThanOrEqualTo: todayTimestamp)
+          .get(const GetOptions(source: Source.cache));
+      if (cacheSnap.docs.isNotEmpty && mounted) {
+        _processCatalogDocs(cacheSnap.docs);
+        setState(() => _isLoading = false);
+      }
+    } catch (_) {}
+
+    // 2. Aşama: Server Revalidation
+    try {
+      final serverSnap = await FirebaseFirestore.instance
+          .collection('kataloglar')
+          .where('bitisTarihi', isGreaterThanOrEqualTo: todayTimestamp)
+          .get(const GetOptions(source: Source.server));
+      if (mounted) {
+        _processCatalogDocs(serverSnap.docs);
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _processCatalogDocs(List<QueryDocumentSnapshot> docs) {
+    final counts = <String, int>{};
+    int total = 0;
+    for (final doc in docs) {
+      try {
+        final data = doc.data() as Map<String, dynamic>;
+        final magazaKodu = data['magazaKodu'] as String?;
+        if (magazaKodu != null && magazaKodu.isNotEmpty) {
+          final codeLower = magazaKodu.toLowerCase();
+          counts[codeLower] = (counts[codeLower] ?? 0) + 1;
+          total++;
+        }
+      } catch (_) {}
+    }
+    setState(() {
+      _activeStoreCatalogCounts = counts;
+      _totalActiveCatalogs = total;
+    });
   }
 
   void _onScroll() {
@@ -159,54 +215,35 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           tooltip: 'Geri',
         ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _kataloglarStream,
-        builder: (context, snapshot) {
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
-          final activeStoreCatalogCounts = <String, int>{};
-          int totalActiveCatalogs = 0;
+      body: RefreshIndicator(
+        onRefresh: () async {
+          HapticFeedback.lightImpact();
+          await _loadActiveCatalogs();
+        },
+        color: AppTheme.primary,
+        child: Builder(
+          builder: (context) {
+            final activeStoreCatalogCounts = _activeStoreCatalogCounts;
+            final totalActiveCatalogs = _totalActiveCatalogs;
+            final isLoading = _isLoading && activeStoreCatalogCounts.isEmpty;
 
-          if (snapshot.hasData) {
-            for (var doc in snapshot.data!.docs) {
-              try {
-                final data = doc.data() as Map<String, dynamic>;
-                final bitisTimestamp = data['bitisTarihi'] as Timestamp?;
-                if (bitisTimestamp != null) {
-                  final bitis = bitisTimestamp.toDate();
-                  final expiryDay = DateTime(bitis.year, bitis.month, bitis.day);
-                  if (!expiryDay.isBefore(today)) {
-                    final magazaKodu = data['magazaKodu'] as String?;
-                    if (magazaKodu != null && magazaKodu.isNotEmpty) {
-                      final codeLower = magazaKodu.toLowerCase();
-                      activeStoreCatalogCounts[codeLower] = (activeStoreCatalogCounts[codeLower] ?? 0) + 1;
-                      totalActiveCatalogs++;
-                    }
-                  }
-                }
-              } catch (_) {}
+            // Filter by Active Catalogs
+            var visibleStores = _magazalar.where((m) => activeStoreCatalogCounts.containsKey(m.code.toLowerCase())).toList();
+
+            // Filter by Category
+            if (_selectedCategory != MagazaKategori.tumu) {
+              visibleStores = visibleStores.where((m) => m.kategori == _selectedCategory).toList();
             }
-          }
 
-          final isLoading = snapshot.connectionState == ConnectionState.waiting;
-
-          // Filter by Active Catalogs
-          var visibleStores = _magazalar.where((m) => activeStoreCatalogCounts.containsKey(m.code.toLowerCase())).toList();
-
-          // Filter by Category
-          if (_selectedCategory != MagazaKategori.tumu) {
-            visibleStores = visibleStores.where((m) => m.kategori == _selectedCategory).toList();
-          }
-
-          // Filter by Search Query
-          if (_searchQuery.trim().isNotEmpty) {
-            final q = _searchQuery.trim().toLowerCase();
-            visibleStores = visibleStores.where((m) => m.name.toLowerCase().contains(q) || m.code.toLowerCase().contains(q)).toList();
-          }
+            // Filter by Search Query
+            if (_searchQuery.trim().isNotEmpty) {
+              final q = _searchQuery.trim().toLowerCase();
+              visibleStores = visibleStores.where((m) => m.name.toLowerCase().contains(q) || m.code.toLowerCase().contains(q)).toList();
+            }
 
           return CustomScrollView(
             controller: _scrollController,
-            physics: const BouncingScrollPhysics(),
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             slivers: [
               // 1. HERO BANNER
               if (!_hideHeroBanner)
@@ -261,7 +298,8 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
           );
         },
       ),
-      floatingActionButton: ScrollToTopButton(
+    ),
+    floatingActionButton: ScrollToTopButton(
         isVisible: _showScrollToTop,
         scrollController: _scrollController,
       ),

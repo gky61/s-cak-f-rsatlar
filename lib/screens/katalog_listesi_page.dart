@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../models/katalog.dart';
 import '../theme/app_theme.dart';
@@ -10,6 +9,7 @@ import '../utils/store_asset_helper.dart';
 import '../services/ad_manager_service.dart';
 import '../services/theme_service.dart';
 import '../widgets/ad_deal_card.dart';
+import '../widgets/resilient_catalog_image.dart';
 import 'katalog_detay_page.dart';
 
 enum KatalogSortOption {
@@ -685,17 +685,17 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                       Positioned.fill(
                         child: Container(
                           color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                          child: CachedNetworkImage(
+                          child: ResilientCatalogImage(
                             imageUrl: catalog.kapakResmi,
                             fit: BoxFit.cover,
-                            fadeInDuration: const Duration(milliseconds: 350),
-                            placeholder: (context, url) => Center(
+                            showRetryButton: false,
+                            placeholder: Center(
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: isDark ? Colors.white38 : AppTheme.primary,
                               ),
                             ),
-                            errorWidget: (context, url, error) => Center(
+                            errorWidget: Center(
                               child: Icon(
                                 Icons.broken_image_outlined,
                                 size: 36,

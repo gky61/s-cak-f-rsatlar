@@ -6,12 +6,14 @@ class KuponlarPageResult {
   final DocumentSnapshot? lastDocument;
   final bool hasMore;
   final bool isFromCache;
+  final bool isError;
 
   const KuponlarPageResult({
     required this.kuponlar,
     this.lastDocument,
     required this.hasMore,
     this.isFromCache = false,
+    this.isError = false,
   });
 }
 
@@ -23,12 +25,19 @@ class KuponService {
   Future<KuponlarPageResult> getKuponlarPaginated({
     int limit = 30,
     DocumentSnapshot? lastDocument,
+    String? kaynakTipi,
     Source source = Source.serverAndCache,
   }) async {
     try {
       Query query = _firestore
           .collection('kuponlar')
-          .where('durum', isEqualTo: 'aktif')
+          .where('durum', isEqualTo: 'aktif');
+
+      if (kaynakTipi != null && kaynakTipi.trim().isNotEmpty) {
+        query = query.where('kaynakTipi', isEqualTo: kaynakTipi.trim());
+      }
+
+      query = query
           .orderBy('olusturulmaTarihi', descending: true)
           .limit(limit);
 
@@ -46,12 +55,14 @@ class KuponService {
         lastDocument: newLastDoc,
         hasMore: hasMore,
         isFromCache: snapshot.metadata.isFromCache,
+        isError: false,
       );
     } catch (e) {
       return KuponlarPageResult(
         kuponlar: [],
         lastDocument: lastDocument,
         hasMore: false,
+        isError: true,
       );
     }
   }

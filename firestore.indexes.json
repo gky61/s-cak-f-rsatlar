@@ -51,6 +51,24 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "searchKeywords",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isApproved",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "isUserSubmitted",
           "order": "ASCENDING"
         },
@@ -355,6 +373,24 @@
       "fields": [
         {
           "fieldPath": "durum",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "olusturulmaTarihi",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "kuponlar",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "durum",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kaynakTipi",
           "order": "ASCENDING"
         },
         {

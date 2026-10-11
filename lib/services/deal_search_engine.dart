@@ -8,22 +8,22 @@ class DealSearchEngine {
   static String normalizeText(String input) {
     if (input.isEmpty) return '';
 
-    String text = input.toLowerCase();
-
-    // Türkçe karakter dönüşümleri
-    text = text
-        .replaceAll('ç', 'c')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ı', 'i')
-        .replaceAll('ö', 'o')
-        .replaceAll('ş', 's')
-        .replaceAll('ü', 'u')
-        .replaceAll('Ç', 'c')
-        .replaceAll('Ğ', 'g')
+    // Türkçe karakterleri önce İngilizce karşılıklarına dönüştür (Dart toLowerCase() öncesi U+0307 birleşen nokta bug'ını önler)
+    String text = input
         .replaceAll('İ', 'i')
+        .replaceAll('I', 'i')
+        .replaceAll('ı', 'i')
+        .replaceAll('Ç', 'c')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ğ', 'g')
+        .replaceAll('ğ', 'g')
         .replaceAll('Ö', 'o')
+        .replaceAll('ö', 'o')
         .replaceAll('Ş', 's')
-        .replaceAll('Ü', 'u');
+        .replaceAll('ş', 's')
+        .replaceAll('Ü', 'u')
+        .replaceAll('ü', 'u')
+        .toLowerCase();
 
     // Özel noktalama işaretlerini ve fazla boşlukları temizle
     text = text.replaceAll(RegExp(r'[^\w\s]'), ' ');

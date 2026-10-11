@@ -37,22 +37,24 @@ graph TD
     
     %% 2. Backend İşleme
     Scraper -->|Mükerrer Kontrolü Case-Insensitive Set| CloudFunctions[⚡ Cloud Functions: Node.js 22]
-    CloudFunctions -->|kaynakTipi='web' 400'lük Batch Yazma| Firestore[(🔥 Firestore: 'kuponlar' Koleksiyonu)]
+    CloudFunctions -->|kaynakTipi='web' Deterministik Upsert batch.set merge| Firestore[(🔥 Firestore: 'kuponlar' Koleksiyonu)]
     AdminWeb[💻 Web Admin Paneli] -->|scrapeCouponsManual / toggleCouponsEnabled| CloudFunctions
     
     %% 3. Mobil İstemci ve Oylama
-    Firestore -->|Canlı Dinleme Stream| KuponlarPage[📱 KuponlarPage: 2 Sekmeli TabBar]
-    KuponlarPage -->|Sekme 1: Kupon Radarı| Tab1[🤖 Botkolik Kupon Radarı]
-    KuponlarPage -->|Sekme 2: Topluluk Kuponları| Tab2[👥 Topluluk Kuponları Listesi]
-    UserVote[🗳️ Kullanıcı Oyu: Sıcak 🔥 / Soğuk ❄️] -->|0ms Optimistic UI + 300ms Debounce| VoteTx[⚡ Firestore Transaction: votes Subcollection]
-    VoteTx -->|Net Skor <= -5 ise Web Sil / Topluluk Geçersiz Yap| Firestore
+    Firestore -->|SWR Cache-First + Çift Cursor Sayfalama| KuponlarPage[📱 KuponlarPage: 2 Sekmeli TabBar]
+    KuponlarPage -->|Sekme 1: Kupon Radarı - Cursor 1| Tab1[🤖 Botkolik Kupon Radarı]
+    KuponlarPage -->|Sekme 2: Topluluk Kuponları - Cursor 2| Tab2[👥 Topluluk Kuponları Listesi]
+    UserVote[🗳️ Kullanıcı Oyu: Sıcak 🔥 / Soğuk ❄️] -->|0ms Senkron SharedPreferences + 300ms Debounce| VoteTx[⚡ Firestore Atomik WriteBatch + FieldValue.increment]
+    VoteTx -->|Net Skor <= -5 ise Sıralamada En Sona At| Firestore
 ```
 
 ### Temel Mimari Prensipler:
-* **İki Sekmeli İzolasyon:** Botların web'den topladığı "Kupon Radarı" ile kullanıcıların paylaştığı "Topluluk Kuponları" tamamen izole sekmelerde sunulur.
+* **İki Sekmeli İzolasyon & Çift Cursor Sayfalama (FS-KUP-03):** Botların web'den topladığı "Kupon Radarı" (`kaynakTipi == 'web'`) ile kullanıcıların paylaştığı "Topluluk Kuponları" (`kaynakTipi == 'topluluk'`) iki tamamen bağımsız liste ve ayrı Firestore cursor'ları ile yönetilir (`durum ASC, kaynakTipi ASC, olusturulmaTarihi DESC` bileşik indeksi).
+* **Deterministik ID & Oy Koruma Kalkanı (FS-KUP-02):** Scraper her çalıştığında rastgele doküman ID'si üretmek yerine `web_${magaza}_${kod}` deterministik kimliğini kullanır. `batch.set(docRef, data, { merge: true })` sayesinde oylar ve orijinal oluşturulma tarihleri korunur; siteden kalkan kuponlardan oyu olanlar silinmez (`durum: 'gecersiz'`), yetim alt dokümanlar engellenir.
+* **0ms Senkron Oy Önbelleği (FS-KUP-01):** Kart builder içinde Firestore'dan N+1 ağ okuması yapılması tamamen engellenmiştir. Kullanıcı oyları cihaz hafızasından (`SharedPreferences`) senkron yüklenir, 0ms anlık arayüz tepkisi sağlanır.
+* **Form Spam Cooldown ve Veritabanı Karakter Kalkanı (FS-KUP-04):** Topluluk kuponu ekleme formunda 30 saniyelik yerel spam cooldown'ı ve `firestore.rules` üzerinde başlık (3-120 krk) ve kod (1-50 krk) karakter doğrulamaları aktiftir.
 * **Topluluk Koruması (Fail-Safe):** Kazıma işlemi web kuponlarını yenilerken `kaynakTipi == 'topluluk'` olan kullanıcı paylaşımlarına asla dokunmaz.
-* **Akıllı Sıralama (Wilson Score & Time Decay):** Oylanan kuponlar güvenilirlik puanına göre en üste taşınır; çalışmayan kuponlar otomatik olarak listenin sonuna atılır (web kuponlarının oyla silinmesi kurallar tarafından engellenir, bkz. §4.2).
-* **İdempotent Oylama (Vote Idempotency):** Alt koleksiyon (`kuponlar/{id}/votes/{uid}`) ve Firestore Transaction mekanizması sayesinde mükerrer oy kullanımı engellenir.
+* **Akıllı Sıralama (Wilson Score & Time Decay):** Oylanan kuponlar güvenilirlik puanına göre en üste taşınır; çalışmayan kuponlar otomatik olarak listenin sonuna atılır.
 * **Dinamik Uzaktan Şalter (Remote Feature Switch):** `settings/app` dokümanı üzerinden tek tıkla mobil uygulamadaki kuponlar sekmesi kapatılıp açılabilir.
 
 ---
@@ -302,13 +304,19 @@ Kupon kayıtları Firestore'da kök düzeydeki `kuponlar` koleksiyonunda saklan�
 Kupon verileri [firestore.rules](file:///d:/firsatkolik/firestore.rules) içerisinde aşağıdaki kurallarla korunur:
 
 ```javascript
-// firestore.rules:359-391
+// firestore.rules:359-398
 match /kuponlar/{kuponId} {
   allow read: if true;                       // kupon kodları dahil herkese açık
   allow create: if canWrite() && 
                 !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) && (
       isAdmin() || (
         request.resource.data.paylasanKullaniciId == userId() &&
+        request.resource.data.baslik is string &&
+        request.resource.data.baslik.size() >= 3 &&
+        request.resource.data.baslik.size() <= 120 &&
+        request.resource.data.kuponKodu is string &&
+        request.resource.data.kuponKodu.size() >= 1 &&
+        request.resource.data.kuponKodu.size() <= 50 &&
         (!('durum' in request.resource.data) || request.resource.data.durum == 'beklemede') &&
         (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi == 0) &&
         (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi == 0)
@@ -343,7 +351,7 @@ Kupon kazıma ve senkronizasyon motoru iki Cloud Function ile yönetilir ([funct
 * **Tetikleyici:** Cloud Pub/Sub Cron.
 * **Çalışma Zamanı:** Her gün gece **04:00** (Europe/Istanbul: `0 4 * * *`).
 * **Kaynak Yapılandırması:** `timeoutSeconds: 540` (9 dakika), `memory: '1GB'`.
-* **İşleyiş:** 3 farklı web kaynağından kuponları çeker, mükerrerleri eler, önce yenilerini yazar, sonra eski `web` kuponlarını siler (`limit(500)` ile sınırlı). Çalışma `systemLocks/coupon_scraping` dağıtık kilidi (15 dk lease) altındadır (`index.js:4376`). Her çalışmada yeni rastgele doküman ID'leri üretilir; kısmi kaynak hatasında iyi veri silinebilir.
+* **İşleyiş:** 3 farklı web kaynağından kuponları çeker, mükerrerleri eler, deterministik kimliklerle (`generateCouponDocId` -> `web_${store}_${code}`) `batch.set(docRef, data, { merge: true })` kullanarak mevcut oyları ve orijinal oluşturulma tarihlerini koruyarak yazar. Çalışma `systemLocks/coupon_scraping` dağıtık kilidi (15 dk lease) altındadır (`index.js:4376`). Siteden tamamen kalkan kuponlardan kullanıcı oyu olanlar silinmez (`durum: 'gecersiz'`), böylece alt dokümanlar ve oylar korunur; yalnızca hiç oyu olmayan çöp kuponlar silinir.
 
 ### 8.2. Manuel Yönetici Tetikleyicisi (`scrapeCouponsManual`)
 * **Tetikleyici:** HTTPS Callable (`functions.https.onCall`).
@@ -391,8 +399,8 @@ graph TD
     S3 --> Dedup3[seenCodes Set: Yeni Olanları Ekle]
     
     Dedup3 --> Order[⏱️ Sıralama Düzeltmesi: 1'er Saniyelik Aralıklarla Timestamp Üretimi]
-    Order --> WriteNew[📝 Firestore: Yeni Kuponları 400'lük Batch Yazma]
-    WriteNew --> DelOld[🧹 Firestore: eski kaynakTipi=='web' kayıtlar, limit 500, 400'lük Batch Silme]
+    Order --> WriteNew[📝 Firestore: Deterministik ID ile 400'lük Batch Upsert merge:true]
+    WriteNew --> CleanOld[🧹 Firestore: Siteden Kalkan Oysuz Kayıtları Temizleme / Oyluları Arşivleme]
 ```
 
 ### 9.1. Kaynak Detayları ve Ayrıştırma Yöntemleri:

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/kupon.dart';
 import '../services/kupon_service.dart';
 import '../theme/app_theme.dart';
@@ -130,6 +131,27 @@ class _KuponFormPageState extends State<KuponFormPage> {
       return;
     }
 
+    if (widget.kupon == null) {
+      // FS-KUP-04: Spam Kalkanı - 30 saniyelik paylaşım cooldown koruması
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final lastShareTime = prefs.getInt('last_coupon_share_timestamp_${widget.userId}') ?? 0;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final diffSeconds = ((now - lastShareTime) / 1000).floor();
+        if (diffSeconds < 30) {
+          final remaining = 30 - diffSeconds;
+          if (mounted) {
+            _showCustomSnackBar(
+              message: 'Yeni kupon paylaşmak için lütfen $remaining saniye bekleyin.',
+              icon: Icons.hourglass_top_rounded,
+              backgroundColor: const Color(0xFFE65100),
+            );
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -170,6 +192,11 @@ class _KuponFormPageState extends State<KuponFormPage> {
           paylasanKullaniciAdi: kullaniciAdi,
           bitisTarihi: _secilenBitisTarihi,
         );
+
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('last_coupon_share_timestamp_${widget.userId}', DateTime.now().millisecondsSinceEpoch);
+        } catch (_) {}
       }
 
       if (mounted) {
@@ -396,10 +423,10 @@ class _KuponFormPageState extends State<KuponFormPage> {
                           ),
                         ),
                         children: [
-                          // Kupon Kodu
+                          // Kupon Kodu (Büyük-küçük harf duyarlılığı tam korunur)
                           TextFormField(
                             controller: _kodController,
-                            textCapitalization: TextCapitalization.characters,
+                            textCapitalization: TextCapitalization.none,
                             textInputAction: TextInputAction.done,
                             onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
                             style: TextStyle(

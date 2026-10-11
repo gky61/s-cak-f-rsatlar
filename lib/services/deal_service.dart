@@ -387,14 +387,31 @@ class DealService {
       final sortedTokens = List<String>.from(tokens)..sort((a, b) => b.length.compareTo(a.length));
       final primaryToken = sortedTokens.first;
 
-      final queryRef = _firestore
-          .collection('deals')
-          .where('searchKeywords', arrayContains: primaryToken)
-          .limit(limit);
+      QuerySnapshot<Map<String, dynamic>> snapshot;
+      try {
+        // FS-20 Prod Kalkanı: En taze onaylanmış fırsatları azalan tarih sırasıyla çek
+        // (Bileşik İndeks: isApproved ASC, searchKeywords CONTAINS, createdAt DESC)
+        final queryRef = _firestore
+            .collection('deals')
+            .where('isApproved', isEqualTo: true)
+            .where('searchKeywords', arrayContains: primaryToken)
+            .orderBy('createdAt', descending: true)
+            .limit(limit);
 
-      final snapshot = await queryRef.get();
+        snapshot = await queryRef.get();
+      } catch (indexError) {
+        _log('⚠️ searchDealsServer sıralı sorgu uyarısı (fallback yapılıyor): $indexError');
+        // İndeks henüz derleniyorsa veya yerel emülatörde çalışıyorsa geriye dönük güvenli sorgu
+        final fallbackRef = _firestore
+            .collection('deals')
+            .where('searchKeywords', arrayContains: primaryToken)
+            .limit(limit);
+
+        snapshot = await fallbackRef.get();
+      }
+
       final now = DateTime.now();
-      final cutoffTime = now.subtract(const Duration(days: 30)); // Son 30 günün fırsatları
+      final cutoffTime = now.subtract(const Duration(days: 45)); // Son 45 günün fırsatları
 
       final List<Deal> serverDeals = [];
       for (final doc in snapshot.docs) {

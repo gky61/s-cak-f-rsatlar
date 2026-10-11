@@ -29,33 +29,36 @@ Aktüel Kataloglar Modülü, kullanıcıların Türkiye'nin en popüler zincir m
 ```mermaid
 graph TD
     %% 1. Veri Toplama Katmanı
-    Akakce[🌐 Akakçe Broşür Kaynağı] -->|5 Katmanlı WAF Bypass + HTTP/Proxy| Scraper[🤖 Catalog Scraper Engine]
+    Akakce[🌐 Akakçe Broşür Kaynağı] -->|Çok Stratejili Fetch (A1/A2/B/C/D/E)| Scraper[🤖 Catalog Scraper Engine]
     
     %% 2. Backend & Bulut Katmanı
     Scraper -->|Zamanlanmış: 03:00 Cron / Manuel: Callable| CloudFunctions[⚡ Cloud Functions: Node.js 22]
     AdminWeb[💻 Web Admin Paneli] -->|scrapeCatalogsManual / deleteAllCatalogs| CloudFunctions
-    CloudFunctions -->|500'lük Atomik Batch Yazma/Silme| Firestore[(🔥 Firestore: 'kataloglar' Koleksiyonu)]
+    CloudFunctions -->|400'lük Batch Yazma/Silme| Firestore[(🔥 Firestore: 'kataloglar' Koleksiyonu)]
     
     %% 3. Mobil İstemci Katmanı
-    Firestore -->|Canlı StreamBuilder Dinleme| Level1[📱 Seviye 1: AktuelMagazalarPage]
+    Firestore -->|SWR Cache-First + bitisTarihi Filtreli Sorgu| Level1[📱 Seviye 1: AktuelMagazalarPage]
     Level1 -->|Mağaza Seçimi| Level2[📄 Seviye 2: KatalogListesiPage]
     Level2 -->|Broşür Seçimi| Level3[🖼️ Seviye 3: KatalogDetayPage]
-    Level3 -->|Görsel İndirme + XFile| NativeShare[📤 KatalogShareService: Natif Paylaşım Menüsü]
+    Level3 -->|Görsel İndirme + XFile + Weserv Fallback| NativeShare[📤 KatalogShareService: Natif Paylaşım Menüsü]
 ```
 
 ### Temel Mimari Prensipler:
 * **Sıfır İstisna ile 3 Seviyeli Doğrusal Akış:** Mağazada tek bir katalog olsa dahi akış her zaman `Mağaza Seçimi ➔ Katalog Listesi ➔ Katalog Detay` sırasını takip eder. Hiçbir mağaza için doğrudan detay sayfasına atlama yapılmaz.
+* **SWR (Stale-While-Revalidate) & Sıfır Dinleme Maliyeti (FS-AKT-01):** Canlı `StreamBuilder` WebSocket dinleyicisi kaldırılmıştır. 100k kullanıcıda her veri değişiminde oluşacak 15 milyon anlık okuma maliyetini engellemek için `where('bitisTarihi' >= todayTimestamp)` filtreli Cache-First + Server Revalidation SWR ve `RefreshIndicator` mimarisi kullanılır.
+* **Dayanıklı Akakçe Görsel Kalkanı (ResilientCatalogImage - FS-AKT-02):** Akakçe CDN'in çıplak mobil istemci isteklerine 403 Forbidden dönmesini engellemek için tüm kapak ve detay resimleri özel User-Agent/Referer başlıkları ve otomatik `images.weserv.nl` proxy CDN fallback'i ile donatılmıştır.
 * **Dinamik Mağaza Listeleme (Dynamic Visibility):** Sadece yayında **aktif en az 1 kataloğu bulunan** mağazalar ana listede gösterilir. Aktif kataloğu olmayan mağazalar arayüzde otomatik olarak gizlenir.
 * **Akıllı Süre Yönetimi (Client-Side Expiry):** Süresi geçmiş kataloglar mobil istemci sorgularında ve listeleme anında elenir, kullanıcılara asla süresi dolmuş katalog sunulmaz.
+* **Taşma Korumalı Katalog İnceleme (FS-AKT-03):** 12+ sayfadan uzun kataloglarda `RenderFlex overflow` çökmesini önlemek için nokta çubuğu gizlenir, kompakt hap sayaç korunur.
 * **Yüksek Çözünürlük ve Hızlı Önyükleme (Progressive Image Scaling):** Listeleme ekranlarında optimize edilmiş küçük kapak resimleri (`/_bro/l/`), detay ekranında ise ultra yüksek kaliteli sayfalar (`/_bro/u/`) sunulur.
-* **5 Katmanlı Garantili Kazıma Hattı:** Akakçe üzerindeki Cloudflare/WAF kısıtlamalarını aşmak için Google Translate Proxy, Googlebot UA, WhatsApp Mobile UA, Microlink API ve Curl araçlarını sıralı deneyen otonom mekanizma.
+* **Çok Stratejili Kazıma Hattı (garanti değil):** Cloudflare/WAF kısıtlamaları için 6 stratejiyi (Google Translate Proxy standart + wapp, Googlebot UA, WhatsApp UA, Microlink API, curl) sıralı deneyen mekanizma.
 
 ---
 
 ## 2. 📱 Mobil İstemci ve 3 Seviyeli Doğrusal Kullanıcı Deneyimi (Linear UX)
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Aktüel Modülü Ürün ve UX Yol Haritası](file:///d:/firsatkolik/documentation/aktuel/aktuel-new-feature.md) — 3 seviyeli doğrusal UX vizyonu, ekran hiyerarşisi ve arayüz gereksinimleri.
+> - [Aktüel Modülü Ürün ve UX Yol Haritası](file:///d:/firsatkolik/documentation/_arsiv/aktuel/aktuel-new-feature.md) — 3 seviyeli doğrusal UX vizyonu, ekran hiyerarşisi ve arayüz gereksinimleri.
 
 Mobil uygulama tarafında modül, [AppTheme](file:///d:/firsatkolik/lib/theme/app_theme.dart) tasarım sistemine tam uyumlu 3 ana ekrandan ve bir paylaşım servisinden oluşur.
 
@@ -90,7 +93,7 @@ Mobil uygulama tarafında modül, [AppTheme](file:///d:/firsatkolik/lib/theme/ap
      - `expirySoonest` (Bitişi Yaklaşanlar - `Icons.hourglass_bottom_rounded`)
      - `expiryLatest` (En Uzun Süreli - `Icons.event_available_rounded`)
   3. **Katalog Grid'i:** 2'li dizilimde (`crossAxisCount: 2`, `childAspectRatio: 0.58`) dikey broşür kartları.
-     - **Kapak Görseli:** `CachedNetworkImage` ile önbelleklenen görsel, sol üstte geçerlilik rozeti, sağ altta sayfa sayısı rozeti (`X Sayfa`).
+     - **Kapak Görseli:** `ResilientCatalogImage` ile dayanıklı önbelleklenen görsel (Akakçe Referer/UA başlıkları ve otomatik Weserv proxy fallback'li), sol üstte geçerlilik rozeti, sağ altta sayfa sayısı rozeti (`X Sayfa`).
      - **Geçerlilik Rozeti Renk Kodları:**
        - Mavi (`#2563EB`): Henüz başlamamış / Gelecek kampanya ("Yarın başlıyor", "X gün sonra başlayacak").
        - Yeşil (`#16A34A`): 4 günden fazla süresi olan aktif kampanya ("X gün sonra bitecek").
@@ -107,7 +110,7 @@ Mobil uygulama tarafında modül, [AppTheme](file:///d:/firsatkolik/lib/theme/ap
   3. **Çoklu Dokunma Koruması (Multi-touch Lock):** Kullanıcı iki parmağıyla zoom yaparken PageView kaydırması kilitlenir (`NeverScrollableScrollPhysics`), böylece görseli incelerken yanlışlıkla yan sayfaya geçilmez.
   4. **Çift Tıklama ile Hızlı Büyütme (Double-Tap to Zoom):** Çift tıklandığında `2.5x` odaklı yumuşak animasyon (`Matrix4Tween`, `Curves.easeInOutCubic`).
   5. **Buzlu Cam Üst Bar (Frosted Glass Header):** `BackdropFilter` (16px blur), geri butonu, katalog başlığı, geçerlilik noktası/metni ve paylaşım butonu.
-  6. **Buzlu Cam Alt Sayfa İndikatörü (Frosted Glass Footer):** `Sayfa X / Y` kapsülü ve aktif sayfayı gösteren animasyonlu nokta çubuğu (Dots Indicator).
+  6. **Buzlu Cam Alt Sayfa İndikatörü (Frosted Glass Footer):** `Sayfa X / Y` kapsülü ve aktif sayfayı gösteren animasyonlu nokta çubuğu (Dots Indicator - Sayfa sayısı 12'den fazla olan kataloglarda `RenderFlex overflow` çökmesini önlemek için nokta çubuğu otomatik gizlenir, kompakt hap sayaç korunur).
 
 ---
 
@@ -185,7 +188,7 @@ Doküman ID formatı standart olarak `{magazaKodu}_{brochureId}` bileşik anahta
 | Alan Adı | Tip | Zorunlu | Açıklama ve İş Kuralları |
 | :--- | :--- | :--- | :--- |
 | `katalogId` | `String` | Evet | Benzersiz katalog kimliği (`{magazaKodu}_{brochureId}`). |
-| `magazaKodu` | `String` | Evet | Desteklenen 36 mağazadan birinin normalize edilmiş kodu (Örn: `bim`, `a101`, `gratis`). |
+| `magazaKodu` | `String` | Evet | `catalog_scraper.js` `STORES` listesindeki 36 mağazadan birinin normalize edilmiş kodu (Örn: `bim`, `a101`, `gratis`). |
 | `katalogBasligi` | `String` | Evet | Kataloğun kampanya başlığı / türü (Örn: "Aldın Aldın", "Haftanın Yıldızları", "İndirim Broşürü"). |
 | `baslangicTarihi` | `Timestamp` | Evet | Kampanyanın başlangıç tarihi (Türkiye saatiyle 00:00:00). |
 | `bitisTarihi` | `Timestamp` | Evet | Kampanyanın son geçerlilik tarihi (Türkiye saatiyle 23:59:59.999). |
@@ -226,7 +229,7 @@ Katalog kazıma ve veritabanı senkronizasyonu iki ayrı Cloud Function üzerind
 * **Tetikleyici:** Cloud Pub/Sub Cron.
 * **Çalışma Zamanı:** Her gece **03:00** (Europe/Istanbul saat dilimi: `0 3 * * *`).
 * **Kaynak Yapılandırması:** `timeoutSeconds: 540` (9 dakika), `memory: '1GB'`.
-* **İşleyiş:** 36 mağazanın tüm Akakçe sayfalarını tarar, yeni broşürleri ayrıştırır, eski veritabanı kayıtlarını temizler ve güncel katalogları Firestore'a yazar.
+* **İşleyiş:** 36 mağazanın Akakçe sayfalarını tarar, broşürleri `kataloglar`'a `merge` ile yazar, ardından bu çalışmada görülmeyen eski kayıtları siler (uzlaştırma). Önce `systemLocks/catalog_scraping` dağıtık kilidi alınır (15 dk lease; manuel ve zamanlanmış tetikleme çakışmaz: `functions/index.js:4376`). `cleanupExpiredDeals` de aynı saatte (03:00) çalışır.
 
 ### 6.2. Manuel Yönetici Tetikleyicisi (`scrapeCatalogsManual`)
 * **Tetikleyici:** HTTPS Callable (`functions.https.onCall`).
@@ -239,12 +242,12 @@ Katalog kazıma ve veritabanı senkronizasyonu iki ayrı Cloud Function üzerind
 ## 7. 🤖 Otonom Akakçe Kazıma Motoru ve WAF Bypass Hattı
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Akakçe Broşür Kazıma ve Doğrulama Notları](file:///d:/firsatkolik/documentation/aktuel/aktuel-scraper.md) — Cheerio DOM ayrıştırma, sayfa bağlantı haritası ve HTML filtreleme detayları.
+> - [Akakçe Broşür Kazıma ve Doğrulama Notları](file:///d:/firsatkolik/documentation/_arsiv/aktuel/aktuel-scraper.md) — Cheerio DOM ayrıştırma, sayfa bağlantı haritası ve HTML filtreleme detayları.
 
 Katalog kazıma motoru ([catalog_scraper.js](file:///d:/firsatkolik/functions/catalog_scraper.js)), Akakçe'nin anti-bot ve Cloudflare korumalarını aşmak üzere tasarlanmış çok katmanlı bir mimariye sahiptir.
 
 ### 7.1. Gelişmiş Çok Katmanlı WAF Bypass Stratejisi (`fetchHtmlWithRetry`)
-Her bir URL isteği için en fazla 3 tam deneme yapılır ve her denemede aşağıdaki stratejiler sırayla işletilir:
+Her bir URL isteği için en fazla 3 tam deneme yapılır ve her denemede aşağıdaki 6 strateji (A1, A2, B, C, D, E) sırayla işletilir (`catalog_scraper.js:104`):
 
 ```mermaid
 graph TD
@@ -265,7 +268,7 @@ graph TD
     S6 -->|Hata / Timeout 10s| Retry[🔁 Jitter ile Bekle ve Tekrar Dene: Max 3]
 ```
 
-1. **Dinamik User-Agent Havuzu (`USER_AGENTS`):** Her istekte modern masaüstü ve mobil tarayıcı başlıkları (Chrome 126, Safari 17.5, Firefox 127, Edge 125) rastgele seçilerek parmak izi tespiti önlenir.
+1. **User-Agent Havuzu (`USER_AGENTS`):** Masaüstü ve mobil tarayıcı başlıkları (Chrome 126/125, Safari 17.5, Firefox 127, Edge, mobil Safari/Chrome) rastgele seçilir; tespiti engellemeyi garanti etmez.
 2. **Strateji A1 (Google Translate Standart Proxy):** URL `*.translate.goog` formatına dönüştürülerek Google çeviri omurgası üzerinden çekilir. HTTP 429 alınırsa 1200ms - 2000ms rastgele gecikme ile dinlenme sağlanır.
 3. **Strateji A2 (Google Translate WebApp Modu - `_x_tr_pto=wapp`):** Standart çeviri uç noktası tıkandığında alternatif web uygulaması proxy moduna otomatik geçiş yapılır.
 4. **Strateji B (Googlebot User-Agent):** `Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)` başlığı ile doğrudan istek.
@@ -301,8 +304,8 @@ Katalogların geçerlilik süreleri `#br_s` etiketindeki metinden veya URL yolun
 * **Zaman Dilimi Senkronizasyonu (`createTurkeyDate`):** UTC+3 (İstanbul) saat farkı dikkate alınarak milisaniye düzeyinde doğru Timestamp üretilir.
 
 ### 7.6. Eşzamanlılık ve 500'lük Toplu Veritabanı İşlemleri
-* Mağazalar arası aşırı yükü engellemek için `mapConcurrent(items, 2, ...)` ile maksimum 2 eşzamanlı sayfa çekilir ve mağazalar arasında `200ms` bekleme uygulanır.
-* Kazıma tamamlandığında eski kayıtlar ve yeni kayıtlar Firestore'un 500 işlem limitli `batch` mekanizması ile parçalı olarak güncellenir.
+* Mağaza içinde `mapConcurrent(items, 2, ...)` ile en fazla 2 eşzamanlı detay sayfası çekilir; mağazalar sıralı işlenir, aralarında `300ms` beklenir.
+* Yazma ve silme 400'lük `batch` parçalarıyla yapılır (Firestore limiti 500). Katalog ID'si sabittir (`{magazaKodu}_{brochureId}`); kuponlar gibi her çalışmada değişmez.
 
 ---
 
@@ -310,7 +313,7 @@ Katalogların geçerlilik süreleri `#br_s` etiketindeki metinden veya URL yolun
 
 Katalog detay ekranındaki paylaşım butonu [KatalogShareService](file:///d:/firsatkolik/lib/services/katalog_share_service.dart) servisini tetikler:
 
-1. **Görsel İndirme:** Aktif görüntülenen sayfa resmi `http.get` ile indirilir.
+1. **Görsel İndirme (FS-AKT-04):** Aktif görüntülenen sayfa resmi Referer (`https://www.akakce.com/`) ve User-Agent başlıklarıyla `http.get` üzerinden indirilir; 403 veya ağ hatası durumunda otomatik olarak `images.weserv.nl` proxy CDN üzerinden çekilir.
 2. **Geçici Dosya Oluşturma:** `path_provider` aracılığıyla `katalog_{id}_p{sayfa}.jpg` adıyla yerel önbelleğe yazılır.
 3. **Natif Paylaşım Sayfası:** `share_plus` paketi ile telefonun natif paylaşım sayfasına (WhatsApp, Telegram, Instagram vb.) resim dosyası (`XFile`) olarak gönderilir.
 4. **Tanıtım Metni Şablonu:**
@@ -332,7 +335,7 @@ Web Admin panelinde [catalogsView](file:///d:/firsatkolik/web/admin/app.js) üze
 * **Gerçek Zamanlı Dinleyici (`loadCatalogs`):** `db.collection('kataloglar').orderBy('baslangicTarihi', 'desc').onSnapshot` ile veritabanındaki tüm kataloglar canlı tablo olarak listelenir.
 * **Katalog Sayacı:** Aktif toplam katalog sayısı başlıkta dinamik gösterilir.
 * **Manuel Kazıma Butonu (`scrapeCatalogsBtn`):** `scrapeCatalogsManual` Cloud Function'ını çağırarak anlık tarama başlatır.
-* **Tüm Katalogları Sil Butonu (`deleteAllCatalogsBtn`):** Hatalı veya süresi geçmiş tüm katalogları 500'lük batch bloklarıyla veritabanından kalıcı olarak siler.
+* **Tüm Katalogları Sil Butonu (`deleteAllCatalogsBtn`):** Hatalı veya süresi geçmiş tüm katalogları istemci SDK'sıyla 400'lük batch bloklarıyla (`web/admin/app.js:14126`; Cloud Function değil, `firestore.rules:353-356` admin yazma) kalıcı olarak siler.
 
 ---
 
@@ -343,10 +346,9 @@ Modülün kararlılığı [functions/tests/](file:///d:/firsatkolik/functions/te
 | Test Dosyası | Test Edilen Bileşen ve Senaryo |
 | :--- | :--- |
 | [test_catalog_scraper.js](file:///d:/firsatkolik/functions/tests/test_catalog_scraper.js) | Temel Akakçe kazıyıcı motorunun çalışması ve Cheerio DOM ayrıştırması. |
-| [test_guaranteed_scraper.js](file:///d:/firsatkolik/functions/tests/test_guaranteed_scraper.js) | 5 katmanlı WAF bypass stratejilerinin ve proxy dayanıklılığının testi. |
-| [dry_run_all_stores.js](file:///d:/firsatkolik/functions/tests/dry_run_all_stores.js) | 36 mağazanın tamamının veritabanına yazmadan uçtan uca simülasyonu. |
+| [test_guaranteed_scraper.js](file:///d:/firsatkolik/functions/tests/test_guaranteed_scraper.js) | Fetch stratejilerinin ve proxy dayanıklılığının testi (canlı ağ gerektirir). |
+| [test_catalog_scraper_flow.js](file:///d:/firsatkolik/functions/tests/test_catalog_scraper_flow.js) | Kazıma akışı simülasyonu. |
 | [test_span_date_parser.js](file:///d:/firsatkolik/functions/tests/test_span_date_parser.js) | Türkçe tarih aralıklarının (hafta, ay, gün) ve saat dilimlerinin doğruluğu. |
-| [check_firestore_kataloglar.js](file:///d:/firsatkolik/functions/tests/check_firestore_kataloglar.js) | Canlı Firestore ortamındaki mağaza bazlı katalog dağılımının kontrolü. |
 
 ---
 
@@ -357,6 +359,7 @@ Modülün kararlılığı [functions/tests/](file:///d:/firsatkolik/functions/te
 | **Mobil UI: Seviye 1** | [aktuel_magazalar_page.dart](file:///d:/firsatkolik/lib/screens/aktuel_magazalar_page.dart) | Mağaza gridi, arama ve kategori filtreleme ekranı. |
 | **Mobil UI: Seviye 2** | [katalog_listesi_page.dart](file:///d:/firsatkolik/lib/screens/katalog_listesi_page.dart) | Mağaza katalog listesi, sıralama ve geçerlilik rozetleri. |
 | **Mobil UI: Seviye 3** | [katalog_detay_page.dart](file:///d:/firsatkolik/lib/screens/katalog_detay_page.dart) | Tam ekran yüksek çözünürlüklü broşür inceleme ve zoom. |
+| **Görsel Kalkanı** | [resilient_catalog_image.dart](file:///d:/firsatkolik/lib/widgets/resilient_catalog_image.dart) | Akakçe Referer/UA koruması ve otomatik Weserv proxy CDN fallback bileşeni. |
 | **Mobil Model** | [katalog.dart](file:///d:/firsatkolik/lib/models/katalog.dart) | Katalog veri sınıfı, Firestore serileştirme ve geçerlilik metin motoru. |
 | **Mobil Paylaşım** | [katalog_share_service.dart](file:///d:/firsatkolik/lib/services/katalog_share_service.dart) | Natif görsel indirme ve sosyal medya paylaşım servisi. |
 | **Mağaza Yardımcısı** | [store_asset_helper.dart](file:///d:/firsatkolik/lib/utils/store_asset_helper.dart) | Mağaza logoları ve marka renkleri merkezi eşleme motoru. |

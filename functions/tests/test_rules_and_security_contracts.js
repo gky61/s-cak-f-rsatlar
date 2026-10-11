@@ -937,9 +937,9 @@ console.log('\n--- TEST 25: P1-22 HomeScreen Arama Prefix Sorgusu Sözleşmesi -
   // İstemci tarafı körleme 30 doküman çekme kodunun kalktığını doğrula
   assert.strictEqual(homeCode.includes("source: Source.serverAndCache"), false, 'Körleme 30 doküman çekip bellek içi filtreleme kaldırılmış olmalı');
 
-  // Firestore aralık sorgusu (.startAt ve .endAt \uf8ff) olduğunu doğrula
-  assert.ok(homeCode.includes(".startAt([trimmed])"), 'startAt([trimmed]) prefix sorgusu bulunmalı');
-  assert.ok(homeCode.includes(".endAt(['$trimmed\\uf8ff'])"), 'endAt prefix sorgusu bulunmalı');
+  // Firestore aralık sorgusu (.startAt ve .endAt \uf8ff) olduğunu doğrula (Tekil veya varyant tabanlı)
+  assert.ok(homeCode.includes(".startAt([variant])") || homeCode.includes(".startAt([trimmed])"), 'startAt([variant]) prefix sorgusu bulunmalı');
+  assert.ok(homeCode.includes(".endAt(['$variant\\uf8ff'])") || homeCode.includes(".endAt(['$trimmed\\uf8ff'])"), 'endAt prefix sorgusu bulunmalı');
 
   console.log('✅ TEST 25 BAŞARILI: P1-22 Kullanıcı aramasında indeksli prefix sorgusu ve bellek taşması engeli doğrulandı.');
 }

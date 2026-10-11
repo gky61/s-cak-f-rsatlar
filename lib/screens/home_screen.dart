@@ -542,12 +542,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final maxScroll = _scrollController.position.maxScrollExtent;
     // FS-09: Infinite scroll - Kullanıcı alt sınıra yaklaştığında bir sonraki sayfayı çek (Gerçek sunucu sayfalaması)
     if (offset > maxScroll - 350 && _hasMore && !_isLoadingMore && mounted) {
+      // Arama modunda iken genel akış sayfalanmamalı (Gereksiz okuma maliyetini ve alakasız veri yüklemesini engeller)
+      if (_isSearchMode && _searchQuery.trim().isNotEmpty) return;
       _loadMoreDeals();
     }
   }
 
   // FS-09: Sayfalı Fırsat Yükleme (Gerçek imleçli sayfalama)
   Future<void> _loadMoreDeals() async {
+    if (_isSearchMode && _searchQuery.trim().isNotEmpty) return;
     if (_isLoadingMore || !_hasMore || _lastDealDocument == null) return;
     
     setState(() {
@@ -1168,6 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isSearchingUsers = true);
     try {
       final results = <Map<String, dynamic>>[];
+      final seenIds = <String>{};
 
       // 1. Botkolik kontrolü
       if ('botkolik'.contains(normalized) || 'bot'.contains(normalized)) {
@@ -1178,6 +1182,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'isBot': true,
           'imageUrl': 'assets/botkolik.webp',
         });
+        seenIds.add('botkolik');
       }
 
       // 2. P1-22 (R-SCL-03): İlk 30 doküman sınırı yerine veritabanı prefix sorgusu
@@ -1185,52 +1190,88 @@ class _HomeScreenState extends State<HomeScreen> {
       if (currentUserId != null) {
         final trimmed = rawQuery.trim();
         final lower = trimmed.toLowerCase();
-        final seenIds = <String>{};
 
-        // Öncelikli olarak username üzerinde prefix araması
-        final snap = await FirebaseFirestore.instance
-            .collection('users')
-            .orderBy('username')
-            .startAt([trimmed])
-            .endAt(['$trimmed\uf8ff'])
-            .limit(20)
-            .get();
-
-        for (final doc in snap.docs) {
-          seenIds.add(doc.id);
-          if (doc.id == currentUserId) continue; // Kendini listede arama sonucunda gösterme
-          if (doc.id == 'botkolik' && results.any((r) => r['id'] == 'botkolik')) continue;
-
-          final data = doc.data();
-          final username = (data['username'] ?? '').toString();
-          final displayName = (data['displayName'] ?? '').toString();
-
-          results.add({
-            'id': doc.id,
-            'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
-            'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
-            'isBot': false,
-            'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
-            'pinnedBadge': data['pinnedBadge']?.toString(),
-          });
+        // Çoklu varyant kümesi oluştur (Büyük-küçük harf duyarsızlığı garantisi)
+        // Örn: "muratcan" arandığında -> ["muratcan", "Muratcan", "MURATCAN"]
+        // Örn: "Muratcan" arandığında -> ["Muratcan", "muratcan", "MURATCAN"]
+        // Örn: "murat can" arandığında -> ["murat can", "Murat Can", "MURAT CAN"]
+        // Örn: "ismail" arandığında -> ["ismail", "İsmail", "Ismail"]
+        final searchVariants = <String>[];
+        void addVariant(String v) {
+          final t = v.trim();
+          if (t.isNotEmpty && !searchVariants.contains(t)) {
+            searchVariants.add(t);
+          }
         }
 
-        // Eğer büyük/küçük harf farkı varsa ve limit dolmadıysa küçük harfli varyantı da tara
-        if (trimmed != lower && results.length < 20) {
+        addVariant(trimmed);
+        addVariant(lower);
+        if (trimmed.length > 1) {
+          addVariant('${trimmed[0].toUpperCase()}${trimmed.substring(1).toLowerCase()}');
+          addVariant(trimmed.toUpperCase());
+        }
+        if (trimmed.contains(' ')) {
+          final words = trimmed.split(RegExp(r'\s+'));
+          final titleWords = words.map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
+          addVariant(titleWords);
+        }
+        // Türkçe özel harf desteği ('i' ve 'İ')
+        if (lower.startsWith('i')) {
+          addVariant('İ${lower.substring(1)}');
+          addVariant('I${lower.substring(1)}');
+        } else if (trimmed.startsWith('İ') || trimmed.startsWith('I')) {
+          addVariant('i${trimmed.substring(1).toLowerCase()}');
+        }
+
+        // 1. username alanı üzerinde varyantlarla prefix taraması
+        for (final variant in searchVariants) {
+          if (results.length >= 20) break;
           try {
-            final lowerSnap = await FirebaseFirestore.instance
+            final snap = await FirebaseFirestore.instance
                 .collection('users')
                 .orderBy('username')
-                .startAt([lower])
-                .endAt(['$lower\uf8ff'])
+                .startAt([variant])
+                .endAt(['$variant\uf8ff'])
                 .limit(20 - results.length)
                 .get();
 
-            for (final doc in lowerSnap.docs) {
+            for (final doc in snap.docs) {
               if (seenIds.contains(doc.id)) continue;
               seenIds.add(doc.id);
               if (doc.id == currentUserId) continue;
-              if (doc.id == 'botkolik' && results.any((r) => r['id'] == 'botkolik')) continue;
+
+              final data = doc.data();
+              final username = (data['username'] ?? '').toString();
+              final displayName = (data['displayName'] ?? '').toString();
+
+              results.add({
+                'id': doc.id,
+                'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
+                'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
+                'isBot': false,
+                'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
+                'pinnedBadge': data['pinnedBadge']?.toString(),
+              });
+            }
+          } catch (_) {}
+        }
+
+        // 2. displayName alanı üzerinde varyantlarla prefix taraması (Kullanıcı isimle arandığında)
+        for (final variant in searchVariants) {
+          if (results.length >= 20) break;
+          try {
+            final nameSnap = await FirebaseFirestore.instance
+                .collection('users')
+                .orderBy('displayName')
+                .startAt([variant])
+                .endAt(['$variant\uf8ff'])
+                .limit(20 - results.length)
+                .get();
+
+            for (final doc in nameSnap.docs) {
+              if (seenIds.contains(doc.id)) continue;
+              seenIds.add(doc.id);
+              if (doc.id == currentUserId) continue;
 
               final data = doc.data();
               final username = (data['username'] ?? '').toString();
@@ -1249,7 +1290,9 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      if (mounted) {
+      // Async Race Condition Kalkanı: Yalnızca arama çubuğundaki sorgu ile eşleşen istek UI'ı günceller
+      final expectedQuery = _searchQuery.replaceFirst('@', '').trim();
+      if (mounted && expectedQuery.toLowerCase() == rawQuery.trim().toLowerCase()) {
         setState(() {
           _matchedUsers = results;
           _isSearchingUsers = false;
@@ -2864,6 +2907,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {
                       _activeSearchScope = SearchScope.deals;
                     });
+                    final cleanQuery = _searchQuery.trim();
+                    if (cleanQuery.length >= 2 && _serverSearchResults.isEmpty && !_isServerSearching) {
+                      _searchDealsServer(cleanQuery);
+                    }
                   }
                 },
                 child: AnimatedContainer(
@@ -3343,7 +3390,89 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // 4. Eşleşen kullanıcı bulunamadı (Empty state)
+    // 4. Misafir kullanıcı oturum açma çağrısı (P1-19 gereği users koleksiyonu oturum gerektirir)
+    if (_authService.currentUser == null) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.25),
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(
+                  Icons.lock_person_rounded,
+                  size: 48,
+                  color: primaryColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Topluluk Üyelerini Aramak İçin Giriş Yapın',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white : AppTheme.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'FırsatKolik topluluğundaki üyeleri aramak, takip etmek ve profillerini görüntülemek için ücretsiz giriş yapabilirsiniz.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.grey[300] : AppTheme.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  HapticFeedback.lightImpact();
+                  final loggedIn = await showGuestLoginBottomSheet(
+                    context,
+                    title: 'Topluluğu Keşfet! 🚀',
+                    message: 'Kullanıcıları aramak, takip etmek ve fırsat bildirimlerini almak için giriş yapın.',
+                    primaryButtonText: '🚀 Giriş Yap / Devam Et',
+                  );
+                  if (loggedIn == true && mounted) {
+                    final q = _searchQuery.replaceFirst('@', '').trim();
+                    if (q.length >= 2) {
+                      _searchUsers(q);
+                    }
+                  }
+                },
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text(
+                  'Giriş Yap / Kayıt Ol',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 5. Eşleşen kullanıcı bulunamadı (Empty state)
     final cleanQuery = _searchQuery.trim();
     return Center(
       child: SingleChildScrollView(

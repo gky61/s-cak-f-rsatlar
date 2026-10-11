@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,12 +55,19 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   bool _isAdmin = false;
   bool _hideRadarBanner = false;
   bool _hideHeroBanner = false;
-  // FS-19: SWR, Pagination & Cache-First State for Kuponlar
-  List<Kupon> _kuponlarList = [];
-  DocumentSnapshot? _lastKuponDocument;
-  bool _isLoadingKuponlar = false;
+
+  // FS-19 & FS-KUP-03: Bağımsız Sekme Sayfalama ve SWR State
+  List<Kupon> _radarKuponlarList = [];
+  DocumentSnapshot? _radarLastDocument;
+  bool _isLoadingRadar = false;
+  bool _hasMoreRadar = true;
+
+  List<Kupon> _toplulukKuponlarList = [];
+  DocumentSnapshot? _toplulukLastDocument;
+  bool _isLoadingTopluluk = false;
+  bool _hasMoreTopluluk = true;
+
   bool _isFirstLoadKuponlar = true;
-  bool _hasMoreKuponlar = true;
   String? _kuponlarErrorMessage;
   late TabController _tabController;
   final ScrollController _radarScrollController = ScrollController();
@@ -112,6 +120,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     });
     _radarScrollController.addListener(_onRadarScroll);
     _toplulukScrollController.addListener(_onToplulukScroll);
+    _loadUserVotesLocally();
     _loadKuponlarFirstPage();
     _checkAdminStatus();
     _loadHiddenCoupons();
@@ -127,6 +136,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         _userVotes.clear();
         _localHotCounts.clear();
         _localColdCounts.clear();
+        _loadUserVotesLocally();
         setState(() {});
       }
     });
@@ -164,6 +174,45 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     super.dispose();
   }
 
+  String _getUserVotesStorageKey() {
+    final uid = AuthService().currentUser?.uid;
+    return (uid != null && uid.isNotEmpty)
+        ? 'cached_coupon_votes_$uid'
+        : 'cached_coupon_votes_guest';
+  }
+
+  Future<void> _loadUserVotesLocally() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _getUserVotesStorageKey();
+      final jsonStr = prefs.getString(key);
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final decoded = json.decode(jsonStr) as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            _userVotes.clear();
+            decoded.forEach((k, v) {
+              if (v is String) _userVotes[k] = v;
+            });
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveUserVoteLocally(String kuponId, String? voteType) async {
+    try {
+      if (voteType != null) {
+        _userVotes[kuponId] = voteType;
+      } else {
+        _userVotes.remove(kuponId);
+      }
+      final prefs = await SharedPreferences.getInstance();
+      final key = _getUserVotesStorageKey();
+      await prefs.setString(key, json.encode(_userVotes));
+    } catch (_) {}
+  }
+
   void _onRadarScroll() {
     if (!_radarScrollController.hasClients) return;
     final show = _radarScrollController.offset > ScrollToTopButton.defaultThreshold;
@@ -171,7 +220,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       setState(() => _showRadarScrollToTop = show);
     }
     if (_radarScrollController.offset >= _radarScrollController.position.maxScrollExtent - 350) {
-      _loadMoreKuponlar();
+      _loadMoreRadar();
     }
   }
 
@@ -182,56 +231,100 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       setState(() => _showToplulukScrollToTop = show);
     }
     if (_toplulukScrollController.offset >= _toplulukScrollController.position.maxScrollExtent - 350) {
-      _loadMoreKuponlar();
+      _loadMoreTopluluk();
     }
   }
 
-  /// FS-19: SWR + Cache-First ilk yükleme
+  /// FS-19 & FS-KUP-03: SWR + Cache-First bağımsız sekme ilk yükleme
   Future<void> _loadKuponlarFirstPage() async {
     if (!mounted) return;
     setState(() {
-      _isLoadingKuponlar = true;
+      _isLoadingRadar = true;
+      _isLoadingTopluluk = true;
       _kuponlarErrorMessage = null;
     });
 
     try {
       // 1. Aşama: Cache-First (0ms yerel önbellek açılışı)
       try {
-        final cacheResult = await _kuponService.getKuponlarPaginated(
-          limit: 40,
+        final cacheRadarFuture = _kuponService.getKuponlarPaginated(
+          limit: 30,
+          kaynakTipi: 'web',
           source: Source.cache,
         );
-        if (mounted && cacheResult.kuponlar.isNotEmpty) {
+        final cacheToplulukFuture = _kuponService.getKuponlarPaginated(
+          limit: 30,
+          kaynakTipi: 'topluluk',
+          source: Source.cache,
+        );
+
+        final cacheResults = await Future.wait([cacheRadarFuture, cacheToplulukFuture]);
+        final cacheRadar = cacheResults[0];
+        final cacheTopluluk = cacheResults[1];
+
+        if (mounted && (cacheRadar.kuponlar.isNotEmpty || cacheTopluluk.kuponlar.isNotEmpty)) {
           setState(() {
-            _kuponlarList = cacheResult.kuponlar;
-            _lastKuponDocument = cacheResult.lastDocument;
-            _hasMoreKuponlar = cacheResult.hasMore;
+            if (cacheRadar.kuponlar.isNotEmpty) {
+              _radarKuponlarList = cacheRadar.kuponlar;
+              _radarLastDocument = cacheRadar.lastDocument;
+              _hasMoreRadar = cacheRadar.hasMore;
+            }
+            if (cacheTopluluk.kuponlar.isNotEmpty) {
+              _toplulukKuponlarList = cacheTopluluk.kuponlar;
+              _toplulukLastDocument = cacheTopluluk.lastDocument;
+              _hasMoreTopluluk = cacheTopluluk.hasMore;
+            }
             _isFirstLoadKuponlar = false;
           });
         }
       } catch (_) {}
 
-      // 2. Aşama: SWR Server Revalidation
-      final serverResult = await _kuponService.getKuponlarPaginated(
-        limit: 40,
+      // 2. Aşama: SWR Server Revalidation (Paralel sunucu senkronizasyonu)
+      final serverRadarFuture = _kuponService.getKuponlarPaginated(
+        limit: 30,
+        kaynakTipi: 'web',
+        source: Source.server,
+      );
+      final serverToplulukFuture = _kuponService.getKuponlarPaginated(
+        limit: 30,
+        kaynakTipi: 'topluluk',
         source: Source.server,
       );
 
+      final serverResults = await Future.wait([serverRadarFuture, serverToplulukFuture]);
+      final serverRadar = serverResults[0];
+      final serverTopluluk = serverResults[1];
+
       if (mounted) {
         setState(() {
-          _kuponlarList = serverResult.kuponlar;
-          _lastKuponDocument = serverResult.lastDocument;
-          _hasMoreKuponlar = serverResult.hasMore;
-          _isLoadingKuponlar = false;
+          if (!serverRadar.isError) {
+            _radarKuponlarList = serverRadar.kuponlar;
+            _radarLastDocument = serverRadar.lastDocument;
+            _hasMoreRadar = serverRadar.hasMore;
+          }
+          _isLoadingRadar = false;
+
+          if (!serverTopluluk.isError) {
+            _toplulukKuponlarList = serverTopluluk.kuponlar;
+            _toplulukLastDocument = serverTopluluk.lastDocument;
+            _hasMoreTopluluk = serverTopluluk.hasMore;
+          }
+          _isLoadingTopluluk = false;
+
           _isFirstLoadKuponlar = false;
+
+          if (serverRadar.isError && serverTopluluk.isError && _radarKuponlarList.isEmpty && _toplulukKuponlarList.isEmpty) {
+            _kuponlarErrorMessage = 'Kuponlar yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+          }
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoadingKuponlar = false;
+          _isLoadingRadar = false;
+          _isLoadingTopluluk = false;
           _isFirstLoadKuponlar = false;
-          if (_kuponlarList.isEmpty) {
+          if (_radarKuponlarList.isEmpty && _toplulukKuponlarList.isEmpty) {
             _kuponlarErrorMessage = 'Kuponlar yüklenemedi';
           }
         });
@@ -239,36 +332,85 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     }
   }
 
-  /// FS-19: Sonsuz kaydırma - Sonraki kupon sayfasını getir
-  Future<void> _loadMoreKuponlar() async {
-    if (_isLoadingKuponlar || !_hasMoreKuponlar || _lastKuponDocument == null || !mounted) return;
+  /// FS-19 & FS-KUP-03: Kupon Radarı sekmesi için sonraki sayfayı getir
+  Future<void> _loadMoreRadar() async {
+    if (_isLoadingRadar || !_hasMoreRadar || _radarLastDocument == null || !mounted) return;
 
     setState(() {
-      _isLoadingKuponlar = true;
+      _isLoadingRadar = true;
     });
 
     try {
       final result = await _kuponService.getKuponlarPaginated(
-        limit: 30,
-        lastDocument: _lastKuponDocument,
+        limit: 25,
+        kaynakTipi: 'web',
+        lastDocument: _radarLastDocument,
         source: Source.serverAndCache,
       );
 
       if (mounted) {
-        final existingIds = _kuponlarList.map((k) => k.id).toSet();
-        final newKuponlar = result.kuponlar.where((k) => !existingIds.contains(k.id)).toList();
+        if (!result.isError) {
+          final existingIds = _radarKuponlarList.map((k) => k.id).toSet();
+          final newKuponlar = result.kuponlar.where((k) => !existingIds.contains(k.id)).toList();
 
-        setState(() {
-          _kuponlarList.addAll(newKuponlar);
-          _lastKuponDocument = result.lastDocument;
-          _hasMoreKuponlar = result.hasMore && newKuponlar.isNotEmpty;
-          _isLoadingKuponlar = false;
-        });
+          setState(() {
+            _radarKuponlarList.addAll(newKuponlar);
+            _radarLastDocument = result.lastDocument;
+            _hasMoreRadar = result.hasMore && newKuponlar.isNotEmpty;
+            _isLoadingRadar = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingRadar = false;
+          });
+        }
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _isLoadingKuponlar = false;
+          _isLoadingRadar = false;
+        });
+      }
+    }
+  }
+
+  /// FS-19 & FS-KUP-03: Topluluk Kuponları sekmesi için sonraki sayfayı getir
+  Future<void> _loadMoreTopluluk() async {
+    if (_isLoadingTopluluk || !_hasMoreTopluluk || _toplulukLastDocument == null || !mounted) return;
+
+    setState(() {
+      _isLoadingTopluluk = true;
+    });
+
+    try {
+      final result = await _kuponService.getKuponlarPaginated(
+        limit: 25,
+        kaynakTipi: 'topluluk',
+        lastDocument: _toplulukLastDocument,
+        source: Source.serverAndCache,
+      );
+
+      if (mounted) {
+        if (!result.isError) {
+          final existingIds = _toplulukKuponlarList.map((k) => k.id).toSet();
+          final newKuponlar = result.kuponlar.where((k) => !existingIds.contains(k.id)).toList();
+
+          setState(() {
+            _toplulukKuponlarList.addAll(newKuponlar);
+            _toplulukLastDocument = result.lastDocument;
+            _hasMoreTopluluk = result.hasMore && newKuponlar.isNotEmpty;
+            _isLoadingTopluluk = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingTopluluk = false;
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingTopluluk = false;
         });
       }
     }
@@ -1858,6 +2000,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final prevCold = _localColdCounts[kuponId] ?? 0;
 
     // 0ms Anında Optimistic UI Güncellemesi (Kilitlenme ve tıklama kaybı yok)
+    final targetVoteType = (currentVote == voteType) ? null : voteType;
+    _saveUserVoteLocally(kuponId, targetVoteType);
+
     setState(() {
       if (currentVote == voteType) {
         // Tıklanan oyu geri al (toggle off)
@@ -2132,17 +2277,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final isExpired = kupon.isExpired;
     final isRecentlyRestored = _recentlyRestoredKuponIds.contains(kupon.id);
 
-    if (currentUser != null && !_userVotes.containsKey(kupon.id)) {
-      _userVotes[kupon.id] = null;
-      _kuponService.getUserKuponVote(kuponId: kupon.id, userId: currentUser.uid).then((vote) {
-        if (mounted) {
-          setState(() {
-            _userVotes[kupon.id] = vote;
-          });
-        }
-      });
-    }
-
+    // FS-KUP-01: Oylar önceden yerel oturum/SharedPreferences üzerinden senkron yüklenir.
+    // Kart çiziminde asla N+1 ağ çağrısı ve asenkron setState fırtınası yapılmaz.
     final userVote = _userVotes[kupon.id];
     final isHotSelected = userVote == 'hot';
     final isColdSelected = userVote == 'cold';
@@ -3022,7 +3158,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           final int couponsPerAd = interval - 1; // Standart: 5 - 1 = 4 kupon
           final int adCount =
               (showAds && couponsPerAd > 0) ? (list.length ~/ couponsPerAd) : 0;
-          final bool showBottomSpinner = _isLoadingKuponlar && !_isFirstLoadKuponlar;
+          final bool isLoadingThisTab = (tabName == 'Kupon Radarı') ? _isLoadingRadar : _isLoadingTopluluk;
+          final bool showBottomSpinner = isLoadingThisTab && !_isFirstLoadKuponlar;
           final int totalItemCount = list.length + headerCount + adCount + (showBottomSpinner ? 1 : 0);
 
         return ListView.builder(
@@ -3330,9 +3467,9 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       body: Stack(
         children: [
           // FS-19: SWR Kuponlar Akışı
-          if (_isFirstLoadKuponlar && _isLoadingKuponlar && _kuponlarList.isEmpty)
+          if (_isFirstLoadKuponlar && (_isLoadingRadar || _isLoadingTopluluk) && _radarKuponlarList.isEmpty && _toplulukKuponlarList.isEmpty)
             _buildCouponSkeleton(isDark)
-          else if (_kuponlarErrorMessage != null && _kuponlarList.isEmpty)
+          else if (_kuponlarErrorMessage != null && _radarKuponlarList.isEmpty && _toplulukKuponlarList.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -3367,40 +3504,43 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
           else
             Builder(
               builder: (context) {
-                final kuponlar = _kuponlarList;
+                final allVisibleKuponlar = [
+                  ..._radarKuponlarList.where((k) => !_hiddenKuponIds.contains(k.id)),
+                  ..._toplulukKuponlarList.where((k) => !_hiddenKuponIds.contains(k.id)),
+                ];
 
-              final hiddenToplulukIds = kuponlar
-                  .where((k) => k.kaynakTipi == 'topluluk' && _hiddenKuponIds.contains(k.id))
-                  .map((k) => k.id)
-                  .toSet();
+                final hiddenToplulukIds = _toplulukKuponlarList
+                    .where((k) => _hiddenKuponIds.contains(k.id))
+                    .map((k) => k.id)
+                    .toSet();
 
-              final hiddenRadarIds = kuponlar
-                  .where((k) => k.kaynakTipi == 'web' && _hiddenKuponIds.contains(k.id))
-                  .map((k) => k.id)
-                  .toSet();
+                final hiddenRadarIds = _radarKuponlarList
+                    .where((k) => _hiddenKuponIds.contains(k.id))
+                    .map((k) => k.id)
+                    .toSet();
 
-              final activeStores = kuponlar.map((k) => k.magazaAdi).toSet().toList();
-              activeStores.sort((a, b) => _getStoreRank(a).compareTo(_getStoreRank(b)));
-              final stores = ['Tümü', ...activeStores];
+                final activeStores = allVisibleKuponlar.map((k) => k.magazaAdi).toSet().toList();
+                activeStores.sort((a, b) => _getStoreRank(a).compareTo(_getStoreRank(b)));
+                final stores = ['Tümü', ...activeStores];
 
-              if (!stores.contains(_selectedStoreFilter)) {
-                _selectedStoreFilter = 'Tümü';
-              }
+                if (!stores.contains(_selectedStoreFilter)) {
+                  _selectedStoreFilter = 'Tümü';
+                }
 
-              final filteredKuponlar = _selectedStoreFilter == 'Tümü'
-                  ? kuponlar
-                  : kuponlar.where((k) => k.magazaAdi == _selectedStoreFilter).toList();
+                final radarKuponlar = _selectedStoreFilter == 'Tümü'
+                    ? _radarKuponlarList.where((k) => !_hiddenKuponIds.contains(k.id) && k.durum == 'aktif').toList()
+                    : _radarKuponlarList.where((k) => !_hiddenKuponIds.contains(k.id) && k.durum == 'aktif' && k.magazaAdi == _selectedStoreFilter).toList();
+                radarKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: false));
 
-              final visibleKuponlar = filteredKuponlar.where((k) => !_hiddenKuponIds.contains(k.id)).toList();
+                final toplulukKuponlar = _selectedStoreFilter == 'Tümü'
+                    ? _toplulukKuponlarList.where((k) => !_hiddenKuponIds.contains(k.id) && k.durum == 'aktif').toList()
+                    : _toplulukKuponlarList.where((k) => !_hiddenKuponIds.contains(k.id) && k.durum == 'aktif' && k.magazaAdi == _selectedStoreFilter).toList();
+                toplulukKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: true));
 
-              final toplulukKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'topluluk' && k.durum == 'aktif').toList();
-              toplulukKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: true));
+                final visibleKuponlar = allVisibleKuponlar.where((k) => _selectedStoreFilter == 'Tümü' || k.magazaAdi == _selectedStoreFilter).toList();
 
-              final radarKuponlar = visibleKuponlar.where((k) => k.kaynakTipi == 'web' && k.durum == 'aktif').toList();
-              radarKuponlar.sort((a, b) => Kupon.compareKuponlar(a, b, _getStoreRank, isCommunity: false));
-
-              final currentTabCount = _tabController.index == 0 ? radarKuponlar.length : toplulukKuponlar.length;
-              final currentTabTitle = _tabController.index == 0 ? 'Kupon Radarı' : 'Topluluk Kuponları';
+                final currentTabCount = _tabController.index == 0 ? radarKuponlar.length : toplulukKuponlar.length;
+                final currentTabTitle = _tabController.index == 0 ? 'Kupon Radarı' : 'Topluluk Kuponları';
 
               // Hedef kupona otomatik kaydırma (Highlight Kupon ID varsa)
               if (_highlightedKuponId != null && !_hasAutoScrolledToHighlight) {

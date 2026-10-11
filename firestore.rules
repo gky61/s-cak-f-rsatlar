@@ -362,6 +362,12 @@ service cloud.firestore {
                     !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) && (
         isAdmin() || (
           request.resource.data.paylasanKullaniciId == userId() &&
+          request.resource.data.baslik is string &&
+          request.resource.data.baslik.size() >= 3 &&
+          request.resource.data.baslik.size() <= 120 &&
+          request.resource.data.kuponKodu is string &&
+          request.resource.data.kuponKodu.size() >= 1 &&
+          request.resource.data.kuponKodu.size() <= 50 &&
           (!('durum' in request.resource.data) || request.resource.data.durum == 'beklemede') &&
           (!('sicakOySayisi' in request.resource.data) || request.resource.data.sicakOySayisi == 0) &&
           (!('sogukOySayisi' in request.resource.data) || request.resource.data.sogukOySayisi == 0)

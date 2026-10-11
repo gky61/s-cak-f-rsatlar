@@ -2,10 +2,10 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/katalog.dart';
 import '../services/katalog_share_service.dart';
 import '../services/analytics_service.dart';
+import '../widgets/resilient_catalog_image.dart';
 
 class KatalogDetayPage extends StatefulWidget {
   final Katalog catalog;
@@ -424,8 +424,10 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
                               child: GestureDetector(
                                 onDoubleTapDown: isCurrent ? _handleDoubleTap : null,
                                 onDoubleTap: isCurrent ? () {} : null,
-                                child: _ResilientCatalogImage(
+                                child: ResilientCatalogImage(
                                   imageUrl: widget.catalog.sayfaResimleri[index],
+                                  width: double.infinity,
+                                  height: double.infinity,
                                 ),
                               ),
                             ),
@@ -621,26 +623,30 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          // Page Dots Indicator
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              pageCount,
-                              (index) => AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
-                                width: _currentPage == index ? 18 : 5,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: _currentPage == index
-                                      ? const Color(0xFFFF6B35)
-                                      : Colors.white.withValues(alpha: 0.35),
-                                  borderRadius: BorderRadius.circular(999),
+                          // FS-AKT-03: RenderFlex overflow koruması
+                          // 12 sayfaya kadar şık nokta göstergesi; 12+ sayfalık market/yapı market kataloglarında
+                          // ekran taşmasını önlemek için sadece üstteki kompakt sayfa hapı gösterilir.
+                          if (pageCount <= 12) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(
+                                pageCount,
+                                (index) => AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  width: _currentPage == index ? 18 : 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    color: _currentPage == index
+                                        ? const Color(0xFFFF6B35)
+                                        : Colors.white.withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -655,152 +661,3 @@ class _KatalogDetayPageState extends State<KatalogDetayPage> with TickerProvider
   }
 }
 
-/// FS-23: Aktüel Broşür Görselleri Dayanıklılık Bileşeni
-/// Cloudflare WAF, Referer kısıtı veya CDN engellerine karşı
-/// özel HTTP başlıkları, otomatik proxy fallback ve etkileşimli yeniden deneme sağlar.
-class _ResilientCatalogImage extends StatefulWidget {
-  final String imageUrl;
-
-  const _ResilientCatalogImage({required this.imageUrl});
-
-  @override
-  State<_ResilientCatalogImage> createState() => _ResilientCatalogImageState();
-}
-
-class _ResilientCatalogImageState extends State<_ResilientCatalogImage> {
-  bool _useProxyFallback = false;
-  int _retryKey = 0;
-
-  static const Map<String, String> _standardHeaders = {
-    'User-Agent':
-        'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-    'Referer': 'https://www.akakce.com/',
-    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-  };
-
-  String _getEffectiveUrl() {
-    final cleanUrl = widget.imageUrl.trim();
-    if (_useProxyFallback) {
-      // images.weserv.nl proxy CDN fallback (SSL, WebP, hotlink bypass)
-      return 'https://images.weserv.nl/?url=${Uri.encodeComponent(cleanUrl)}&output=webp&w=1400';
-    }
-    return cleanUrl;
-  }
-
-  void _handleRetry() {
-    setState(() {
-      _useProxyFallback = false;
-      _retryKey++;
-    });
-  }
-
-  void _handleImageError() {
-    if (!_useProxyFallback) {
-      setState(() {
-        _useProxyFallback = true;
-      });
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _ResilientCatalogImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl) {
-      _useProxyFallback = false;
-      _retryKey = 0;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return KeyedSubtree(
-      key: ValueKey('catalog_img_${widget.imageUrl}_$_useProxyFallback$_retryKey'),
-      child: CachedNetworkImage(
-        imageUrl: _getEffectiveUrl(),
-        httpHeaders: _standardHeaders,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: double.infinity,
-        placeholder: (context, url) => const Center(
-          child: CircularProgressIndicator(
-            color: Colors.white,
-            strokeWidth: 2.5,
-          ),
-        ),
-        errorWidget: (context, url, error) {
-          if (!_useProxyFallback) {
-            // İlk hata anında derhal otomatik proxy fallback'e geç
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _handleImageError();
-            });
-            return const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2.5,
-              ),
-            );
-          }
-
-          // Hem doğrudan hem yedek proxy başarısız olursa modern yeniden dene butonu
-          return Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              margin: const EdgeInsets.symmetric(horizontal: 32),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.broken_image_rounded,
-                    color: Colors.white60,
-                    size: 52,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Broşür sayfası yüklenemedi',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'İnternet bağlantınızı kontrol edip tekrar deneyebilirsiniz.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _handleRetry,
-                    icon: const Icon(Icons.refresh_rounded, size: 16),
-                    label: const Text('Yeniden Dene'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF6B35),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
