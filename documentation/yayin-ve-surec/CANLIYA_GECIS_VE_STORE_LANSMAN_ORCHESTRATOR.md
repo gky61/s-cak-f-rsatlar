@@ -197,6 +197,9 @@ graph TD
   - *Amazon ASIN Normalizasyonu:* Amazon ürün linkleri başlık slug varyasyonlarından arındırılarak `/dp/ASIN` kanonik formatına çekildi. ASIN benzersiz olduğu için yanlış pozitif riski %0'dır.  
   - *Pazaryeri Satıcı Paritesi:* Hepsiburada (`magaza`) ve Teknosa (`shopId`) satıcı parametreleri Flutter, Bot ve Web Admin'de korunarak farklı satıcıların fırsatlarının engellenmesi önlendi.  
   - *Parite Doğrulama:* `lib/models/deal.dart`, `cloud-run-bot/affiliate_manager.js` ve `web/admin/affiliate_manager.js` arasında %100 tam kanonik senkronizasyon sağlandı (`test/deal_clean_url_test.dart` 13/13 PASS).
+* 🟢 **Adım 3.13: Çift Kademeli Mükerrerlik ve Gerçek Fiyat Doğrulama Mimarisi (Pending Guard & Post-Scrape Verification)**  
+  - *Kural 1 (Onay Bekleyen / Pending Guard):* Veritabanında aynı `cleanUrl`'e sahip bir fırsat zaten `isApproved === false` (veya `status: pending/beklemede`) durumundaysa, fiyatı ne olursa olsun admin onay kuyruğunda ikinci bir ikiz kart açılması engellendi (`cloud-run-bot/telegram_bot.js` ve `lib/services/deal_service.dart`).  
+  - *Kural 2 (Post-Scrape Fiyat Doğrulama):* Telegram mesajındaki sepet kuponu metni sebebiyle indirim sanılarak kazımaya alınan fırsatların mağaza sayfasındaki nihai fiyatı (`finalPrice`), mevcut aktif fiyattan en az %5 ucuz değilse kayıt engellendi (`cloud-run-bot/tests/deduplication_dual_protection.test.js` %100 PASS).
 
 ---
 

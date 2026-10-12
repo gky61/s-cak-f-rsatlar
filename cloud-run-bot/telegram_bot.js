@@ -57,6 +57,18 @@ function cleanProductUrl(urlStr) {
   return affiliateManager.cleanProductUrl(urlStr);
 }
 
+// Güvenli fiyat ayrıştırma fonksiyonu (Sayı veya "819 TL" gibi metinleri hatasız sayıya dönüştürür)
+function parseDealPrice(val) {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^\d,.]/g, '').replace(',', '.');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 // Environment variables - sanitized to prevent newline/quote issues from Secret Manager
 const API_ID = (process.env.TELEGRAM_API_ID || '').trim();
 const API_HASH = (process.env.TELEGRAM_API_HASH || '').trim();
@@ -1162,6 +1174,63 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       searchKeywords: Array.from(kwSet).slice(0, 50),
     };
 
+    // 🛡️ KURAL 2: Kazıma Sonrası (Post-Scrape) Mükerrerlik ve Gerçek Fiyat Doğrulama Kalkanı:
+    // Kazıma bittikten sonra Firestore'daki mevcut fırsatla karşılaştır:
+    if (finalCleanUrl) {
+      try {
+        const postScrapeSnapshot = await db.collection('deals')
+          .where('cleanUrl', '==', finalCleanUrl)
+          .get();
+
+        if (!postScrapeSnapshot.empty) {
+          const now = new Date();
+          for (const doc of postScrapeSnapshot.docs) {
+            if (doc.id === uniqueDocId) continue;
+
+            const existingDeal = doc.data();
+            const isRejected = existingDeal.isRejected === true || existingDeal.status === 'rejected';
+            if (isRejected) continue;
+
+            const createdAtRaw = existingDeal.createdAt || existingDeal.timestamp;
+            let dealCreatedAt = null;
+            if (createdAtRaw && typeof createdAtRaw.toDate === 'function') {
+              dealCreatedAt = createdAtRaw.toDate();
+            } else if (createdAtRaw instanceof Date) {
+              dealCreatedAt = createdAtRaw;
+            } else if (typeof createdAtRaw === 'string') {
+              dealCreatedAt = new Date(createdAtRaw);
+            }
+            if (dealCreatedAt && (now - dealCreatedAt) > (48 * 60 * 60 * 1000)) continue;
+
+            const isExpired = existingDeal.isExpired === true || existingDeal.status === 'expired';
+            if (isExpired || (existingDeal.expiredVotes || 0) >= 15) continue;
+
+            // A) Eğer mevcut ürün zaten Admin Onayında bekliyorsa (isApproved === false veya beklemede):
+            // Kesinlikle ikinci bir onay kartı oluşturulamaz!
+            const isPending = existingDeal.isApproved === false || existingDeal.status === 'pending' || existingDeal.status === 'beklemede';
+            if (isPending) {
+              console.log(`⏩ [POST-SCRAPE DEDUP] ${finalCleanUrl} zaten admin onayında bekliyor (${doc.id}). Mükerrer kayıt engellendi.`);
+              return false;
+            }
+
+            // B) Eğer mevcut ürün onaylıysa:
+            // Kazınan nihai fiyatın (finalPrice) gerçekten mevcut fiyattan en az %5 daha ucuz olduğu doğrulanmalıdır!
+            const existingPrice = parseDealPrice(existingDeal.price);
+            const currentPrice = parseDealPrice(finalPrice);
+            if (currentPrice > 0 && existingPrice > 0 && currentPrice <= (existingPrice * 0.95)) {
+              console.log(`✅ [POST-SCRAPE DEDUP] Gerçek fiyat düşüşü doğrulandı! (Eski: ${existingPrice}, Yeni: ${currentPrice}). Paylaşıma devam ediliyor.`);
+              continue;
+            } else {
+              console.log(`⏩ [POST-SCRAPE DEDUP] Fiyat düşüşü doğrulanmadı! Sitedeki fiyat (${currentPrice} TL), mevcut fiyattan (${existingPrice} TL) en az %5 ucuz değil. Mükerrer kayıt iptal edildi.`);
+              return false;
+            }
+          }
+        }
+      } catch (postErr) {
+        console.warn('⚠️ [POST-SCRAPE DEDUP] Kontrol hatası, akış korunuyor:', postErr.message);
+      }
+    }
+
     console.log(`💾 Kaydediliyor: ${uniqueDocId} (imageUrl: ${imageUrl ? 'VAR ✅' : 'YOK ❌'})`);
     const dealRef = db.collection('deals').doc(uniqueDocId);
 
@@ -1510,13 +1579,26 @@ async function handleTelegramMessageEvent(event) {
             continue;
           }
 
+          // 🛡️ KURAL 1: Onay Bekleyen (Pending) Fırsat Kalkanı:
+          // Eğer aynı cleanUrl'e sahip bir fırsat zaten Admin Onayında bekliyorsa (isApproved === false veya beklemede),
+          // admin onay kuyruğunda mükerrer kartlar oluşturmamak için bu fırsat doğrudan mükerrer sayılır!
+          // (Fiyat düşüşü dahi iddia edilse, ilk fırsat zaten henüz admin masasında incelenmektedir.)
+          const isPending = dealData.isApproved === false || dealData.status === 'pending' || dealData.status === 'beklemede';
+          if (isPending) {
+            console.log(`⏳ [${matchedChannel.title}] Bu ürün zaten Admin Onayında bekliyor (${doc.id}). Mükerrer kuyruk engellendi.`);
+            isDuplicate = true;
+            break;
+          }
+
           // 5. Fiyat Düşüşü (Price Drop) Toleransı:
-          // Eğer Telegram mesajında çıkarılan fiyat mevcut fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
+          // YALNIZCA ONAYLI (isApproved: true) FIRSATLAR İÇİN:
+          // Eğer Telegram mesajında çıkarılan fiyat mevcut onaylı fırsatın fiyatından en az %5 daha ucuzsa,
+          // kazıma ve nihai fiyat doğrulaması yapılabilmesi için geçici izin ver
           const messageText = message.message || '';
           const messagePrice = extractPrice(messageText);
-          const existingPrice = Number(dealData.price) || 0;
+          const existingPrice = parseDealPrice(dealData.price);
           if (messagePrice && messagePrice > 0 && existingPrice > 0 && messagePrice <= (existingPrice * 0.95)) {
-            console.log(`🏷️ [${matchedChannel.title}] Fiyat düşüşü tespit edildi (Eski: ${existingPrice}, Yeni: ${messagePrice}). Paylaşıma izin veriliyor.`);
+            console.log(`🏷️ [${matchedChannel.title}] Fiyat düşüşü ihtimali tespit edildi (Eski: ${existingPrice}, Mesaj: ${messagePrice}). Kazıma ve doğrulama için izin veriliyor.`);
             continue;
           }
 
@@ -1544,6 +1626,8 @@ async function handleTelegramMessageEvent(event) {
       success = await saveDealToFirebase(message, matchedChannel);
       if (success) {
         dealCount++;
+      } else {
+        dupCount++;
       }
     } finally {
       if (cleanUrl) {

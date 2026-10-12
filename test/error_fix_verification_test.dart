@@ -66,5 +66,57 @@ void main() {
       expect(handle(ex1), equals('pending:doc-1'));
       expect(handle(ex2), equals('shared:doc-2'));
     });
+
+    test('Onay bekleyen fırsat kalkanı (Pending Guard) fiyat düşüşünden önce değerlendirilmelidir', () {
+      // Simülasyon: Veritabanındaki belge onay bekliyor mu yoksa onaylı mı?
+      DealBusinessException? evaluateDuplicate({
+        required bool isApproved,
+        required double existingPrice,
+        required double newPrice,
+        required String docId,
+      }) {
+        // Kural 1: Onay bekleyen kalkanı
+        if (!isApproved) {
+          return DealPendingApprovalException(docId);
+        }
+
+        // Kural 2: Fiyat düşüşü toleransı (yalnızca onaylılar için)
+        if (newPrice > 0 && existingPrice > 0 && newPrice <= (existingPrice * 0.95)) {
+          return null; // Fiyat düşüşü geçerli, paylaşıma izin verildi
+        }
+
+        return DealAlreadySharedException(docId);
+      }
+
+      // Vaka A: Ürün zaten admin onayında (isApproved: false), kullanıcı daha düşük fiyat girse bile
+      // ikinci onay kartı açılmamalı ve DealPendingApprovalException fırlatılmalıdır
+      final resultA = evaluateDuplicate(
+        isApproved: false,
+        existingPrice: 819.0,
+        newPrice: 619.0, // Fiyat daha düşük olsa bile!
+        docId: 'deal-haluk-aydin-pending',
+      );
+      expect(resultA, isA<DealPendingApprovalException>());
+      expect((resultA as DealPendingApprovalException).existingDealId, equals('deal-haluk-aydin-pending'));
+
+      // Vaka B: Ürün onaylı (isApproved: true) ve kullanıcı aynı/yüksek fiyat giriyor
+      final resultB = evaluateDuplicate(
+        isApproved: true,
+        existingPrice: 819.0,
+        newPrice: 819.0,
+        docId: 'deal-haluk-aydin-approved',
+      );
+      expect(resultB, isA<DealAlreadySharedException>());
+
+      // Vaka C: Ürün onaylı (isApproved: true) ve kullanıcı gerçek %50 indirimli fiyat giriyor
+      final resultC = evaluateDuplicate(
+        isApproved: true,
+        existingPrice: 1000.0,
+        newPrice: 500.0,
+        docId: 'deal-headphone-approved',
+      );
+      expect(resultC, isNull); // Fiyat düşüşü izin verildi
+    });
   });
 }
+

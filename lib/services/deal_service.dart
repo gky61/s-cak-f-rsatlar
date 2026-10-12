@@ -689,19 +689,21 @@ class DealService {
               continue;
             }
 
-            // 5. Fiyat Düşüşü (Price Drop) Toleransı
-            // Eğer yeni girilen fiyat, mevcut aktif fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
+            // 5. Onay Durumu Kontrolü (Onay bekleyen fırsat kuyrukta spam olmasın)
+            // Eğer aynı ürün zaten admin onayında bekliyorsa, fiyatı ne olursa olsun ikinci bir onay kartı açılmaz.
+            final isDocApproved = dealData['isApproved'] == true;
+            final isDocPending = !isDocApproved || dealData['status'] == 'pending' || dealData['status'] == 'beklemede';
+            if (isDocPending) {
+              throw DealPendingApprovalException(doc.id);
+            }
+
+            // 6. Fiyat Düşüşü (Price Drop) Toleransı (Yalnızca onaylı ve aktif fırsatlar için)
+            // Eğer yeni girilen fiyat, mevcut onaylı aktif fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
             double existingPrice = PriceFormatUtil.parse(dealData['price']) ?? 0.0;
 
             if (price > 0 && existingPrice > 0 && price <= (existingPrice * 0.95)) {
               _log('🏷️ [DEDUPLICATION] Fiyat düşüşü tespit edildi (Eski: $existingPrice, Yeni: $price). Paylaşıma izin veriliyor.');
               continue;
-            }
-
-            // 6. Onay Durumu Kontrolü (Onay bekleyen fırsat kuyrukta spam olmasın)
-            final isDocApproved = dealData['isApproved'] == true;
-            if (!isDocApproved) {
-              throw DealPendingApprovalException(doc.id);
             }
             
             // 7. Aktif onaylı fırsat eşleşti -> paylaşımı engelle
