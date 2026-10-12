@@ -14,7 +14,7 @@ import 'message_service.dart';
 import 'comment_service.dart';
 import 'system_log_service.dart';
 
-export 'deal_service.dart' show DealSubmitResult;
+export 'deal_service.dart' show DealSubmitResult, DealBusinessException, DealPendingApprovalException, DealAlreadySharedException;
 
 /// Bu sınıf artık bir Facade (Ön Yüz) görevi görmektedir.
 /// Tüm karmaşık işlemler alt servislere (DealService, UserService vb.) dağıtılmıştır.

@@ -47,6 +47,33 @@ class DealSubmitResult {
   });
 }
 
+/// Fırsat paylaşımında beklenen iş mantığı (business validation) istisnaları.
+/// Bu sınıflar bir sistem hatası (system error) veya çökme DEĞİLDİR;
+/// kullanıcının mükerrer fırsat girmesini önleyen beklenen validasyon akışlarıdır.
+sealed class DealBusinessException implements Exception {
+  final String message;
+  final String existingDealId;
+  const DealBusinessException(this.message, this.existingDealId);
+
+  /// Ergonomi takma adı (alias): Çağrıcıların hem dealId hem existingDealId kullanabilmesini sağlar.
+  String get dealId => existingDealId;
+
+  @override
+  String toString() => message;
+}
+
+/// Onay bekleyen bir fırsatın aynısı zaten moderasyon kuyruğunda mevcut.
+class DealPendingApprovalException extends DealBusinessException {
+  const DealPendingApprovalException(String dealId)
+      : super('pending_approval:$dealId', dealId);
+}
+
+/// Aktif ve onaylı aynı fırsat zaten sistemde yayında.
+class DealAlreadySharedException extends DealBusinessException {
+  const DealAlreadySharedException(String dealId)
+      : super('already_shared:$dealId', dealId);
+}
+
 class DealService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
@@ -674,11 +701,11 @@ class DealService {
             // 6. Onay Durumu Kontrolü (Onay bekleyen fırsat kuyrukta spam olmasın)
             final isDocApproved = dealData['isApproved'] == true;
             if (!isDocApproved) {
-              throw Exception('pending_approval:${doc.id}');
+              throw DealPendingApprovalException(doc.id);
             }
             
             // 7. Aktif onaylı fırsat eşleşti -> paylaşımı engelle
-            throw Exception('already_shared:${doc.id}');
+            throw DealAlreadySharedException(doc.id);
           }
         }
       }
@@ -806,6 +833,9 @@ class DealService {
         dealId: docRef.id,
         isApproved: !isApprovalRequired,
       );
+    } on DealBusinessException catch (e) {
+      _log('ℹ️ [DEDUPLICATION] Beklenen iş mantığı validasyonu tetiklendi: $e');
+      rethrow;
     } catch (e, stack) {
       _log('Deal oluşturma hatası: $e');
       final errorStr = e.toString();

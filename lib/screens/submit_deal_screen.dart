@@ -1081,6 +1081,14 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             duration: const Duration(seconds: 4),
           );
         }
+      } on DealAlreadySharedException catch (e) {
+        if (mounted) {
+          _showAlreadySharedDialog(context, e.existingDealId);
+        }
+      } on DealPendingApprovalException {
+        if (mounted) {
+          _showPendingApprovalDialog(context);
+        }
       } catch (e) {
         if (mounted) {
           final errorMsg = e.toString();

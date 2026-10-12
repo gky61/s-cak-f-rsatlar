@@ -673,13 +673,12 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           : Category.categories.first;
     }
 
-    return SelectionArea(
-      child: PopScope(
-        canPop: true,
-        onPopInvokedWithResult: (bool didPop, dynamic result) {
-          if (didPop) return;
-        },
-        child: Scaffold(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+      },
+      child: Scaffold(
           backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
           body: Stack(
           children: [
@@ -1843,8 +1842,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           ],
         ),
       ),
-    ),
-  );
+    );
   }
 
   // Helper Widget for Frosted Glass Header Action Buttons
