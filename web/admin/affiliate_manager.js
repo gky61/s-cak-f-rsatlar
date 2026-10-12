@@ -537,29 +537,50 @@ const AffiliateManager = {
 
             const host = urlObj.hostname.toLowerCase();
 
-            // Teknosa
-            if (host.includes('teknosa.com')) {
-                ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ref'].forEach(p => urlObj.searchParams.delete(p));
+            // 1. Amazon: ASIN tespiti yapılıp kanonik /dp/ASIN formatına dönüştürülür
+            if (host.includes('amazon.') || host.includes('amzn.')) {
+                const asinMatch = urlObj.pathname.match(/(?:^|\/)(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Za-z0-9]{10})(?:[/?]|$)/i);
+                if (asinMatch) {
+                    urlObj.pathname = `/dp/${asinMatch[1].toUpperCase()}`;
+                }
+                urlObj.search = '';
             }
-            // Amazon
-            else if (host.includes('amazon.') || host.includes('amzn.')) {
-                ['tag', 'ref', 'linkCode', 'ascsubtag', 'creative', 'camp'].forEach(p => urlObj.searchParams.delete(p));
+            // 2. Hepsiburada: Pazaryeri satıcı parametresi (magaza) korunur, kalan takip parametreleri temizlenir
+            else if (host.includes('hepsiburada')) {
+                const magaza = urlObj.searchParams.get('magaza');
+                urlObj.search = '';
+                if (magaza) {
+                    urlObj.searchParams.set('magaza', magaza);
+                }
             }
-            // Trendyol
-            else if (host.includes('trendyol.com')) {
-                ['boutiqueId', 'merchantId', 'adjust_t', 'utm_source', 'utm_medium', 'utm_campaign'].forEach(p => urlObj.searchParams.delete(p));
+            // 3. Teknosa: Pazaryeri satıcı parametresi (shopId) korunur, kalan takip parametreleri temizlenir
+            else if (host.includes('teknosa')) {
+                const shopId = urlObj.searchParams.get('shopId');
+                urlObj.search = '';
+                if (shopId) {
+                    urlObj.searchParams.set('shopId', shopId);
+                }
             }
-            // Hepsiburada
-            else if (host.includes('hepsiburada.com')) {
-                ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'wt_inf'].forEach(p => urlObj.searchParams.delete(p));
-            }
-            // N11
-            else if (host.includes('n11.com')) {
-                ['ref', 'utm_source', 'utm_medium', 'utm_campaign'].forEach(p => urlObj.searchParams.delete(p));
-            }
-            // İncehesap
-            else if (host.includes('incehesap.com')) {
-                ['utm_source', 'utm_medium', 'utm_campaign', 'ref', 'affiliate'].forEach(p => urlObj.searchParams.delete(p));
+            // 4. Diğer Büyük Mağazalar (Query parametreleri tamamen temizlenir)
+            else {
+                const majorStores = [
+                    'trendyol', 'n11', 'pazarama', 'pttavm',
+                    'zara', 'defacto', 'mavi', 'beymen', 'mediamarkt',
+                    'migros', 'getir', 'vatanbilgisayar', 'idefix', 'itopya', 'incehesap', 'havit'
+                ];
+
+                let isMajorStore = majorStores.some(store => host.includes(store));
+                if (isMajorStore) {
+                    urlObj.search = '';
+                } else {
+                    const paramsToKeep = ['id', 'productid', 'product_id', 'p', 'item_id', 'itemid', 'sku'];
+                    const keys = Array.from(urlObj.searchParams.keys());
+                    for (const key of keys) {
+                        if (!paramsToKeep.includes(key.toLowerCase())) {
+                            urlObj.searchParams.delete(key);
+                        }
+                    }
+                }
             }
 
             return urlObj.toString();

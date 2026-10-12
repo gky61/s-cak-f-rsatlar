@@ -24,7 +24,9 @@ async function runPipelineTests() {
   console.log(`  -> Input:    ${competitorTelegramUrl}`);
   console.log(`  -> Clean:    ${cleanUrl}`);
   assert.strictEqual(cleanUrl, 'https://www.amazon.com.tr/dp/B08N5WRWNW', 'cleanProductUrl must strip all query parameters for Amazon');
-  console.log('✅ Test 2a Passed: cleanProductUrl organik kanonik linki tertemiz üretti.\n');
+  const slugAmazonUrl = 'https://www.amazon.com.tr/Apple-iPhone-12-64-GB-Mavi/dp/B08N5WRWNW?ref=123';
+  assert.strictEqual(affiliateManager.cleanProductUrl(slugAmazonUrl), 'https://www.amazon.com.tr/dp/B08N5WRWNW', 'cleanProductUrl must normalize title slug to /dp/ASIN');
+  console.log('✅ Test 2a Passed: cleanProductUrl organik kanonik linki ve ASIN normalizasyonunu tertemiz üretti.\n');
 
   // 2b: Test affiliate conversion with anti-hijack
   const convertedDealLink = affiliateManager.convert(competitorTelegramUrl, {

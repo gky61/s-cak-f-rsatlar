@@ -40,6 +40,36 @@ void main() {
       const btrckUrlNoParam = 'https://rdr.btrck.com/aff_c?offer_id=5&aff_id=1016&aff_sub3=teknosa.com/apple-iphone-13-128gb-yildiz-isigi-akilli-telefon-p-125078170';
       expect(Deal.cleanProductUrl(btrckUrlNoParam), 'https://www.teknosa.com/apple-iphone-13-128gb-yildiz-isigi-akilli-telefon-p-125078170');
     });
+
+    test('Should normalize Amazon URLs to canonical /dp/ASIN regardless of title slug variations', () {
+      const slugUrl = 'https://www.amazon.com.tr/Apple-iPhone-15-128-GB/dp/B0CHX1W1XY?tag=spambot&ref=abc';
+      expect(Deal.cleanProductUrl(slugUrl), 'https://www.amazon.com.tr/dp/B0CHX1W1XY');
+
+      const plainUrl = 'https://www.amazon.com.tr/dp/B0CHX1W1XY';
+      expect(Deal.cleanProductUrl(plainUrl), 'https://www.amazon.com.tr/dp/B0CHX1W1XY');
+
+      const gpUrl = 'https://www.amazon.com.tr/gp/product/B0CHX1W1XY/ref=ox_sc_act_title_1';
+      expect(Deal.cleanProductUrl(gpUrl), 'https://www.amazon.com.tr/dp/B0CHX1W1XY');
+
+      const lowercaseAsinUrl = 'https://www.amazon.com.tr/product-slug/dp/b0chx1w1xy';
+      expect(Deal.cleanProductUrl(lowercaseAsinUrl), 'https://www.amazon.com.tr/dp/B0CHX1W1XY');
+    });
+
+    test('Should preserve Hepsiburada magaza parameter while stripping tracking parameters', () {
+      const hbWithSeller = 'https://www.hepsiburada.com/apple-iphone-15-128-gb-p-HBCV00004WO64Y?magaza=Hepsiburada&utm_source=firsatkolik&wt_inf=1';
+      expect(Deal.cleanProductUrl(hbWithSeller), 'https://www.hepsiburada.com/apple-iphone-15-128-gb-p-HBCV00004WO64Y?magaza=Hepsiburada');
+
+      const hbWithoutSeller = 'https://www.hepsiburada.com/apple-iphone-15-128-gb-p-HBCV00004WO64Y?utm_source=firsatkolik';
+      expect(Deal.cleanProductUrl(hbWithoutSeller), 'https://www.hepsiburada.com/apple-iphone-15-128-gb-p-HBCV00004WO64Y');
+    });
+
+    test('Should preserve Teknosa shopId parameter while stripping tracking parameters', () {
+      const teknosaWithShop = 'https://www.teknosa.com/apple-iphone-15-128gb-p-125078546?shopId=2442&utm_source=social_affiliate&utm_medium=paylaskazan';
+      expect(Deal.cleanProductUrl(teknosaWithShop), 'https://www.teknosa.com/apple-iphone-15-128gb-p-125078546?shopId=2442');
+
+      const teknosaWithoutShop = 'https://www.teknosa.com/apple-iphone-15-128gb-p-125078546?utm_source=social_affiliate';
+      expect(Deal.cleanProductUrl(teknosaWithoutShop), 'https://www.teknosa.com/apple-iphone-15-128gb-p-125078546');
+    });
   });
 
   group('Deal.displayUrl Tests', () {

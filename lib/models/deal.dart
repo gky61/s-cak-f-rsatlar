@@ -235,11 +235,40 @@ class Deal {
 
       final host = uri.host.toLowerCase();
       
-      // Bilinen büyük mağazaların listesi
+      // 1. Amazon: ASIN tespiti yapılıp kanonik /dp/ASIN standardına dönüştürülür
+      if (host.contains('amazon')) {
+        final asinMatch = RegExp(
+          r'(?:^|/)(?:dp|gp/product|gp/aw/d|product)/([A-Za-z0-9]{10})(?:[/?]|$)',
+          caseSensitive: false,
+        ).firstMatch(uri.path);
+        if (asinMatch != null) {
+          final asin = asinMatch.group(1)!.toUpperCase();
+          return 'https://${uri.host}/dp/$asin';
+        }
+        return uri.replace(queryParameters: {}).toString().replaceAll(RegExp(r'\?$'), '');
+      }
+
+      // 2. Hepsiburada: Pazaryeri satıcı parametresi (magaza) korunur, kalan takip parametreleri temizlenir
+      if (host.contains('hepsiburada')) {
+        final magaza = uri.queryParameters['magaza'];
+        if (magaza != null && magaza.isNotEmpty) {
+          return uri.replace(queryParameters: {'magaza': magaza}).toString();
+        }
+        return uri.replace(queryParameters: {}).toString().replaceAll(RegExp(r'\?$'), '');
+      }
+
+      // 3. Teknosa: Pazaryeri satıcı parametresi (shopId) korunur, kalan takip parametreleri temizlenir
+      if (host.contains('teknosa')) {
+        final shopId = uri.queryParameters['shopId'];
+        if (shopId != null && shopId.isNotEmpty) {
+          return uri.replace(queryParameters: {'shopId': shopId}).toString();
+        }
+        return uri.replace(queryParameters: {}).toString().replaceAll(RegExp(r'\?$'), '');
+      }
+
+      // Bilinen büyük mağazaların listesi (Query parametreleri tamamen temizlenir)
       final majorStores = [
-        'amazon',
         'trendyol',
-        'hepsiburada',
         'n11',
         'pazarama',
         'pttavm',
@@ -247,7 +276,6 @@ class Deal {
         'defacto',
         'mavi',
         'beymen',
-        'teknosa',
         'mediamarkt',
         'migros',
         'getir',

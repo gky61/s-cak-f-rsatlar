@@ -535,7 +535,13 @@ const AffiliateManager = {
       }
 
       const host = urlObj.hostname.toLowerCase();
-      if (host.includes('hepsiburada')) {
+      if (host.includes('amazon')) {
+        const asinMatch = urlObj.pathname.match(/(?:^|\/)(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Za-z0-9]{10})(?:[/?]|$)/i);
+        if (asinMatch) {
+          urlObj.pathname = `/dp/${asinMatch[1].toUpperCase()}`;
+        }
+        urlObj.search = '';
+      } else if (host.includes('hepsiburada')) {
         const magaza = urlObj.searchParams.get('magaza');
         urlObj.search = '';
         if (magaza) {
@@ -549,7 +555,7 @@ const AffiliateManager = {
         }
       } else {
         const majorStores = [
-          'amazon', 'trendyol', 'n11', 'pazarama', 'pttavm',
+          'trendyol', 'n11', 'pazarama', 'pttavm',
           'zara', 'defacto', 'mavi', 'beymen', 'mediamarkt',
           'migros', 'getir', 'vatanbilgisayar', 'idefix', 'itopya', 'incehesap', 'havit'
         ];

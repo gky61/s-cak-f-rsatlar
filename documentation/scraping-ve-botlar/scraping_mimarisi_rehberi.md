@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Base Doküman & Scraping Kontratı:** Bu doküman, FırsatKolik platformunun mobil istemci (Flutter/Dart) ve sunucu (Compute Engine VM / Node.js) katmanlarındaki tüm e-ticaret veri kazıma (scraping) mekanizmasını, 23 mağaza çözümleme stratejilerini, WAF/TLS bypass motorlarını, canlı API entegrasyonlarını, Telegram botunu ve metadata katmanını yöneten **ana orkestratör (Base Contract)** dokümandır. Her bir alt mimarinin ayrıntılı teknik referansları ilgili bölümlerde doğrudan bağlantılanmıştır.
 
-Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu (Google Cloud Run / Compute Engine VM / Node.js) ve bot katmanlarındaki tüm scraping (veri kazıma) mekanizmasını, 23 entegre mağaza için bypass stratejilerini, URL doğrulama zincirini, canlı API ve tersine mühendislik çözümlerini, metadata katmanını (`originalPrice`, `ratingValue`, `priceLabel`), kategori tespit motorunu ve deployment süreçlerini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
+Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu (Compute Engine VM üzerinde Docker / Node.js; `cloud-run-bot` dizin adı tarihsel kalıntıdır) ve bot katmanlarındaki tüm scraping (veri kazıma) mekanizmasını, 23 entegre mağaza için bypass stratejilerini, URL doğrulama zincirini, canlı API ve tersine mühendislik çözümlerini, metadata katmanını (`originalPrice`, `ratingValue`, `priceLabel`), kategori tespit motorunu ve deployment süreçlerini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
 
 ---
 
@@ -29,10 +29,10 @@ Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu 
 ## 1. 🌟 Genel Mimari ve İki Motorlu İstek Akışı
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Uçtan Uca Scraping Mimarisi ve Veri Akışları Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/end_to_end_scraping_architecture.md) — İstemci/sunucu iş akışı, Cloud Run vs VM farkları ve Admin SDK veri akışları.
+> - [Uçtan Uca Scraping Mimarisi ve Veri Akışları Kılavuzu](file:///d:/firsatkolik/documentation/_arsiv/scraping-ve-botlar/end_to_end_scraping_architecture.md) — İstemci/sunucu iş akışı, Cloud Run vs VM farkları ve Admin SDK veri akışları.
 
 FırsatKolik platformunda fırsat akışları iki bağımsız kaynaktan beslenir:
-1. **İstemci Motoru (Client-Side / Flutter - Dart):** Kullanıcının mobil uygulama içerisindeki "Fırsat Paylaş" ekranından (`SubmitDealScreen`) link yapıştırdığı senaryodur. `LinkPreviewService` tarafından 800ms debounce ile tetiklenir.
+1. **İstemci Motoru (Client-Side / Flutter - Dart):** Kullanıcının mobil uygulama içerisindeki "Fırsat Paylaş" ekranından (`SubmitDealScreen`) link yapıştırdığı senaryodur. `LinkPreviewService` tarafından URL alanında 400ms debounce ile tetiklenir (`submit_deal_screen.dart:473`).
 2. **Sunucu Motoru (Server-Side / Google Cloud - Node.js):** Telegram kanallarını 7/24 dinleyen `telegram_bot.js` ve geçmiş mesajları tarayan `fetch_history.js` servisleridir. `link_scraper_service.js` üzerinden çalışır.
 
 ```mermaid
@@ -45,7 +45,7 @@ graph TD
     B1 --> C[URL Doğrulama & Yönlendirme Çözücü]
     B2 --> C
     
-    C -->|Kısa Link: amzn.to, ty.gl, hb.biz, sl.n11.com| D[Adjust / HEAD / Translate Proxy ile Nihai URL Çözülür]
+    C -->|Kısa Link: amzn.to, ty.gl, hb.biz, sl.n11.com, fenom.io| D[Adjust / HEAD / Translate Proxy / Fenom JS Fallback ile Nihai URL Çözülür]
     C -->|Normal Link| E[Nihai Ürün URL'si]
     D --> E
     
@@ -67,12 +67,12 @@ graph TD
     L --> M
     
     %% Sunucu Motoru
-    H -->|Sunucu: Node.js / Cloud Run VM| N[23 Node.js Scraper Sınıfı]
+    H -->|Sunucu: Node.js / GCE VM| N[23 Node.js Scraper Sınıfı]
     N --> O{WAF Koruma Tipi?}
     O -->|Akamai / Cloudflare TLS| P[Sistem curl spawnSync + WhatsApp UA + TR Cookies]
     O -->|Datacenter IP Blok| Q[Google Translate Proxy: translate.goog]
     O -->|CloudFront / Depo Lokasyon| R[Lokasyon Cookie Enjeksiyonu + Yandex / Wayback Fallback]
-    O -->|Katı IP Engeli| S[Microlink Headless API Proxy]
+    O -->|Amazon curl boş dönerse| S[Microlink API Fallback]
     P --> T[HTML DOM Parse: cheerio]
     Q --> T
     R --> T
@@ -96,21 +96,22 @@ Sisteme giren her URL veya paylaşılan metin, scraping yapılmadan önce şu 5 
                  │
                  ▼
  0. 🧠 AKILLI URL & MOBİL PAYLAŞIM NORMALİZASYONU (DealUrlDetector)
-    - Mavi mobil uygulaması göreli rotaları (/slug/p/code) ➔ https://www.mavi.com/slug/p/code
-    - Boyner mobil uygulaması ürün slug'ları (slug-p-id) ➔ https://www.boyner.com.tr/slug-p-id
     - Şemasız alan adları (www.mavi.com/..., boyner.com.tr/...) ➔ https:// ile tamamlama
+    - Metin içerisinden veya paylaşımlardan e-ticaret bağlantılarını izole etme
     - Sondaki noktalama işaretlerinin (. , ; ! ? )) temizlenmesi
                  │
                  ▼
  1. 🔗 KISA LİNK & YÖNLENDİRME ÇÖZME (Redirect Resolution)
-    - amzn.to, amzn.eu, link.amazon ➔ Amazon ürün linki
-    - ty.gl ➔ curl HEAD + TR Cookies ile Trendyol ürün linki
+    - amzn.to, amzn.eu, link.amazon, amzlinks.in, fenom.io ➔ Amazon ürün linki (link.amazon -> amzlinks.in HTTP 200 WhatsApp UA durumunda HTML <base href> btn_url çözümlemesi; fenom.io için JavaScript appLink/fallbackLink regex)
+    - ty.gl ➔ curl (-sL, url_effective) + TR Cookies ile Trendyol ürün linki
     - hb.biz ➔ redirect: 'manual' + Adjust fallback parametresi
     - sl.n11.com/n/ ➔ Google Translate Proxy ile Play Store yönlendirmesinden kurtarma
+    - pzrm.me ➔ Pazarama 302 zinciri takibi
+    - Çoklu Mağaza HTML Body Fallback: Aracı sayfalar 200 OK döndüğünde meta-refresh, JS redirect, canonical ve regex (Trendyol, Hepsiburada, Amazon vb.) ile otomatik kurtarma
                  │
                  ▼
  2. 🏪 İZİNLİ MAĞAZA KONTROLÜ (Domain Allowlist)
-    - 294 entegre mağaza alan adı kontrol edilir (assets/data/domain_allowlist_extended.json)
+    - Allowlist JSON'u kontrol edilir (assets/data/domain_allowlist_extended.json: `store_count` 294, `domain_count` 297; ürün regex kuralı 22 mağazada)
                  │
                  ▼
  3. 🎯 ÜRÜN SAYFASI REGEX KONTROLÜ (Product Path Verification)
@@ -132,13 +133,13 @@ Sisteme giren her URL veya paylaşılan metin, scraping yapılmadan önce şu 5 
 
 Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel teknikler:
 
-### 1. Amazon (`amazon.com.tr`, `amzn.to`, `amzn.eu`, `link.amazon`)
-- **Kısa Linkler:** `amzn.to`, `amzn.eu` ve `link.amazon` kısa linkleri yönlendirme zinciri takibiyle asıl ürün sayfasına çözülür.
-- **Fiyat Seçicileri:** `.a-price-whole` + `.a-price-fraction` birleştirilir.
-- **Amazon Depo (İkinci El / Açılmış Kutu):** `smid=A215JX4S9CANSO` parametresi tespit edildiğinde `#apex-pricetopay-accessibility-label`, `.apex-pricetopay-value`, `#usedBuySection .offer-price` ve `.aok-offscreen` seçicileri önceliklendirilerek Depo fiyatı kazınır ve `isAmazonWarehouse: true` atanır.
+### 1. Amazon (`amazon.com.tr`, `amzn.to`, `amzn.eu`, `link.amazon`, `amzlinks.in`, `fenom.io`)
+- **Kısa Linkler & Aracı Yönlendiriciler:** `amzn.to`, `amzn.eu`, `link.amazon`, `amzlinks.in` ve `fenom.io` kısa linkleri yönlendirme zinciri takibiyle asıl ürün sayfasına çözülür. `link.amazon` linkleri `amzlinks.in` aracı servisine yönlenir; `amzlinks.in` WhatsApp UA tespit ettiğinde 302 yerine 200 OK döndüğünden, HTML gövdesindeki `<base href="...">` ve `btn_url` parametresi `Uri.decodeComponent` ile çözümlenerek doğrudan kanonik Amazon TR ürün linkine ulaşılır. `fenom.io` için ise JavaScript `appLink` / `fallbackLink` regex ayıklaması kullanılır.
+- **Fiyat Seçicileri & Dublike Savunması:** `.a-price` ve `.apex-pricetopay-value` konteynerlerinde çift metin (`.a-offscreen` + `aria-hidden`) birleşmesini önlemek için öncelikle `.a-offscreen` tekil metni alınır, boşsa `aria-hidden` altındaki `.a-price-whole` + `.` + `.a-price-fraction` birleştirilir. `parsePriceText` seviyesinde ardışık tekrarlanan fiyat kalıplarına karşı (`269,91TL269,91TL` -> `269.91`) çift katmanlı savunma kalkanı bulunur.
+- **Amazon Depo (İkinci El / Açılmış Kutu):** `smid=A215JX4S9CANSO` parametresi tespit edildiğinde `#apex-pricetopay-accessibility-label`, `.apex-pricetopay-value`, `#usedBuySection .offer-price` ve `.aok-offscreen` seçicileri önceliklendirilerek Depo fiyatı kazınır ve `isAmazonWarehouse: true` atanır. Normal ürünlerde birincil seçiciler önceliklidir.
 - **1x1 Boş Görsel Filtresi:** Amazon bazen 43-byte boyutunda boş şeffaf piksel döner; `isLogoUrl` ve byte filtreleriyle elenerek `img#landingImage` veya `img#imgBlkFront` DOM elemanları taranır.
 - **Fiyat Rozeti:** `#primeExclusivePricingMessage` veya `#primeSavingsUpsellBlock` var ise `priceLabel: "Prime Fırsatı"` atanır.
-- **Sunucu Bypass:** `curl` spawnSync (`WhatsApp/2.23.4.15 A` UA) veya Microlink Headless API ile ABD konum kısıtlaması aşılır. Fiyatların karusellerden sızmaması için seçiciler `#rightCol` ve `#centerCol` ana bloklarıyla sınırlandırılmıştır.
+- **Sunucu Bypass:** `curl` spawnSync (`WhatsApp/2.23.4.15 A` UA); `curl` boş dönerse Microlink API (`prerender` kapalı) fallback'i. ABD konum kısıtlamasının aşılması garanti değildir. Fiyatların karusellerden sızmaması için seçiciler `#rightCol` ve `#centerCol` ana bloklarıyla sınırlandırılmıştır.
 
 ### 2. Hepsiburada (`hepsiburada.com`, `hb.biz`, `app.hb.biz`)
 - **Kısa Link Çözümleme (`hb.biz`):** Akamai engeline takılmamak için `redirect: 'manual'` yöntemiyle HTTP GET/HEAD atılır, ilk 301 yönlendirmesindeki `Location` başlığından `adj.st` URL'i yakalanır ve `adjust_fallback` / `adj_fallback` parametresinden gerçek ürün linki çıkarılır.
@@ -155,14 +156,14 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 - **Sunucu Bypass:** Akamai Bot Manager, Google Translate ve Googlebot IP'lerini Captcha sayfasına (`HBBlockandCaptcha.html`) yönlendirir. Sunucuda `spawnSync('curl', [...])` + `WhatsApp` UA ile doğrudan erişilir.
 
 ### 3. Trendyol (`trendyol.com`, `ty.gl`)
-- **Kısa Link Çözümleme (`ty.gl`):** WhatsApp UA ve Türkiye çerezleri ile sistem `curl` HEAD komutu kullanılarak çözülür (`adjust_redirect` parametresi üzerinden doğrudan ürün linkine erişilir).
+- **Kısa Link Çözümleme (`ty.gl`):** WhatsApp UA ve Türkiye çerezleri ile sistem `curl -sL -w %{url_effective}` kullanılarak çözülür (`adjust_redirect` parametresi üzerinden doğrudan ürün linkine erişilir).
 - **Varyant Desteği (`ProductGroup`):** Çoklu beden/renk içeren sayfalarda root tipi `ProductGroup` olarak geldiğinde ilk varyantın alakasız fiyatı yerine `findProductInJson` ile ana ürünün geçerli aktif fiyatı çözümlenir.
 - **Kampanya & Sepet İndirimi Fallback'i (`.campaign-price-wrapper` / State Fallback):**
   - Bazı kampanya veya sepet indirimli ürünlerde Trendyol sayfaya `application/ld+json` script bloğu basmaz.
   - Bu tür sayfalarda satış fiyatı DOM'da `<p class="new-price">`, indirimsiz fiyat ise `<p class="old-price">` altında tutulur.
   - DOM seçicilerine ek olarak `__PRODUCT_DETAIL_APP_INITIAL_STATE__` veya `__NEXT_DATA__` script nesnesindeki `discountedPrice` ve `sellingPrice` verileri regex/JSON fallback olarak taranır; böylece JSON-LD bulunmayan ürünlerin de fiyatı 0 TL kalmadan %100 doğrulukla ayıklanır.
 - **Fiyat Rozeti:** `.plus-price` veya `data-plus-price` tespit edildiğinde `priceLabel: "Plus'a Özel"` atanır.
-- **Sunucu Bypass (Yurt Dışı IP Yönlendirmesi):** Cloud Run sunucuları ABD IP'sinde olduğundan Trendyol istekleri `/en/select-country` sayfasına yönlendirir. İstek `curl` ile atılırken `Cookie: storefrontId=1; countryCode=TR; language=tr` çerezleri eklenir; böylece Trendyol botu Türkiye'deki bir kullanıcı gibi algılar ve local butik indirimli fiyatları döner.
+- **Sunucu Bypass (Yurt Dışı IP Yönlendirmesi):** Bot VM'i ABD IP'sinde (us-central1) olduğundan Trendyol istekleri `/en/select-country` sayfasına yönlendirir. İstek `curl` ile atılırken `Cookie: storefrontId=1; countryCode=TR; language=tr` çerezleri eklenir; böylece Trendyol botu Türkiye'deki bir kullanıcı gibi algılar ve local butik indirimli fiyatları döner.
 
 ### 4. N11 (`n11.com`, `sl.n11.com`)
 - **Kısa Link Çözümleme (`sl.n11.com/n/`):** `sl.n11.com/n/...` linkleri `www.n11.com/n/...` formatına dönüştürülerek Google Translate Proxy tüneli üzerinden çözülür; böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir.
@@ -190,8 +191,8 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 - **Veri Kaynağı:** HTML içindeki `zara.analyticsData` script'i regex ile taranarak `mainPrice` ve `productName` alanları ayıklanır.
 
 ### 8. Mango (`mango.com`)
-- **Next.js App Router Hydration:** Mango JSON-LD kullanmaz; veriler `self.__next_f.push` adlı Javascript fonksiyon çağrılarında saklanır.
-- **Veri Kaynağı:** script bloğu içerisindeki `"price":{"amount":...}` nesneleri regex ile taranarak nihai satış fiyatı ayıklanır. Mobil istemcide Native HTTP tünellemesi kullanılır.
+- **React CSS Modules:** Mango artık JSON-LD'ye değil React CSS Modules sınıflarına (`SinglePrice`, `ZoomableImage`) ve `sr-only` erişilebilirlik fiyat etiketlerine (`Güncel fiyat [.]`, `Üstü çizili ilk fiyat [.]`) dayanır; Vercel WAF `WhatsApp` UA'ya 429 verdiği için masaüstü Chrome 124 UA kullanılır (`getHeadersForUrl`, `link_scraper_service.js:41`). Eski `self.__next_f.push` ayrıştırması kodda yoktur.
+- **Veri Kaynağı:** DOM `SinglePrice` (`discounted`/`crossed`/`finalPrice`) ve `sr-only` etiketleri; JSON-LD yalnızca fallback. Mobil istemcide Native HTTP tünellemesi kullanılır.
 
 ### 9. Beymen (`beymen.com`)
 - **BEYMEN.productMain Entegrasyonu:** Sepet indirimleri dahil en güncel fiyatı veren `promotedOrActualPrice` ve tam ürün ismini tutan `displayName` alanları doğrudan script'ten regex ile yakalanır.
@@ -204,8 +205,8 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 - **Javascript `PRODUCT_DETAIL_LASTVISITED`:** Sepet indirimli fiyatlar DOM'da bulunmaz. `window.PRODUCT_DETAIL_LASTVISITED` script bloğundaki `DiscountPrice` ve `CampaignDiscountedPrice` alanları regex ile taranır. Unicode karakter bozuklukları `_decodeUnicode` filtresi ile temizlenir.
 
 ### 12. PttAVM (`pttavm.com`)
-- **WAF ve IP Engeli:** Cloudflare koruması hem Node.js fetch hem de curl isteklerini datacenter IP'sinden engeller.
-- **Sunucu Bypass:** `https://api.microlink.io/?url=...&prerender=true` Microlink Headless API Proxy ile tam HTML çekilerek Cheerio ile parse edilir.
+- **WAF:** Cloudflare, Node.js `fetch` TLS parmak izini engeller.
+- **Sunucu Bypass:** `curl` spawnSync + `WhatsApp` UA (`fetchHtml` → `curlFetchHtml`). Kodda ayrıca bir Microlink dalı vardır (`link_scraper_service.js:1058`) ama `curl` dalı önce döndüğü için ulaşılamaz (ölü kod). ⚠️ VM IP'sinden `curl` ile 200 dönüp dönmediği doğrulanmalı.
 
 ### 13. Vatan Bilgisayar (`vatanbilgisayar.com`)
 - **Sunucu Bypass:** Google Cloud IP engeli `translate.goog` (Google Translate Proxy) yöntemiyle aşılır. DOM seçicisi `.product-list__price` ile fiyat doğrulanır.
@@ -218,13 +219,13 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 
 ### 16. Mavi (`mavi.com`)
 - **Standart Yapı:** `WhatsApp` User-Agent taklidi + `application/ld+json` şeması. Görseller `sky-static.mavi.com` CDN deseniyle doğrulanır.
-- **Mobil Paylaşım Rota Normalizasyonu:** Mavi mobil uygulamasından doğrudan paylaşılan `/slug/p/code` göreli yolları (Örn: `/mavi-logo-baskili-mavi-gomlek/p/0212124-70804`), `DealUrlDetector` tarafından otomatik tespit edilerek `https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804` kanonik URL'ine dönüştürülür ve ürün sayfası regex doğrulaması (`\/p\/[a-z0-9-]+\/?$`) ile tam uyumlu çalışır.
+- **Mobil Paylaşım:** Mavi mobil uygulaması güncel sürümlerinde doğrudan standart HTTP/HTTPS ürün bağlantısı (`https://www.mavi.com/.../p/...`) paylaşmaktadır. Ürün sayfaları Allowlist regex doğrulaması (`\/p\/[a-z0-9-]+\/?$`) ile tam uyumlu çalışır.
 
 ### 17. MediaMarkt (`mediamarkt.com.tr`)
 - **Googlebot UA Taklidi:** Cloudflare korumasını aşmak için `Googlebot/2.1 (+http://www.google.com/bot.html)` User-Agent değeri doğrudan atanır.
 
 ### 18. İncehesap (`incehesap.com`)
-- **iOS UA & curl:** `WhatsApp` ve iOS Safari UA taklidi ile JSON-LD şemaları ve DOM fiyatları çekilir.
+- **iOS UA & curl:** Sunucuda `curl` + iPhone Safari UA ile HTML çekilir (WhatsApp UA yalnızca `incehesap.com/u/...` kısa link çözümünde kullanılır); JSON-LD şemaları ve DOM fiyatları parse edilir.
 
 ### 19. Havit (`havitstore.com.tr`)
 - **E-Ticaret Altyapısı:** Standart Chrome UA + DOM seçicileri ve JSON-LD şeması.
@@ -233,8 +234,14 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 - **Money İndirimi:** `.money-badge` veya Money Kulüp fiyatı tespit edildiğinde `priceLabel: "Money ile"` atanır.
 
 ### 21. Boyner (`boyner.com.tr`)
-- **JSON-LD & DOM:** Ürün başlığı, görseli, satış fiyatı ve indirimsiz liste fiyatı JSON-LD `Product` ve DOM seçicileriyle çekilir.
-- **Mobil Paylaşım Slug Normalizasyonu:** Boyner mobil uygulamasından doğrudan paylaşılan ve başında alan adı bulunmayan ham ürün slug'ları (Örn: `patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996`), `DealUrlDetector` tarafından `-p-\d{5,}` kalıbıyla anında tespit edilerek `https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996` kanonik URL'ine dönüştürülür ve eksiksiz scrape edilir.
+- **WAF & Bot Koruması:** Cloudflare WAF koruması altındadır. Standart masaüstü User-Agent veya kütüphane TLS el sıkışmaları (Dart HTTP ve Node.js fetch) engellenerek `Just a moment...` challenge ekranı veya 403 Forbidden döndürülür.
+- **İstemci Tarafı Çözüm (Native HTTP):** Mobil istemcide `LinkPreviewService`, Android'de yerel `HttpURLConnection` (Conscrypt TLS), iOS'ta `URLSession` (CFNetwork) native kanalı üzerinden `WhatsApp/2.23.4.15 A` User-Agent ile HTML çeker.
+- **Sunucu Tarafı Çözüm (curl):** Node.js sunucu botunda `link_scraper_service.js`, `curl` spawnSync ve `WhatsApp/2.23.4.15 A` User-Agent kombinasyonuyla Cloudflare WAF engelini aşar. Satıcı ve varyant bilgisi için `magaza` ve `barcode` parametreleri korunarak tracking parametreleri temizlenir.
+- **Next.js PriceInfo Engine (Yetkili Kaynak):** Boyner modern ön yüzünde satış fiyatı (`Price`), indirimsiz liste fiyatı (`OldPrice`) ve kampanya bilgisi (`CampaignInfo`) `<script>` etiketlerindeki `"PriceInfo": {"Price": "...", "OldPrice": "...", "CampaignInfo": "..."}` JSON bloğunda saf olarak saklanır. Scraper öncelikle bu bloğu ayrıştırarak harfsiz ve eksiksiz fiyat verisine erişir.
+- **DOM "Sepette" Rozet Temizliği:** Sayfada `[class*="priceMain"]` taranırken, alt eleman olarak gömülen `[class*="priceMainText"]` ("Sepette") rozet elemanı DOM kopyasından izole edilir ve temizlenir. Böylece `"Sepette11.999 TL"` gibi bileşik metinlerin binlik ayracının kuruş sanılarak `11.99` TL'ye kırpılması (1000x basamak kaybı) önlenir.
+- **Dinamik Fiyat Etiketi (`priceLabel`):** `PriceInfo.CampaignInfo` (örn: `"Sepette %28 İndirim"`, `"%48 İndirim"`, `"2000 TL'ye 500 TL İndirim"`) veya DOM'daki `priceMainText` tespit edilerek `priceLabel` olarak Fırsat Paylaş ve feed kartlarına iletilir.
+- **Çapraz Doğrulama Kalkanı (Sanity Check):** DOM'dan çekilen satış fiyatı 100 TL altıysa ancak JSON-LD `offers.price` 100 TL'nin çok üzerindeyse (örn: 11.999 TL'lik ürünün 11.99 TL'ye düşme riski), JSON-LD teyit edilerek %99.95 gibi sahte indirim oranları engellenir.
+- **Mobil Paylaşım:** Boyner mobil uygulaması güncel sürümlerinde doğrudan standart HTTP/HTTPS ürün bağlantısı (`https://www.boyner.com.tr/...`) paylaşmaktadır; Allowlist ve scraping hattı üzerinden standart e-ticaret URL'i olarak eksiksiz scrape edilir.
 
 ### 22. Gamer Gen (`gamer.gen.tr`)
 - **Altyapı:** İtopya ile aynı ASP.NET mimarisi (`provider: ITOPYA`) ve Cloudflare koruması. Ürün sayfaları `_u\d+`, hazır sistem sayfaları `_h\d+` regex desenleriyle doğrulanır.
@@ -252,16 +259,110 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 
 ---
 
-## 4. 🛡️ Bot Koruması ve WAF Bypass Yöntemleri (6 Katmanlı)
+## 4. 🛡️ Bot Koruması ve WAF Bypass Yöntemleri
 
 | Bypass Yöntemi | Hedef Mağazalar | Çözülen Problem / Mekanizma |
 | :--- | :--- | :--- |
-| **1. `curl` spawnSync + WhatsApp UA** | `Hepsiburada`, `Trendyol`, `Teknosa`, `Mavi`, `Amazon` | Node.js `fetch` TLS (JA3/JA4) parmak izi engelini aşar; işletim sistemi düzeyinde OpenSSL stack'i kullanır. |
+| **1. `curl` spawnSync + WhatsApp UA** (İncehesap: iPhone UA) | `Hepsiburada`, `Trendyol`, `Teknosa`, `Mavi`, `Amazon`, `PttAVM`, `İncehesap`, `Boyner` | Node.js `fetch` TLS (JA3/JA4) parmak izi engelini aşar; işletim sistemi düzeyinde OpenSSL stack'i kullanır. |
 | **2. Türkiye Lokasyon Çerezleri** | `Trendyol`, `Getir` | `Cookie: storefrontId=1; countryCode=TR; language=tr` ile yurt dışı sunucu yönlendirmesi engellenir ve yerel indirimli fiyatlar çekilir. |
 | **3. Google Translate Proxy (`translate.goog`)** | `N11`, `Vatan Bilgisayar`, `Itopya` | Datacenter IP bloklarını aşmak için meşru Google Translate IP'leri üzerinden tünelleme yapılır. |
-| **4. Microlink Headless API Proxy** | `Pttavm`, `Amazon`, `hb.biz` (Fallback) | Headless Chromium (`prerender=true`) ve konut IP havuzu ile katı Cloudflare WAF engellerini aşar. |
+| **4. Microlink API Proxy** | `Amazon` (yalnızca `curl` boş dönerse fallback) | Üçüncü taraf HTML proxy; `prerender` parametresi kodda var ama hiçbir çağrı açmaz. PttAVM dalı ölü koddur. |
 | **5. Googlebot User-Agent Taklidi** | `MediaMarkt` | Arama motoru botlarına uygulanan beyaz liste kurallarını kullanarak doğrudan erişim sağlar. |
 | **6. Yandex Translate & Wayback Machine** | `Getir` | CloudFront WAF engellerini Yandex tüneliyle aşar; depo 404 durumunda Wayback arşiviyle görseli kurtarır. |
+
+Not: Yöntem sayısı değil, `fetchHtml()` (`link_scraper_service.js:869`) içindeki mağaza bazlı yönlendirme esastır. Listede olmayan mağazalar (Idefix, Pazarama, Mango, Zara, Beymen, Defacto, Havit, Migros, gamer/gaming.gen.tr) standart `fetch` kullanır..
+
+
+### 4.1 Bot Tarafı Mağaza Bypass Stratejileri ve Çözüm Yolları
+
+Sunucu ortamındaki bot korumalarını aşmak için `link_scraper_service.js` içindeki `fetchHtml()` (`:869`) mağaza bazlı yönlendirme yapar. Kodda tanımlı mekanizmalar: (1) Google Translate Proxy, (2) `curl` (libcurl TLS), (3) Googlebot UA, (4) Microlink API (yalnızca Amazon fallback), (5) Yandex Translate + Wayback Machine (yalnızca Getir). Geri kalan mağazalar (Idefix, Pazarama, Mango, Zara, Beymen, Defacto, Boyner, Havit, Migros, gamer/gaming.gen.tr) standart `fetch` ile, `getHeadersForUrl()` (`:17`) UA seçimiyle çekilir. Bu bir "garanti" değildir: bypass'lar üçüncü taraf davranışına bağlıdır, mağaza tarafı değişirse bozulur; UA taklidi/`translate.goog` tünellemesinin hukuki boyutu için
+
+#### 1. Google Translate Proxy (`translate.goog`)
+*   **Kullanıldığı Mağazalar:** `N11`, `Vatan Bilgisayar`, `Itopya`
+*   **Problem:** Bu mağazalar Google Cloud bulut IP adreslerini (veri merkezleri) doğrudan engeller ve Cloudflare/WAF koruması ile `403 Forbidden` döndürür.
+*   **Çözüm:** İstekler `https://www-domain-com.translate.goog/path?_x_tr_sl=auto&_x_tr_tl=tr` formatına dönüştürülerek gönderilir. Google Translate sunucuları, Cloudflare/Akamai sistemlerinde beyaz listede olduğu için istek meşru bir arama motoru IP'sinden geliyormuş gibi görünür ve 403 engeli aşılır.
+*   **Kritik Detay (Tracking Temizleme):** 
+    *   **N11:** Sadece mağaza bazlı indirimlerin doğru hesaplanması için `magaza` parametresi korunur.
+    *   **Itopya:** URL üzerindeki takip veya yönlendirme parametreleri temizlenerek doğrudan temiz ürün detayı proxy ile çekilir.
+
+#### 2. `curl` spawnSync ile Doğrudan Erişim (TLS/JA3/Geo-Redirect Bypass)
+*   **Kullanıldığı Mağazalar:** `Trendyol`, `Teknosa`, `Mavi`, `Hepsiburada`, `PttAVM`, `Amazon`, `İncehesap`, `Boyner` (`fetchHtml` → `curlFetchHtml`). `İncehesap` için iPhone Safari UA, diğerleri için `WhatsApp/2.23.4.15 A` UA kullanılır; Amazon `curl` boş dönerse Microlink'e düşer.
+*   **Problem:** 
+    *   **Teknosa, Mavi & Boyner:** Bu mağazalar Google Cloud IP bloklarını engellemez; ancak Node.js (`fetch`/`undici`) kütüphanesinin SSL el sıkışması (TLS Handshake JA3/JA4 parmak izi) imzasını "şüpheli bot" olarak algılayıp `403 Forbidden` veya Cloudflare WAF Challenge döndürür.
+    *   **Hepsiburada:** Hepsiburada'nın Akamai Bot Manager koruması, Google Translate Proxy sunucu IP'lerini (ve Googlebot IP'lerini) Captcha sayfasına (`HBBlockandCaptcha.html`) yönlendirir (403 WAF engeli, ~80KB HTML boyutu ama ürün bilgileri ve reduxStore bulunmaz). Ayrıca Microlink API'sinin ücretsiz sürümü Hepsiburada'yı engellemiştir (`EPROXYNEEDED` hatası döner).
+    *   **Trendyol:** Yurt dışı (Iowa / us-central1 VM) IP'lerinden gelen direct istekleri otomatik olarak `/en/select-country?cb=...` (ülke seçimi) sayfasına yönlendirerek orijinal ürün detay sayfasını engeller (74KB anasayfa HTML'i döner). Google Translate Proxy ile gidildiğinde ise, Translate sunucuları yurt dışında olduğu için Trendyol local butik/sepet indirimlerini (`boutiqueId`) render etmeyip standart/indirimsiz global fiyatları (`65374 TL` yerine `63299 TL`) gösterir.
+*   **Çözüm:** 
+    *   **Teknosa, Mavi, Boyner, Hepsiburada, PttAVM, Amazon & İncehesap:** İşletim sistemi düzeyinde çalışan `curl` aracı, Node.js'ten tamamen farklı bir TLS stack'i (libcurl/OpenSSL) kullanır. `spawnSync('curl', [...args])` yardımıyla istek doğrudan `WhatsApp/2.23.4.15 A` User-Agent'ı ile atılarak hem TLS engelleri hem de Google Translate IP engelleri aşılır. Hepsiburada ve Boyner doğrudan 200 OK ile orijinal DOM ve veri bloklarını eksiksiz döndürür.
+    *   **Trendyol:** İstek doğrudan `curl` ile atılırken, header'lara **`Cookie: storefrontId=1; countryCode=TR; language=tr`** çerezleri eklenir. Bu çerezler sayesinde Trendyol yurt dışı IP yönlendirmesini (`select-country`) tamamen atlar, botu Türkiye lokasyonlu bir kullanıcı gibi algılar ve orijinal ürün sayfasını (425KB+) butik kampanya indirimli fiyatıyla beraber kusursuzca render eder. Linklerdeki affiliate/kampanya parametreleri temizlenmezse, Trendyol JSON-LD şemasını HTML içerisinden kaldırdığı için sadece `boutiqueId`, `merchantId` ve `storefrontId` parametreleri korunur, gerisi silinir.
+*   **Gereksinim:** Docker imajında (`Dockerfile`) `apk add --no-cache curl` komutuyla curl yüklü olmalıdır.
+
+#### 3. Googlebot User-Agent Taklidi
+*   **Kullanıldığı Mağazalar:** `MediaMarkt`
+*   **Problem:** MediaMarkt Cloudflare koruması normal tarayıcı ve mobil UA'leri engeller.
+*   **Çözüm:** `Googlebot/2.1 (+http://www.google.com/bot.html)` User-Agent değeri doğrudan set edilerek istek atılır. MediaMarkt'ın Cloudflare ayarlarında Googlebot IP doğrulaması (DNS lookup) aktif veya sıkı olmadığı için bu imza doğrudan geçiş izni alır.
+
+#### 4. Alan Adı Filtreleme İyileştirmesi & Live Review API Entegrasyonu
+*   **Kullanıldığı Mağazalar:** `Idefix` (ve genel x.com yönlendirmeleri)
+*   **Problem:** 
+    *   Botun x.com (Twitter) paylaşımlarını filtrelerken kullandığı basit `.includes('x.com')` kontrolü, `idefix.com` linklerinin de yanlışlıkla filtrelenip atlanmasına neden oluyordu.
+    *   Ayrıca İdefix sunucuları statik HTML yanıtlarında değerlendirme (`averageRating`) ve yorum sayılarını HTML'e gömmemekteydi.
+*   **Çözüm:** 
+    *   `telegram_bot.js` ve `fetch_history.js` dosyalarındaki kontrol mekanizması URL Hostname analizine dönüştürülerek filtreleme çözüldü.
+    *   `idefix_scraper.js` içerisine İdefix'in canlı mikroservis entegrasyonu (`https://ecomapi.idefix.com/api/product/${productId}/detail/review`) eklendi. Puan ve oy sayısı HTML'de yoksa, ürün ID'si ayıklanarak bu API üzerinden canlı olarak parse edilir.
+
+#### 5. Microlink HTML API Proxy (`api.microlink.io`)
+*   **Kullanıldığı Mağazalar:** `Amazon` (yalnızca `curl` başarısız/boş dönerse fallback; `link_scraper_service.js:1043`). `PttAVM` için kodda bir Microlink dalı vardır (`:1058`) ancak `isPttavm` daha önce `curl` dalına (`:1038`) girip döndüğü için **ulaşılamaz (ölü) koddur**; PttAVM fiilen yalnızca `curl` ile çekilir. ⚠️ Doğrulanmalı: PttAVM'nin VM IP'sinden `curl` ile 200 dönüp dönmediği (önceki "tam IP blok" notu Cloud Run dönemine ait olabilir).
+*   **Problem (Amazon):** Amazon, ABD tabanlı bulut IP'lerinden (`us-central1`) varsayılan teslimat konumunu US yapar; Türkiye satıcısının buybox/promosyonlu fiyatı gizlenip liste fiyatı gösterilebilir. Ayrıca "Benzer/Sponsorlu Ürünler" karusellerindeki fiyatlar yanlışlıkla ürün fiyatı sanılabilir; bu yüzden fiyat seçicileri `#rightCol` ve `#centerCol` altındakilerle sınırlandırılmıştır. `amzn.eu`, `amzn.to`, `link.amazon` kısa linkleri `resolveUrlRedirects` ile uzun URL'ye çözülür. Satıcı/varyant parametreleri (`smid`, `th`, `psc`, `m`, `isIsap`, `tag`) korunur.
+*   **Çözüm:** Microlink API'si ile HTML alınır: `https://api.microlink.io/?url=<enc>&data.html.selector=html&data.html.type=html`. `prerender=true` yalnızca fonksiyonun `prerender` argümanı true ise eklenir; mevcut çağrıların hiçbiri (`:1045`, `:1058`) `true` geçmez, yani headless render **kullanılmaz**. Gelen HTML Cheerio ile `AmazonScraper` tarafından parse edilir. Timeout 18 sn. Ücretsiz Microlink planına bağlı olduğundan kota/engel durumunda fallback sessizce boş döner.
+
+#### 6. Yandex Translate Proxy & Wayback Machine Fallback
+*   **Kullanıldığı Mağazalar:** `Getir`
+*   **Problem:** Getir CloudFront WAF, WhatsApp UA'yı ve datacenter IP'lerini engelleyebilir; Google Translate Proxy veya Microlink de captcha (405) engeline takılır. Depoya özel ürünler lokasyon cookie'si olmadan 404 verir.
+*   **Çözüm:** Çok katmanlı bir fallback akışı uygulanmıştır (`fetchHtml` → `curlFetchGetir`, `link_scraper_service.js:702`):
+    0. **`curl` + Chrome UA + lokasyon cookie'leri** (`locale=tr; language=tr; countryCode=TR; appType=GETIR`, URL sonuna `/` eklenir): ilk denemedir; başarısız olursa 1. adıma düşülür.
+    1. **Yandex Translate Proxy:** Doğrudan `curl` WAF'a takılırsa, `https://translate.yandex.ru/translate?url=...&lang=tr-tr` adresine yönlendirilir. Yandex Translate sunucuları WAF'a takılmadan orijinal `__NEXT_DATA__` JSON verisini çeker. Bu sayede genel ürünlerde (Ekmek vb.) **canlı/güncel fiyat** ve görseller başarıyla çekilir.
+    2. **Wayback Machine Fallback:** Yandex Translate başarısız/404 dönerse (bölgesel/depoya özel ürünlerde), en son yedek olarak Wayback Machine arşivi taranır (`https://web.archive.org/web/2024/...`). Buradan eski tarihli JSON-LD veya `__NEXT_DATA__` çekilerek başlık, görsel ve açıklama kurtarılır. Görsel URL'leri Wayback prefix'lerinden temizlenerek orijinal Getir CDN URL'si ile Firebase Storage'a yüklenir.
+
+---
+
+### 4.2 Mağaza ve Bypass Yöntemi Özet Tablosu
+
+| Mağaza | Bot Karşılaşma Durumu | Kullanılan Bypass Yöntemi | Teknik Detay / Başlık |
+| :--- | :--- | :--- | :--- |
+| **Hepsiburada** | Akamai Captcha / Microlink Blok / hb.biz 403 | `curl` spawnSync (Doğrudan) + `redirect:manual` Adjust Fallback | TLS Fingerprint Bypass + `WhatsApp` UA ile HTML çekimi. `hb.biz` kısa linkleri `redirect:'manual'` ile ilk 301 Location header'ı yakalanarak `adj.st` URL'indeki `adj_fallback` parametresinden gerçek `hepsiburada.com` ürün URL'si çıkarılır. |
+| **Trendyol** | Yurt dışı IP & Ülke Engeli | `curl` spawnSync (Doğrudan) | `storefrontId=1; countryCode=TR; language=tr` Cookie Entegrasyonu |
+| **N11** | 403 Forbidden (IP Engeli), Dinamik Sepet İndirimi & Kısa Linkler | Google Translate Proxy + Canlı `personalizedDetail` API | `translate.goog` + `magaza` parametresi koruma. Canlı `POST /rest/v1/personalizedDetail` isteği ile sepet indirimli (`instantDiscountedPrice`) ve eski liste fiyatı (`oldPrice`) çekimi (`price`/`displayPrice` min-max analizi). `sl.n11.com/n/` kısa linkleri `www.n11.com/n/` formatına dönüştürülerek Google Translate Proxy üzerinden çözümlenir (`resolveN11ShortLink`), böylece Adjust'ın Google Play Store yönlendirmesi tamamen bypass edilir. Ücretli üyelik olmadığından `priceLabel` daima `null` döner. |
+| **Vatan Bilgisayar** | 403 Forbidden (IP Engeli) | Google Translate Proxy | `translate.goog` |
+| **Itopya** | 403 Forbidden (Cloudflare Engeli) | Standart Fetch / `translate.goog` | Ürün HTML çekimi `translate.goog` ile yapılır; Değerlendirme/Rating API isteği (`/Urun/UrunYorum?id=...`) ise İdefix mimarisinde olduğu gibi öncelikle doğrudan (proxy'siz) Node `fetch` ile yapılır, sadece engellenirse 2.5s Translate Proxy fallback'i devreye girer. |
+| **Teknosa / Mavi / Amazon** | 403 Forbidden / Satıcı Fiyat Farkı / Amazon Depo Fiyatı | `curl` spawnSync (Doğrudan); Amazon için boş dönerse Microlink fallback | TLS Fingerprint Bypass + `WhatsApp` UA + `smid`/`th`/`psc` Satıcı Parametrelerini Koruma. Amazon Depo (`smid=A215JX4S9CANSO`) ve ikinci el/açılmış kutu ürünlerinde fiyat `#apex-pricetopay-accessibility-label`, `.apex-pricetopay-value`, `#usedBuySection .offer-price`, `.aok-offscreen` seçicileri ile %100 doğrulukla kazınır. |
+| **Pttavm** | Cloudflare (TLS parmak izi / IP) | `curl` spawnSync (Microlink dalı ölü kod, bkz. §5) | WhatsApp UA ile `curlFetchHtml`; ⚠️ VM IP'sinden doğrulanmalı |
+| **İncehesap** | Cloudflare | `curl` spawnSync + iPhone Safari UA | `incehesap.com` kısa linkleri (`/u/...`) `curl` + WhatsApp UA ile çözülür |
+| **MediaMarkt** | 403 Forbidden (Bot Engeli) | Googlebot UA (Doğrudan) | `Googlebot/2.1` taklidi |
+| **Idefix** | Standart HTML Çekim | Standart Fetch | Hostname tabanlı `x.com` filtresi (`telegram_bot.js:433`); yorum sayısı için `ecomapi.idefix.com` API'si |
+| **Pazarama / Mango** | Vercel/WAF 429 | Standart Fetch + masaüstü Chrome 124 UA | `getHeadersForUrl` (`:17`) |
+| **Zara / Beymen / Defacto / Gamer.gen.tr / Gaming.gen.tr** | — | Standart Fetch + WhatsApp UA (403/401'de tarayıcı UA ile tek yeniden deneme) | `fetchHtml` (`:1083`) |
+| **Boyner** | Cloudflare WAF (TLS Parmak İzi & Bot Engeli) | `curl` spawnSync + `WhatsApp` UA (Sunucu) / Native HTTP (İstemci) | `magaza` ve `barcode` parametreleri korunur, Next.js `PriceInfo` üzerinden indirimli/liste fiyatı ve `CampaignInfo` çekilir. |
+| **Havit / Migros** | Bot engeli yok | Standart Fetch (Havit/Migros kodda "engel yok" notlu) | — |
+| **Getir** | CloudFront WAF Captcha (405) | `curl` (Chrome UA + cookie) → **Yandex Translate Proxy** → Wayback Machine | Sıralı fallback; Wayback eski tarihli veri verebilir |
+
+---
+
+### 4.3 Debug Yöntemleri ve Altın Kurallar
+
+#### 1. Bot Engeli / 403 Durumunun Teşhisi
+Eğer bir mağaza 403 dönüyorsa, dönen cevaptaki `server` başlığı ve HTML body kontrol edilmelidir:
+*   `server: ESF` (Google) geliyorsa: Google Translate sunucuları engellenmiştir veya Google Translate bizi engelliyordur.
+*   `server: cloudflare` veya `server: akamai` geliyorsa: Doğrudan bulut sunucu IP'miz veya TLS parmak izimiz engellenmiştir.
+
+#### 2. TLS Engeli vs IP Engeli Test Etme
+Yeni bir bot engeli yaşandığında `scratch/` dizini altında test scriptleri oluşturarak sırasıyla test edin:
+1. `curl` ile doğrudan gitmeyi test edin (`node scratch/test_curl_quick.js`).
+2. Eğer `curl` 200 dönüyorsa, sorun **TLS Fingerprint**'tir. Çözüm: Scraper servisinde o mağazayı `curlFetchHtml` kapsamına alın.
+3. Eğer `curl` da 403 dönüyorsa, sorun **IP Engeli**'dir. Çözüm: Google Translate Proxy yöntemini uygulayın.
+
+#### 3. Komut Satırı / Shell Güvenliği
+Node.js içinden harici araç (`curl`) çağırırken kesinlikle `execSync(commandString, { shell: true })` kullanılmamalıdır. Parametrelerin arasına sızabilecek boşluklar veya özel karakterler zaman aşımına veya güvenlik açıklarına yol açar. Her zaman **`spawnSync('curl', argsArray)`** tercih edilmelidir.
+
 
 ---
 
@@ -270,7 +371,7 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 Mobil cihazlarda (Android & iOS), Dart'ın yerleşik HTTP kütüphanesinin SSL el sıkışması bazı katı bot sistemleri (özellikle Zara ve Akamai Bot Manager) tarafından şüpheli olarak işaretlenebilir.
 
 ### Çalışma Prensibi:
-1. `LinkPreviewService._fetchHtml` metodu URL'in Zara, Mango, Beymen, Getir vb. olduğunu tespit ederse `com.sicakfirsatlar.app/native_http` platform kanalını çağırır.
+1. `LinkPreviewService._fetchHtml` metodu URL 17 domainden biriyse (Zara, Getir, İtopya, Mango, Beymen, Defacto, Mavi, PttAVM, İncehesap, Teknosa, Vatan, Pazarama, İdefix, N11, Hepsiburada, Trendyol, Boyner; `link_preview_service.dart:179`) ve platform Android/iOS ise `com.sicakfirsatlar.app/native_http` platform kanalını çağırır.
 2. **Android (`MainActivity.kt`):** Android işletim sisteminin yerel `HttpURLConnection` sınıfını kullanarak isteği atar.
 3. **iOS (`AppDelegate.swift`):** Apple'ın yerel `URLSession` ağ katmanını kullanarak isteği tamamlar.
 4. İşletim sisteminin kendi yerel ağ kütüphaneleri, cihazın gerçek tarayıcısıyla birebir aynı TLS/JA3 imzasına sahip olduğundan engellere takılmadan tam HTML'i döndürür.
@@ -304,7 +405,7 @@ Platformda hem istemci hem de sunucu scraper'larında özel kulüp ve üyelik fi
 ## 7. 📉 İndirimsiz Liste Fiyatı (originalPrice) ve İndirim Oranı
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [İndirimsiz Liste Fiyatı Kazıma ve Entegrasyon Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/original_price_scraper_integration_guide.md) — 22 mağazanın eski liste fiyatı seçicileri, en küçük aday algoritması ve indirim yüzdesi formülleri.
+> - [İndirimsiz Liste Fiyatı Kazıma ve Entegrasyon Kılavuzu](file:///d:/firsatkolik/documentation/scraping-ve-botlar/original_price_scraper_integration_guide.md) — Mağazaların eski liste fiyatı seçicileri, en küçük aday algoritması ve indirim yüzdesi formülleri.
 
 Bir fırsatın gerçek indirimini hesaplayabilmek için **İndirimsiz Liste Fiyatı (`originalPrice`)** 3 katmanda aranır:
 1. **JSON-LD:** `offers.highPrice`, `offers.listPrice`, `offers.priceSpecification`.
@@ -336,25 +437,25 @@ Kullanıcıların fırsat kalitesini anında değerlendirebilmesi için 3 kritik
 
 ## 9. 🤖 Telegram Botu ve Canlı Kanal Dinleyici Mimarisi
 
-> 🔗 **Detaylı Referans Dokümanı:**
-> - [Bot Kazıma Kuralları ve Stratejileri](file:///d:/firsatkolik/documentation/scraping-ve-botlar/bot_scraping_rules_and_strategies.md) — GramJS MTProto canlı dinleyici, 5 seviyeli WAF bypass motoru, Google Translate proxy, curl spawnSync ve onay süreçleri.
+> 🔗 Bot bypass ayrıntıları bu dokümanın §4'ündedir (eski `bot_scraping_rules_and_strategies.md` ve `end_to_end_scraping_architecture.md` buraya birleştirilip `_arsiv/`'e taşındı).
 
 Google Cloud VM üzerinde Docker container olarak çalışan `telegram_bot.js` servisi:
-- **Canlı Dinleyici (`TelegramClient` + `NewMessage`):** Çevre değişkenlerinde (`TELEGRAM_CHANNELS`) tanımlı tüm popüler indirim kanallarını dinler.
-- **Geçmiş Tarayıcı (`fetch_history.js`):** Kanallardaki geçmiş mesajları toplu olarak tarar ve içe aktarır.
+- **Canlı Dinleyici (`TelegramClient` + `NewMessage`):** Çevre değişkenlerinde (`TELEGRAM_CHANNELS`) veya Firestore (`settings/telegramBot.monitoredChannels`) üzerinde tanımlı tüm popüler indirim kanallarını MTProto üzerinden sıfır gecikmeyle (canlı push) dinler.
+- **Akıllı Kanal Takip Döngüsü & FloodWait Kalkanı (1 dk / 60 sn):** Push olaylarının olası kaçma ihtimaline karşı her 60 saniyede bir kanalların PTS farkını (`GetChannelDifference`) denetler. `isPollingInProgress` kilidi sayesinde eşzamanlı çakışmaları engeller ve Telegram API FloodWait kısıtlamalarına karşı tam koruma sağlar.
+- **In-Flight URL Yarış Durumu (Race Condition) Kalkanı:** Birden fazla kanal aynı ürün linkini (farklı kısa linklerle olsa dahi) aynı saniyelerde paylaştığında, sistem kanonik `cleanUrl` üzerinden in-flight kilidi uygular. İkinci kanal fırsatı silip atmaz; ilk işlemin kaydetmesi için 4 saniye bekler. İlk işlem kaydederse mükerrer olarak eler, ilk işlem başarısız olursa ikinci kanal işleme devam eder (%0 fırsat kaybı garantisi).
+- **Kalite Kapısı (Quality Gate):** Eğer bir linkten fiyat çekilemezse (`finalPrice <= 0`), başlık jenerik kalırsa veya görsel bulunamazsa fırsat asla atlanmaz veya çöpe gitmez. Bunun yerine `requiresManualReview: true` ve `reviewReason` atanarak zorunlu olarak admin onayına (`isApproved: false`) yönlendirilir.
 - **Görsel Kurtarma & Storage Yükleme:** Scraper ürün görselini çekemezse, Telegram mesajının fotoğrafını veya link önizleme görselini indirerek `deals/{chatId}_{messageId}.jpg` yoluyla Firebase Storage'a yükler.
-- **Onay Durumu:** `settings/app` altındaki `dealApprovalRequired` değerine göre fırsatı `isApproved: false` (onay bekliyor) veya `isApproved: true` olarak kaydeder.
+- **Onay Durumu (Fail-Safe Admin Onayı):** `settings/app` altındaki `dealApprovalRequired` değerine bakar; doküman veya alan bulunamasa dahi varsayılan olarak `true` (admin onayı zorunlu) modunda güvenli çalışır.
 
 ---
 
 ## 10. 🧠 Kategori Tespit Motoru ve Reklam Mevzuatı Uyumu
 
 ### Kategori Tespit Motoru ([category_detection_service.js](file:///d:/firsatkolik/cloud-run-bot/category_detection_service.js))
-Fırsat başlığı, breadcrumbs hiyerarşisi ve mağaza bilgisini 1-gram ve 2-gram NLP kelime ağırlıklarıyla analiz ederek ürünü 12 ana kategoriye otomatik atar:
-- `elektronik`, `moda`, `ev-yasam`, `anne-bebek`, `kozmetik`, `spor-outdoor`, `supermarket`, `kitap-hobi`, `otomotiv`, `yapi-market`, `pet-shop`, `diger`.
+Fırsat başlığı, breadcrumbs hiyerarşisi ve mağaza bilgisini 1-gram ve 2-gram NLP kelime ağırlıklarıyla analiz ederek ürünü ana kategoriye otomatik atar. Uygulama kategori ID'leri (`lib/models/category.dart`): `elektronik`, `moda`, `ev_yasam`, `anne_bebek`, `kozmetik`, `spor_outdoor`, `supermarket`, `yapi_oto`, `kitap_hobi`, `dijital_hizmetler`, `finans_kampanyalar`, `diger` (+ `tumu` filtresi). Anahtar kelime haritasında `diger` yoktur; eşleşmeyen ürün varsayılan kategoriye düşer. Ayrıntı: [kategori tespit motoru rehberi](file:///d:/firsatkolik/documentation/kategoriler-ve-magazalar/kategori_tespit_motoru_ve_anahtar_kelime_rehberi.md).
 
 ### Reklam Uyum Servisi ([advertising_compliance_service.js](file:///d:/firsatkolik/cloud-run-bot/advertising_compliance_service.js))
-Ticaret Bakanlığı'nın sosyal medya ve e-ticaret reklam mevzuatına tam uyum sağlamak amacıyla, bot tarafından eklenen tüm fırsat açıklamalarının sonuna otomatik olarak `#işbirliği` veya `#reklam` yasal ibarelerini ekler.
+Ticaret Bakanlığı'nın sosyal medya ve e-ticaret reklam mevzuatına tam uyum sağlamak amacıyla, bot tarafından oluşturulan fırsat açıklamalarında eski `#reklam`/`#işbirliği`/`[REKLAM]` vb. etiketleri temizler ve sona tek bir `#tanıtım` etiketi ekler (`ensureAdvertisingDisclosure`, `advertising_compliance_service.js:39`; `telegram_bot.js:1060`). Mevzuat uygunluğu hukuki görüş gerektirir; kod yalnızca etiketi ekler.
 
 ---
 
@@ -371,7 +472,7 @@ Telegram Bot servisi Google Cloud Compute Engine VM üzerinde 7/24 çalışır.
                                                                      ▼
 [ SSH ile VM Sunucusuna Bağlantı ] ◄─────────────────────────────────┘
   ├── docker pull gcr.io/.../telegram-bot:latest
-  ├── docker stop <env>-bot && docker rm <env>-bot
+  ├── docker rm -f <env>-bot || true
   └── docker run -d --name <env>-bot --restart always -p <port>:8080 ...
 ```
 
@@ -382,48 +483,75 @@ python cloud-run-bot/deploy_to_vm.py dev
 
 # Canlı Prod Ortamı (PROD - Port 8082)
 python cloud-run-bot/deploy_to_vm.py prod
+
+# Cloud Build'i atlayıp mevcut :latest imajı kullan
+python cloud-run-bot/deploy_to_vm.py prod --skip-build
 ```
+Dev ve prod aynı `:latest` imajını paylaşır, geri alma imajı yoktur ; tek e2-micro VM SPOF'tur
+
+
+### Ortam Farklılıkları, Log ve Sağlık Kontrolü
+
+| Parametre | Development | Production |
+| :--- | :--- | :--- |
+| **Container** | `dev-bot` | `prod-bot` |
+| **Port** | `8081:8080` | `8082:8080` |
+| **Firebase anahtarı (mount)** | `dev_firebase_key.json` | `prod_firebase_key.json` (`/app/firebase_key.json`) |
+| **Çalışma dizini (VM)** | `/home/murat/app/dev-bot` | `/home/murat/app/prod-bot` |
+| **Firestore** | `sicak-firsatlar-e6eae` | `firsatkolik-prod-e6eae` |
+
+Container şu komutla başlar: `docker run -d --name <env>-bot --restart always -p <port>:8080 --env-file <dizin>/.env -v <dizin>/<env>_firebase_key.json:/app/firebase_key.json gcr.io/firsatkolik-prod-e6eae/telegram-bot:latest` (`deploy_to_vm.py`; VM ve GCR PROD projesindedir). Servis hesabı JSON'ları build bağlamında (`.`) imaja/Cloud Build arşivine de girer.
+
+```bash
+# Loglar (bot Cloud Run'da değil VM'de olduğundan cloud_run_revision filtresi kullanılamaz)
+gcloud compute ssh telegram-bot-server --zone=us-central1-a --project=firsatkolik-prod-e6eae
+sudo docker logs -f prod-bot --tail 100   # dev: dev-bot
+
+# Sağlık (kimliksiz, düz HTTP)
+curl http://<VM_IP>:8082/health   # prod; dev: 8081
+```
+`/health` yanıtı: `{status, bot_running, channels, uptime, timestamp}` (`telegram_bot.js:1729`).
 
 ---
 
-## 12. 📊 22 Mağaza İçin Kapsamlı Özet Karar Matrisi
+## 12. 📊 23 Mağaza İçin Kapsamlı Özet Karar Matrisi
 
 | Mağaza | İstemci (Dart) Yöntemi | Sunucu (Node.js) Yöntemi | Özel Fiyat / Rozet / Canlı Servis |
 | :--- | :--- | :--- | :--- |
-| **Amazon** | WhatsApp UA + 43-byte Filtresi | curl spawnSync / Microlink | Prime Fırsatı (`priceLabel`), Amazon Depo 2. El (`isAmazonWarehouse`) |
+| **Amazon** | WhatsApp UA + 43-byte Filtresi | curl spawnSync (boşsa Microlink fallback) | Prime Fırsatı (`priceLabel`), Amazon Depo 2. El (`isAmazonWarehouse`) |
 | **Hepsiburada** | Canlı `withoutAffordability` API | curl spawnSync (Akamai Bypass) | Premium ile (`priceLabel`), Gotham API Gateway, Sepet İndirimi |
 | **Trendyol** | JSON-LD `ProductGroup` Parser | curl spawnSync + TR Cookies | Plus'a Özel (`priceLabel`), Butik/Varyant Fiyat Ayrımı |
 | **N11** | WhatsApp UA + Canlı `personalizedDetail` API | Google Translate Proxy | Sepette İndirim (`instantDiscountedPrice`), `magaza` parametresi koruma, `price`/`displayPrice` min-max analizi |
-| **Pazarama** | DOM (Plus Alanı) & JSON-LD | curl spawnSync | Plus ile (`priceLabel`), Standart JSON-LD fallback |
-| **Getir** | Native HTTP + Lokasyon Çerezleri| Lokasyon curl + Yandex / Wayback | Depo Ürünleri Çözümleme, `__NEXT_DATA__` Parser |
-| **Zara** | **Native MethodChannel HTTP** | curl spawnSync | Akamai Bot Manager Bypass, `zara.analyticsData` Script |
-| **Mango** | **Native MethodChannel HTTP** | curl spawnSync | Next.js `self.__next_f.push` Fiyat Ayrıştırıcı |
-| **Beymen** | Native HTTP + JSON Sanitizer | curl spawnSync | `BEYMEN.productMain` Script, `.o-productDetail__description` Başlık |
+| **Pazarama** | DOM (Plus Alanı) & JSON-LD | Standart fetch (Chrome 124 UA) | Plus ile (`priceLabel`), Standart JSON-LD fallback |
+| **Getir** | Native HTTP + Lokasyon Çerezleri| Lokasyon cookie'li curl → Yandex → Wayback | Depo Ürünleri Çözümleme, `__NEXT_DATA__` Parser |
+| **Zara** | **Native MethodChannel HTTP** | Standart fetch (WhatsApp UA) | Akamai Bot Manager Bypass, `zara.analyticsData` Script |
+| **Mango** | **Native MethodChannel HTTP** | Standart fetch (Chrome 124 UA) | React CSS-Modules `SinglePrice` / `sr-only` Fiyat Ayrıştırıcı |
+| **Beymen** | Native HTTP + JSON Sanitizer | Standart fetch (WhatsApp UA) | `BEYMEN.productMain` Script, `.o-productDetail__description` Başlık |
 | **İdefix** | Canlı `ecomapi` Review API | Canlı `ecomapi` Review API | Canlı Değerlendirme Puanı ve Yorum Sayısı Çekimi |
-| **DeFacto** | Native HTTP + Unicode Filtresi| curl spawnSync | `window.PRODUCT_DETAIL_LASTVISITED` Sepet Fiyatı |
-| **PttAVM** | Native HTTP | **Microlink Headless API** | Cloudflare WAF Bypass, JSON-LD Şeması |
+| **DeFacto** | Native HTTP + Unicode Filtresi| Standart fetch (WhatsApp UA) | `window.PRODUCT_DETAIL_LASTVISITED` Sepet Fiyatı |
+| **PttAVM** | Native HTTP | curl spawnSync (Microlink dalı ölü kod) | Cloudflare WAF, JSON-LD Şeması |
 | **Vatan Bilg.**| Standart Fetch / Chrome UA | Google Translate Proxy | DOM `.product-list__price` Seçicisi |
 | **İtopya** | Native HTTP + Yorum API | Translate Proxy + Yorum API | Canlı `/Urun/UrunYorum` Değerlendirme Servisi |
 | **Teknosa** | Native HTTP | curl spawnSync (TLS Bypass) | JSON-LD `Product` Şeması |
 | **Mavi** | WhatsApp UA | curl spawnSync | `sky-static.mavi.com` CDN Doğrulaması |
 | **MediaMarkt**| Standart Fetch | Googlebot UA Taklidi | Cloudflare Bypass, JSON-LD Şeması |
-| **İncehesap** | iOS Safari / WhatsApp UA | curl spawnSync | JSON-LD ve DOM Fiyat Seçicileri |
+| **İncehesap** | iOS Safari / WhatsApp UA | curl spawnSync (iPhone UA) | JSON-LD ve DOM Fiyat Seçicileri |
 | **Havit** | Standart Fetch | Standart Fetch | E-Ticaret DOM ve JSON-LD Şeması |
-| **Migros** | Standart Fetch | curl spawnSync | Money ile (`priceLabel`), Money Kulüp İndirimleri |
-| **Boyner** | Standart Fetch | curl spawnSync | JSON-LD `Product` Şeması ve DOM İndirimleri |
-| **Gamer Gen** | DOM (`.text-price`/`.product-price`) | curl spawnSync / Cheerio | Sepette İndirim, Hazır Sistemler (`_h...`), Değerlendirme Yok (`null`) |
-| **Gaming Gen**| DOM (`.summary .price`) & JSON-LD | WhatsApp UA / curl spawnSync | WooCommerce Altyapısı, Bundle Fiyat Filtreleme, Yıldız Puanı (1 ondalık) & Yorum Sayısı |
+| **Migros** | Standart Fetch | Standart fetch | Money ile (`priceLabel`), Money Kulüp İndirimleri |
+| **Boyner** | **Native MethodChannel HTTP** + WhatsApp UA | `curl` spawnSync + WhatsApp UA | Next.js `PriceInfo` Engine (Satış, Eski Fiyat & `CampaignInfo`), DOM Sepette Rozet Temizliği |
+| **Gamer Gen** | DOM (`.text-price`/`.product-price`) | Standart fetch (WhatsApp UA) + Cheerio | Sepette İndirim, Hazır Sistemler (`_h...`), Değerlendirme Yok (`null`) |
+| **Gaming Gen**| DOM (`.summary .price`) & JSON-LD | Standart fetch (WhatsApp UA) | WooCommerce Altyapısı, Bundle Fiyat Filtreleme, Yıldız Puanı (1 ondalık) & Yorum Sayısı |
 
 ---
 
 ## 13. 🧪 Birim Testleri ve Doğrulama Süitleri
 
-Her mağazanın scraper doğruluğu bağımsız unit testler ile garanti altına alınmıştır:
+Scraper davranışı kayıtlı HTML örnekleriyle birim testlerle korunur (canlı site değişikliklerini yakalamaz):
 
 | Test Dosyası | Katman | Açıklama | Komut |
 | :--- | :--- | :--- | :--- |
 | **`test/*_scraper_test.dart`** | Flutter / Dart | 23 mağazanın fiyat, başlık, görsel ve metadata birim testleri | `flutter test` |
-| **`cloud-run-bot/tests/*.test.js`** | Node.js | Sunucu tarafı scraper'ların Cheerio DOM ve regex doğrulama testleri | `node cloud-run-bot/tests/...` |
+| **`cloud-run-bot/tests/*.test.js`** | Node.js | Sunucu tarafı scraper'ların Cheerio DOM ve regex doğrulama testleri | `node cloud-run-bot/tests/<dosya>.test.js` (⚠️ `package.json`'da test script'i yoktur) |
 | **`cloud-run-bot/test_simulate_bot.js`**| Node.js | Canlı Telegram mesaj simülasyonu ve uçtan uca akış testi | `node cloud-run-bot/test_simulate_bot.js` |
 
 ---
@@ -434,7 +562,7 @@ Her mağazanın scraper doğruluğu bağımsız unit testler ile garanti altına
 - Sunucu başlığında `server: cloudflare` veya `server: akamai` geliyorsa sorun **IP veya TLS** engelidir.
   - İlk adım: `curlFetchHtml` ile `spawnSync` deneyin (TLS bypass).
   - İkinci adım: `translate.goog` (Google Translate Proxy) deneyin (IP bypass).
-  - Üçüncü adım: `microlinkFetchHtml(url, ..., prerender: true)` deneyin (Headless browser).
+  - Üçüncü adım: `microlinkFetchHtml(url, ..., prerender: true)` deneyin (şu an kodda hiçbir çağrı `prerender` açmaz).
 - `server: ESF` geliyorsa Google Translate sunucuları geçici olarak engellenmiştir.
 
 ### 2. Yanlış / İndirimsiz Fiyat Çekildiğinde:
@@ -449,12 +577,65 @@ Her mağazanın scraper doğruluğu bağımsız unit testler ile garanti altına
 | Rol / Katman | Dosya Yolu | Açıklama |
 | :--- | :--- | :--- |
 | **Mobil Link Önizleme Servisi** | [link_preview_service.dart](file:///d:/firsatkolik/lib/services/link_preview_service.dart) | İstemci scraper koordinatörü, redirect çözücü ve native HTTP tüneli. |
-| **Dart Mağaza Scraper'ları (23 Adet)**| [lib/services/scrapers/](file:///d:/firsatkolik/lib/services/scrapers/) | 23 mağazaya ait Dart scraper sınıfları. |
-| **Domain Allowlist & Regex Kuralları**| [domain_allowlist_extended.json](file:///d:/firsatkolik/assets/data/domain_allowlist_extended.json) | 23 mağazanın izinli alan adları ve ürün sayfası regex desenleri. |
+| **Dart Mağaza Scraper'ları (23 Adet)**| [lib/services/scrapers/](file:///d:/firsatkolik/lib/services/scrapers) | 23 mağazaya ait Dart scraper sınıfları. |
+| **Domain Allowlist & Regex Kuralları**| [domain_allowlist_extended.json](file:///d:/firsatkolik/assets/data/domain_allowlist_extended.json) | İzinli alan adları (`store_count` 294) ve 22 mağaza için ürün sayfası regex desenleri. |
 | **Sunucu Link Scraper Servisi** | [link_scraper_service.js](file:///d:/firsatkolik/cloud-run-bot/link_scraper_service.js) | Node.js scraper koordinatörü, curl, Translate Proxy ve Microlink motoru. |
-| **Node.js Mağaza Scraper'ları (23 Adet)**| [cloud-run-bot/scrapers/](file:///d:/firsatkolik/cloud-run-bot/scrapers/) | 23 mağazaya ait Node.js scraper sınıfları. |
+| **Node.js Mağaza Scraper'ları (23 Adet)**| [cloud-run-bot/scrapers/](file:///d:/firsatkolik/cloud-run-bot/scrapers) | 23 mağazaya ait Node.js scraper sınıfları. |
 | **Telegram Canlı Botu** | [telegram_bot.js](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js) | Telegram kanallarını dinleyen ve fırsatları Firestore'a kaydeden ana bot. |
 | **Kategori Tespit Servisi** | [category_detection_service.js](file:///d:/firsatkolik/cloud-run-bot/category_detection_service.js) | NLP tabanlı otomatik kategori sınıflandırma motoru. |
 | **Reklam Uyum Servisi** | [advertising_compliance_service.js](file:///d:/firsatkolik/cloud-run-bot/advertising_compliance_service.js) | Yasal reklam ibaresi (#işbirliği) entegrasyonu. |
 | **Affiliate Dönüştürme Rehberi** | [affiliate_link_donusturme_ve_stratejileri_rehberi.md](file:///d:/firsatkolik/documentation/scraping-ve-botlar/affiliate/affiliate_link_donusturme_ve_stratejileri_rehberi.md) | TUNE HasOffers tersine mühendisliği, modüler adaptör mimarisi ve mağaza affiliate stratejileri. |
 | **VM Deployment Scripti** | [deploy_to_vm.py](file:///d:/firsatkolik/cloud-run-bot/deploy_to_vm.py) | Google Cloud Build ve VM Docker container güncelleme otomasyonu. |
+
+---
+
+## 16. 🛡️ Kanonik Link ve Akıllı Mükerrerlik (Deduplication) Mimarisi
+
+FırsatKolik platformunda **sıfır fırsat kaybı (Zero Deal Loss)** ve **sıfır yanlış pozitif (Zero False Positive)** prensibi esastır:
+> **Ana İlke:** *"Admin onayında aynı 2 ürün linki olması, 2 farklı ürünün aynı zannedilerek engellenmesinden çok daha kabul edilebilirdir."*
+
+### 16.1 Çok Katmanlı Mükerrerlik Akışı
+Telegram Botu (`telegram_bot.js`), Mobil İstemci (`DealService.createDeal`) ve Web Admin (`web/admin/app.js`) mükerrerlik denetimini tamamen senkronize bir boru hattıyla yürütür:
+
+```
+[Ham Link / Kısa Link (amzn.eu, hb.biz, ty.gl vb.)]
+                     │
+                     ▼
+  1. Yönlendirme Çözümü (resolveUrlRedirects)
+  (Kısa linkler gerçek mağaza URL'sine genişletilir)
+                     │
+                     ▼
+  2. Kanonik Temizleme (cleanProductUrl)
+  (Flutter, Node.js Bot ve Web Admin'de %100 Birebir Aynı Mantık)
+                     │
+                     ▼
+  3. In-Flight URL Kilit Kalkanı (telegram_bot.js)
+  (Aynı anda paralel kanallardan gelen URL'ler için 4 sn atomic lock)
+                     │
+                     ▼
+  4. Firestore cleanUrl Sorgusu (.where('cleanUrl', '==', cleanUrl))
+                     │
+        ┌────────────┴────────────┐
+        ▼                         ▼
+   Kayıt Yok                 Kayıt Bulundu
+  (Doğrudan İlerle)               │
+                                  ▼
+                     5. Güvenlik ve Tolerans Filtreleri:
+                     ├── 1. Reddedilmiş mi? (isRejected == true) ➔ Yeni paylaşıma İZİN VER
+                     ├── 2. 48 saatten eski mi? ➔ Yeni paylaşıma İZİN VER
+                     ├── 3. Bitti/Stoksuz mu? (isExpired veya expiredVotes >= 15) ➔ İZİN VER
+                     ├── 4. Soğuk mu? (hotVotes - coldVotes <= -5) ➔ İZİN VER
+                     └── 5. Fiyat Düşüşü (Price Drop >= %5) ➔ İZİN VER (Yeni fırsat sayılır)
+```
+
+### 16.2 cleanProductUrl Kanonik Eşitlik Tablosu (Dart, Node.js ve Web Admin Paritesi)
+
+| Mağaza / Kategori | Kural | Örnek Girdi | Kanonik cleanUrl Çıktısı |
+| :--- | :--- | :--- | :--- |
+| **Amazon** | ASIN yakalanır (`/dp/ASIN`), başlık slug varyasyonları elenir | `amazon.com.tr/iPhone-15/dp/B0CHX1W1XY?ref=abc` | `https://www.amazon.com.tr/dp/B0CHX1W1XY` |
+| **Amazon (gp/aw)** | Mobil/Eski formatlar standart `/dp/ASIN` standardına çekilir | `amazon.com.tr/gp/product/B0CHX1W1XY` | `https://www.amazon.com.tr/dp/B0CHX1W1XY` |
+| **Hepsiburada** | Pazaryeri satıcısı (`magaza`) korunur, takip kodları budanır | `hepsiburada.com/urun-p-HBCV123?magaza=Hepsiburada&utm=1` | `https://www.hepsiburada.com/urun-p-HBCV123?magaza=Hepsiburada` |
+| **Teknosa** | Pazaryeri satıcısı (`shopId`) korunur, takip kodları budanır | `teknosa.com/urun-p-12345?shopId=2442&utm_source=...` | `https://www.teknosa.com/urun-p-12345?shopId=2442` |
+| **Trendyol / N11** | Tüm query parametreleri temizlenir (Ürün ID path'tedir) | `trendyol.com/marka/urun-p-12345?merchantId=777` | `https://www.trendyol.com/marka/urun-p-12345` |
+| **Özel Mağazalar** | Sadece ürün ID parametreleri (`id`, `sku`, `p` vb.) korunur | `butik.com/urun.php?id=999&fbclid=xyz` | `https://butik.com/urun.php?id=999` |
+
