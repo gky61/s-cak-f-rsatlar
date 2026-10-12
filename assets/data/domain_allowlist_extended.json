@@ -6,19 +6,26 @@
     "domain_count": 297,
     "stores": {
         "trendyol": [
-            "trendyol.com"
+            "trendyol.com",
+            "ty.gl"
         ],
         "hepsiburada": [
-            "hepsiburada.com"
+            "hepsiburada.com",
+            "hb.biz"
         ],
         "amazon_tr": [
-            "amazon.com.tr"
+            "amazon.com.tr",
+            "amzn.eu",
+            "amzn.to",
+            "link.amazon",
+            "amzlinks.in"
         ],
         "n11": [
             "n11.com"
         ],
         "pazarama": [
-            "pazarama.com"
+            "pazarama.com",
+            "pzrm.me"
         ],
         "idefix": [
             "idefix.com"
@@ -874,7 +881,11 @@
         "amazon_tr": [
             "\\/dp\\/[a-z0-9]{10}(?:\\/|$)",
             "\\/gp\\/product\\/[a-z0-9]{10}(?:\\/|$)",
-            "\\/gp\\/aw\\/d\\/[a-z0-9]{10}(?:\\/|$)"
+            "\\/gp\\/aw\\/d\\/[a-z0-9]{10}(?:\\/|$)",
+            "\\/product\\/[a-z0-9]{10}(?:\\/|$)",
+            "\\/aw\\/d\\/[a-z0-9]{10}(?:\\/|$)",
+            "\\/d\\/[a-z0-9]{5,15}(?:\\/|$)",
+            "\\/gp\\/offer-listing\\/[a-z0-9]{10}(?:\\/|$)"
         ],
         "n11": [
             "\\/urun\\/.+-\\d+\\/?$"

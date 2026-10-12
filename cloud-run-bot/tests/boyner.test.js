@@ -169,4 +169,20 @@ describe('BoynerScraper Tests', () => {
     expect(originalPrice).toBe(4019);
     expect(scraper.scrapePriceLabel($)).toBe('%25 İndirim');
   });
+
+  test('Product #8 (Adidas Handball Spezial) - Should scrape title, brand, discounted price (6999 TL), old price (7499 TL), and campaign info correctly', () => {
+    const htmlPath = path.join(__dirname, '../../scratch/boyner_handball.html');
+    if (!fs.existsSync(htmlPath)) return;
+    const html = fs.readFileSync(htmlPath, 'utf-8');
+    const $ = cheerio.load(html);
+
+    expect(scraper.scrapeTitle($)).toContain('Adidas Originals IF6490 HANDBALL SPEZIAL');
+    expect(scraper.scrapeBrand($)).toBe('Adidas');
+    const price = scraper.scrapePrice($);
+    expect(price).toBe(6999);
+    const originalPrice = scraper.scrapeOriginalPrice($, price);
+    expect(originalPrice).toBe(7499);
+    expect(scraper.scrapePriceLabel($)).toBe("2000 TL'ye 500 TL İndirim");
+  });
 });
+

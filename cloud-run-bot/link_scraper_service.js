@@ -56,6 +56,7 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('trendyol.com') ||
     lowerUrl.includes('ty.gl') ||
     lowerUrl.includes('pttavm.com') ||
+    lowerUrl.includes('boyner.com.tr') ||
     lowerUrl.includes('gamer.gen.tr') ||
     lowerUrl.includes('gaming.gen.tr') ||
     lowerUrl.includes('incehesap.com')) {
@@ -180,6 +181,125 @@ async function resolveFenomShortLink(url) {
   return url;
 }
 
+/** HTML gövdesinden (amzlinks, meta-refresh, JS redirect, canonical veya mağaza regex) yönlendirme URL'sini çıkartır */
+function extractRedirectUrlFromBody(html, currentUrl) {
+  if (!html || typeof html !== 'string') return null;
+
+  // 1. Hedef URL query parametresi (btn_url, target_url, redirect_url, dest_url)
+  const urlParamMatch = html.match(/(?:btn_url|target_url|redirect_url|dest_url)=([^"&\s]+)/i);
+  if (urlParamMatch && urlParamMatch[1]) {
+    try {
+      const decoded = decodeURIComponent(urlParamMatch[1]);
+      if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+        console.log(`[RESOLVE-REDIRECT] ✅ Hedef URL parametresi yakalandı: ${decoded}`);
+        return decoded;
+      }
+    } catch (_) {}
+  }
+
+  // 2. HTML Meta Refresh etiketi: <meta http-equiv="refresh" content="0; url=...">
+  const metaRefreshMatch = html.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^"'>]*url=([^"'>\s]+)/i);
+  if (metaRefreshMatch && metaRefreshMatch[1]) {
+    const metaUrl = metaRefreshMatch[1];
+    if (metaUrl.startsWith('http://') || metaUrl.startsWith('https://')) {
+      console.log(`[RESOLVE-REDIRECT] ✅ HTML meta-refresh yakalandı: ${metaUrl}`);
+      return metaUrl;
+    }
+  }
+
+  // 3. JavaScript yönlendirmesi: window.location.href = "..."
+  const jsMatch = html.match(/(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i);
+  if (jsMatch && jsMatch[1]) {
+    const jsUrl = jsMatch[1];
+    if (jsUrl.startsWith('http://') || jsUrl.startsWith('https://')) {
+      console.log(`[RESOLVE-REDIRECT] ✅ JavaScript redirect yakalandı: ${jsUrl}`);
+      return jsUrl;
+    }
+  }
+
+  // 4. Canonical link etiketi: <link rel="canonical" href="...">
+  const canonicalMatch = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i);
+  if (canonicalMatch && canonicalMatch[1]) {
+    const canonicalUrl = canonicalMatch[1];
+    if (canonicalUrl.startsWith('http://') || canonicalUrl.startsWith('https://')) {
+      console.log(`[RESOLVE-REDIRECT] ✅ Canonical link etiketi yakalandı: ${canonicalUrl}`);
+      return canonicalUrl;
+    }
+  }
+
+  // 5. Desteklenen mağaza ürün linkleri regex fallback
+  // Amazon: /dp/, /gp/product/, /d/
+  const amazonMatch = html.match(/(https?:\/\/(?:www\.)?amazon\.com(?:\.tr)?\/(?:dp|gp\/product|d)\/[a-zA-Z0-9]{5,15}[^\s"'<>]*)/i);
+  if (amazonMatch && amazonMatch[1]) {
+    console.log(`[RESOLVE-REDIRECT] ✅ Amazon ürün regex yakalandı: ${amazonMatch[1]}`);
+    return amazonMatch[1];
+  }
+
+  // Trendyol: -p-12345
+  const trendyolMatch = html.match(/(https?:\/\/(?:www\.)?trendyol\.com\/[^\s"'<>]+-p-\d+[^\s"'<>]*)/i);
+  if (trendyolMatch && trendyolMatch[1]) {
+    console.log(`[RESOLVE-REDIRECT] ✅ Trendyol ürün regex yakalandı: ${trendyolMatch[1]}`);
+    return trendyolMatch[1];
+  }
+
+  // Hepsiburada: -(?:p|pm)-...
+  const hbMatch = html.match(/(https?:\/\/(?:www\.)?hepsiburada\.com\/[^\s"'<>]+-(?:p|pm)-[a-zA-Z0-9]+[^\s"'<>]*)/i);
+  if (hbMatch && hbMatch[1]) {
+    console.log(`[RESOLVE-REDIRECT] ✅ Hepsiburada ürün regex yakalandı: ${hbMatch[1]}`);
+    return hbMatch[1];
+  }
+
+  // N11: /urun/...-12345
+  const n11Match = html.match(/(https?:\/\/(?:www\.)?n11\.com\/urun\/[^\s"'<>]+-\d+[^\s"'<>]*)/i);
+  if (n11Match && n11Match[1]) {
+    console.log(`[RESOLVE-REDIRECT] ✅ N11 ürün regex yakalandı: ${n11Match[1]}`);
+    return n11Match[1];
+  }
+
+  // Pazarama: -p-...
+  const pazaramaMatch = html.match(/(https?:\/\/(?:www\.)?pazarama\.com\/[^\s"'<>]+-p-[a-zA-Z0-9-]+[^\s"'<>]*)/i);
+  if (pazaramaMatch && pazaramaMatch[1]) {
+    console.log(`[RESOLVE-REDIRECT] ✅ Pazarama ürün regex yakalandı: ${pazaramaMatch[1]}`);
+    return pazaramaMatch[1];
+  }
+
+  return null;
+}
+
+/** amzlinks.in kısa linklerini (amzlinks.in/...) uzun Amazon ürün linkine çözer */
+async function resolveAmzlinksShortLink(url) {
+  try {
+    console.log(`[RESOLVE-REDIRECT] 🔗 amzlinks kısa linki çözülüyor: ${url}`);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'WhatsApp/2.23.4.15 A',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8'
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(8000)
+    });
+
+    const location = res.headers.get('location');
+    if (location) {
+      console.log(`[RESOLVE-REDIRECT] ✅ amzlinks Location header yakalandı: ${location}`);
+      return location;
+    }
+
+    if (res.ok) {
+      const html = await res.text();
+      const extracted = extractRedirectUrlFromBody(html, url);
+      if (extracted) {
+        return extracted;
+      }
+    }
+  } catch (err) {
+    console.warn(`[RESOLVE-REDIRECT] ⚠️ amzlinks resolution hatası: ${err.message}`);
+  }
+  return url;
+}
+
 /**
  * Teknosa Paylaş Kazan yönlendirmesinden (Location header) kanonik ürün URL'sini ve shopId'yi çıkarır.
  */
@@ -280,6 +400,9 @@ async function resolveUrlRedirects(url) {
   }
   if (targetUrl.toLowerCase().includes('fenom.io')) {
     targetUrl = await resolveFenomShortLink(targetUrl);
+  }
+  if (targetUrl.toLowerCase().includes('amzlinks.')) {
+    targetUrl = await resolveAmzlinksShortLink(targetUrl);
   }
   const lowerUrl = targetUrl.toLowerCase();
 
@@ -481,7 +604,7 @@ async function resolveUrlRedirects(url) {
       'hb.biz', 'app.hb.biz', 'publicis.link',
       'bit.ly', 'tinyurl.com', 't.co', 'rebrand.ly',
       'rdrtr.com', 'onelink.me', 'paylaskazan.teknosa.com',
-      'rdr.btrck.com', 'sl.n11.com', 'fenom.io'
+      'rdr.btrck.com', 'sl.n11.com', 'fenom.io', 'pzrm.me'
     ];
     isShortOrRedirect = shortDomains.some(d => targetHost === d || targetHost.endsWith('.' + d));
   } catch (err) {
@@ -532,6 +655,22 @@ async function resolveUrlRedirects(url) {
       } catch (microErr) {
         console.warn(`[RESOLVE-REDIRECT] ⚠️ Microlink redirect resolution hatası: ${microErr.message}`);
       }
+    }
+
+    if (resolvedUrl.toLowerCase().includes('amzlinks.')) {
+      resolvedUrl = await resolveAmzlinksShortLink(resolvedUrl);
+    } else {
+      try {
+        const parsedFinal = new URL(resolvedUrl);
+        const isStillShort = shortDomains.some(d => parsedFinal.hostname === d || parsedFinal.hostname.endsWith('.' + d));
+        if (isStillShort && response.ok) {
+          const bodyText = await response.text();
+          const extracted = extractRedirectUrlFromBody(bodyText, resolvedUrl);
+          if (extracted) {
+            resolvedUrl = extracted;
+          }
+        }
+      } catch (_) {}
     }
 
     resolvedUrl = extractAdjustFallback(resolvedUrl);
@@ -619,7 +758,7 @@ async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime, preren
  * Bu fonksiyon özellikle Teknosa gibi agresif Cloudflare koruması olan siteler için.
  */
 function curlFetchHtml(targetUrl, originalUrl, fetchStartTime) {
-  if (targetUrl.includes('hepsiburada.com') || targetUrl.includes('trendyol.com') || targetUrl.includes('ty.gl') || targetUrl.includes('n11.com') || targetUrl.includes('vatanbilgisayar.com') || targetUrl.includes('pazarama.com') || targetUrl.includes('idefix.com') || targetUrl.includes('mediamarkt.com.tr') || targetUrl.includes('teknosa.com') || targetUrl.includes('incehesap.com') || targetUrl.includes('pttavm.com')) {
+  if (targetUrl.includes('hepsiburada.com') || targetUrl.includes('trendyol.com') || targetUrl.includes('ty.gl') || targetUrl.includes('n11.com') || targetUrl.includes('vatanbilgisayar.com') || targetUrl.includes('pazarama.com') || targetUrl.includes('idefix.com') || targetUrl.includes('mediamarkt.com.tr') || targetUrl.includes('teknosa.com') || targetUrl.includes('incehesap.com') || targetUrl.includes('pttavm.com') || targetUrl.includes('boyner.com.tr')) {
     try {
       console.log(`[FETCH-HTML] 🔧 curl (Clean headers) ile çekiliyor: ${targetUrl}`);
       let userAgent = 'WhatsApp/2.23.4.15 A';
@@ -987,6 +1126,7 @@ async function fetchHtml(url) {
   let isAmazon = false;
   let isGetir = false;
   let isIncehesap = false;
+  let isBoyner = false;
 
   try {
     const parsed = new URL(url);
@@ -1099,6 +1239,19 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       isPttavm = true;
       console.log(`[FETCH-HTML] 🔄 Pttavm linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
+    } else if (parsed.hostname.includes('boyner.com.tr')) {
+      // Boyner Cloudflare koruması altında — Node.js fetch() TLS fingerprint'i engelleniyor.
+      // curl + WhatsApp User-Agent kombinasyonuyla Cloudflare WAF engeli aşılıyor.
+      const keepParams = ['magaza', 'barcode'];
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      for (const key of keepParams) {
+        if (parsed.searchParams.has(key)) {
+          cleaned.searchParams.set(key, parsed.searchParams.get(key));
+        }
+      }
+      targetUrl = cleaned.toString();
+      isBoyner = true;
+      console.log(`[FETCH-HTML] 🔄 Boyner linki tespit edildi. Tracking params temizlendi. curl ile çekilecek: ${targetUrl}`);
     } else if (parsed.hostname.includes('amazon.') || parsed.hostname.includes('link.amazon') || parsed.hostname.includes('amzlinks.') || parsed.hostname.includes('amzn.') || parsed.hostname.includes('fenom.io')) {
       // Amazon linklerinde satıcı (smid) ve varyant (th, psc, m, isIsap) parametrelerini koru.
       // Aksi takdirde varsayılan farklı bir satıcının indirimsiz yüksek fiyatı çekilmektedir.
@@ -1142,8 +1295,8 @@ async function fetchHtml(url) {
 
   console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${targetUrl}`);
 
-  // ── Hepsiburada, Trendyol, Teknosa, İncehesap, Mavi, PttAVM & Amazon: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
-  if (isHepsiburada || isTrendyol || isTeknosa || isIncehesap || isMavi || isPttavm || isAmazon) {
+  // ── Hepsiburada, Trendyol, Teknosa, İncehesap, Mavi, PttAVM, Amazon & Boyner: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
+  if (isHepsiburada || isTrendyol || isTeknosa || isIncehesap || isMavi || isPttavm || isAmazon || isBoyner) {
     const html = curlFetchHtml(targetUrl, url, fetchStartTime);
     if (html && html.length > 1000) {
       return html;

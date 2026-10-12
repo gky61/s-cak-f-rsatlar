@@ -60,11 +60,11 @@ _ParsedAllowlistData _parseAllowlistJson(String jsonStr) {
 class DomainAllowlistService {
   /// Fallback (yedek) 20 mağaza tanımı
   static const Map<String, List<String>> _fallbackStores = {
-    "trendyol": ["trendyol.com"],
-    "hepsiburada": ["hepsiburada.com"],
-    "amazon_tr": ["amazon.com.tr"],
+    "trendyol": ["trendyol.com", "ty.gl"],
+    "hepsiburada": ["hepsiburada.com", "hb.biz"],
+    "amazon_tr": ["amazon.com.tr", "amzn.eu", "amzn.to", "link.amazon", "amzlinks.in"],
     "n11": ["n11.com"],
-    "pazarama": ["pazarama.com"],
+    "pazarama": ["pazarama.com", "pzrm.me"],
     "idefix": ["idefix.com"],
     "pttavm": ["pttavm.com"],
     "teknosa": ["teknosa.com"],
@@ -73,9 +73,9 @@ class DomainAllowlistService {
     "itopya": ["itopya.com"],
     "incehesap": ["incehesap.com"],
     "mavi": ["mavi.com"],
-    "defacto_tr": ["defacto.com.tr"],
-    "zara_tr": ["zara.com"],
-    "mango_tr": ["mango.com"],
+    "defacto": ["defacto.com.tr"],
+    "zara": ["zara.com"],
+    "mango": ["mango.com"],
     "beymen": ["beymen.com"],
     "migros": ["migros.com.tr"],
     "getir": ["getir.com"],
@@ -168,8 +168,16 @@ class DomainAllowlistService {
     'paylaskazan.teknosa.com',
     'rdr.btrck.com',
     'incehesap.com/u/',
-    'fenom.io'
+    'fenom.io',
+    'pzrm.me'
   ];
+
+  /// Verilen URL'nin bilinen bir kısa link veya aracı yönlendirme servisi olup olmadığını kontrol eder.
+  static bool isShortLink(String urlStr) {
+    if (urlStr.trim().isEmpty) return false;
+    final lower = urlStr.trim().toLowerCase();
+    return _shortLinkDomains.any((domain) => lower.contains(domain));
+  }
 
   /// Verilen URL'nin domain'inin (hostname) allowlist'te olup olmadığını kontrol eder.
   /// Hostname exact match ("trendyol.com") veya subdomain match (".trendyol.com") olmalıdır.
@@ -230,10 +238,11 @@ class DomainAllowlistService {
       if (resolved.toLowerCase().contains('fenom.io')) {
         resolved = await linkPreviewService.resolveFenomShortLink(resolved);
       }
+      if (resolved.toLowerCase().contains('amzlinks.')) {
+        resolved = await linkPreviewService.resolveAmzlinksShortLink(resolved);
+      }
       
-      final lowerResolved = resolved.toLowerCase();
-      final isShort = _shortLinkDomains.any((domain) => lowerResolved.contains(domain));
-      if (isShort) {
+      if (isShortLink(resolved)) {
         resolved = await linkPreviewService.resolveUrlRedirects(resolved);
       }
     } catch (_) {

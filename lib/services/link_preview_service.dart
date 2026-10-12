@@ -143,7 +143,8 @@ class LinkPreviewService {
         lowerUrl.contains('trendyol.com') ||
         lowerUrl.contains('ty.gl') ||
         lowerUrl.contains('incehesap.com') ||
-        lowerUrl.contains('pttavm.com')) {
+        lowerUrl.contains('pttavm.com') ||
+        lowerUrl.contains('boyner.com.tr')) {
       userAgent = 'WhatsApp/2.23.4.15 A';
     } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('havitstore.com.tr') || lowerUrl.contains('mango.com')) {
       userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -176,7 +177,7 @@ class LinkPreviewService {
     
     // Akamai Bot Manager ve AWS WAF gibi sıkı korumaları aşmak için Android ve iOS'ta native HTTP kütüphanesini kullanıyoruz.
     if ((defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && 
-        (lowerUrl.contains('zara.com') || lowerUrl.contains('getir.com') || lowerUrl.contains('itopya.com') || lowerUrl.contains('mango.com') || lowerUrl.contains('beymen.com') || lowerUrl.contains('defacto.com.tr') || lowerUrl.contains('mavi.com') || lowerUrl.contains('pttavm.com') || lowerUrl.contains('incehesap.com') || lowerUrl.contains('teknosa.com') || lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('n11.com') || lowerUrl.contains('hepsiburada.com') || lowerUrl.contains('trendyol.com'))) {
+        (lowerUrl.contains('zara.com') || lowerUrl.contains('getir.com') || lowerUrl.contains('itopya.com') || lowerUrl.contains('mango.com') || lowerUrl.contains('beymen.com') || lowerUrl.contains('defacto.com.tr') || lowerUrl.contains('mavi.com') || lowerUrl.contains('pttavm.com') || lowerUrl.contains('incehesap.com') || lowerUrl.contains('teknosa.com') || lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('n11.com') || lowerUrl.contains('hepsiburada.com') || lowerUrl.contains('trendyol.com') || lowerUrl.contains('boyner.com.tr'))) {
       _log('🚀 Native HTTP istemcisi çağrılıyor: $url');
       try {
         final headers = _getHeadersForUrl(url);
@@ -230,24 +231,10 @@ class LinkPreviewService {
       if (targetUrl.toLowerCase().contains('fenom.io')) {
         targetUrl = await resolveFenomShortLink(targetUrl);
       }
-      final lowerUrl = targetUrl.toLowerCase();
-      final isShortOrRedirect = lowerUrl.contains('amzn.eu') || 
-                               lowerUrl.contains('amzn.to') || 
-                               lowerUrl.contains('link.amazon') || 
-                               lowerUrl.contains('hb.biz') ||
-                               lowerUrl.contains('publicis.link') ||
-                               lowerUrl.contains('bit.ly') ||
-                               lowerUrl.contains('tinyurl.com') ||
-                               lowerUrl.contains('t.co') ||
-                               lowerUrl.contains('rebrand.ly') ||
-                               lowerUrl.contains('rdrtr.com') ||
-                               lowerUrl.contains('onelink.me') ||
-                               lowerUrl.contains('paylaskazan.teknosa.com') ||
-                               lowerUrl.contains('incehesap.com/u/') ||
-                               lowerUrl.contains('ty.gl') ||
-                               lowerUrl.contains('fenom.io');
-
-      if (isShortOrRedirect) {
+      if (targetUrl.toLowerCase().contains('amzlinks.')) {
+        targetUrl = await resolveAmzlinksShortLink(targetUrl);
+      }
+      if (DomainAllowlistService.isShortLink(targetUrl)) {
         final resolved = await resolveUrlRedirects(targetUrl);
         if (resolved.isNotEmpty) {
           targetUrl = resolved;
@@ -563,8 +550,11 @@ class LinkPreviewService {
       if (currentUrl.toLowerCase().contains('fenom.io')) {
         currentUrl = await resolveFenomShortLink(currentUrl);
       }
+      if (currentUrl.toLowerCase().contains('amzlinks.')) {
+        currentUrl = await resolveAmzlinksShortLink(currentUrl);
+      }
       if (currentUrl != cleanInput) {
-        _log('🎯 Adjust yönlendirmesi hemen çözüldü: $currentUrl');
+        _log('🎯 Ön çözümleme yönlendirmesi hemen çözüldü: $currentUrl');
         if (_redirectCache.length >= _maxRedirectCacheSize) {
           _redirectCache.remove(_redirectCache.keys.first);
         }
@@ -599,8 +589,25 @@ class LinkPreviewService {
           redirectCount++;
           _log('   -> Yönlendi ($redirectCount): $currentUrl');
 
-          // Eğer hedef URL zaten İncehesap kanonik ürün sayfasına ulaştıysa döngüyü hemen tamamla
-          if (currentUrl.contains('incehesap.com') && RegExp(r'-fiyati-\d+').hasMatch(currentUrl)) {
+          // Eğer hedef URL zaten kanonik ürün sayfasına ulaştıysa döngüyü hemen tamamla
+          if (_isCanonicalProductUrl(currentUrl)) {
+            break;
+          }
+        } else if (response.statusCode == 200) {
+          // Location header'ı yok, ancak sayfa 200 OK döndü.
+          // amzlinks.in gibi bazı kısa link servisleri WhatsApp UA gördüğünde
+          // 302 yerine HTML içinde <base href="...btn_url=..."> veya meta-refresh döner.
+          final body = await response.stream.bytesToString();
+          final extractedUrl = _extractRedirectUrlFromBody(body, currentUrl);
+          if (extractedUrl != null && extractedUrl.isNotEmpty && extractedUrl != currentUrl) {
+            currentUrl = extractedUrl;
+            redirectCount++;
+            _log('   -> HTML İçeriğinden Yönlendi ($redirectCount): $currentUrl');
+
+            if (_isCanonicalProductUrl(currentUrl)) {
+              break;
+            }
+          } else {
             break;
           }
         } else {
@@ -619,6 +626,181 @@ class LinkPreviewService {
       _log('⚠️ Yönlendirme çözme hatası: $e, orijinal URL kullanılıyor');
       return url;
     }
+  }
+
+  /// Verilen URL'nin bilinen bir mağazanın nihai kanonik ürün sayfası olup olmadığını kontrol eder
+  bool _isCanonicalProductUrl(String url) {
+    // Kısa linkler veya aracı yönlendirmeler ASLA kanonik ürün sayfası değildir
+    if (DomainAllowlistService.isShortLink(url)) {
+      return false;
+    }
+
+    final lower = url.toLowerCase();
+    // Amazon kanonik ürün sayfası (/dp/..., /gp/product/..., /d/...)
+    if (lower.contains('amazon.com.tr') && (lower.contains('/dp/') || lower.contains('/gp/product/') || lower.contains('/d/'))) {
+      return true;
+    }
+    // Hepsiburada kanonik ürün sayfası (-p-..., -pm-...)
+    if (lower.contains('hepsiburada.com') && RegExp(r'-(?:p|pm)-[a-z0-9]+').hasMatch(lower)) {
+      return true;
+    }
+    // Trendyol kanonik ürün sayfası (-p-12345)
+    if (lower.contains('trendyol.com') && RegExp(r'-p-\d+').hasMatch(lower)) {
+      return true;
+    }
+    // N11 kanonik ürün sayfası (/urun/...-12345)
+    if (lower.contains('n11.com') && RegExp(r'/urun/.+-\d+').hasMatch(lower)) {
+      return true;
+    }
+    // Pazarama kanonik ürün sayfası (-p-...)
+    if (lower.contains('pazarama.com') && RegExp(r'-p-[a-z0-9-]+').hasMatch(lower)) {
+      return true;
+    }
+    // İncehesap kanonik ürün sayfası (-fiyati-12345)
+    if (lower.contains('incehesap.com') && RegExp(r'-fiyati-\d+').hasMatch(lower)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// HTML gövdesinden (amzlinks.in, meta-refresh, JS redirect veya affiliate landing page) yönlendirme URL'sini çıkartır
+  String? _extractRedirectUrlFromBody(String body, String currentUrl) {
+    if (body.isEmpty) return null;
+
+    // 1. btn_url / target_url / redirect_url query parametresi (<base href="..."> veya query parametresi)
+    final urlParamMatch = RegExp(
+      r'(?:btn_url|target_url|redirect_url|dest_url)=([^"&\s]+)',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (urlParamMatch != null) {
+      try {
+        final rawDecoded = Uri.decodeComponent(urlParamMatch.group(1)!);
+        if (rawDecoded.startsWith('http://') || rawDecoded.startsWith('https://')) {
+          return rawDecoded;
+        }
+      } catch (_) {}
+    }
+
+    // 2. HTML Meta Refresh etiketi: <meta http-equiv="refresh" content="0; url=...">
+    final metaRefreshMatch = RegExp(
+      r'''<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^"'>]*url=([^"'>\s]+)''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (metaRefreshMatch != null) {
+      final metaUrl = metaRefreshMatch.group(1)!;
+      if (metaUrl.startsWith('http://') || metaUrl.startsWith('https://')) {
+        return metaUrl;
+      }
+    }
+
+    // 3. JavaScript yönlendirmesi: window.location.href = "..."
+    final jsMatch = RegExp(
+      r'''(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (jsMatch != null) {
+      final jsUrl = jsMatch.group(1)!;
+      if (jsUrl.startsWith('http://') || jsUrl.startsWith('https://')) {
+        return jsUrl;
+      }
+    }
+
+    // 4. Canonical link etiketi: <link rel="canonical" href="...">
+    final canonicalMatch = RegExp(
+      r'''<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (canonicalMatch != null) {
+      final canonicalUrl = canonicalMatch.group(1)!;
+      if ((canonicalUrl.startsWith('http://') || canonicalUrl.startsWith('https://')) &&
+          DomainAllowlistService.isDomainAllowed(canonicalUrl) &&
+          DomainAllowlistService.isProductUrl(canonicalUrl)) {
+        return canonicalUrl;
+      }
+    }
+
+    // 5. Desteklenen mağaza ürün linkleri regex fallback (HTML içinde geçen geçerli e-ticaret ürün URL'leri)
+    // Amazon: /dp/, /gp/product/, /d/
+    final amazonMatch = RegExp(
+      r'''(https?://(?:www\.)?amazon\.com(?:\.tr)?/(?:dp|gp/product|d)/[a-zA-Z0-9]{5,15}[^\s"'>]*)''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (amazonMatch != null) {
+      return amazonMatch.group(1)!;
+    }
+
+    // Trendyol: -p-12345
+    final trendyolMatch = RegExp(
+      r'''(https?://(?:www\.)?trendyol\.com/[^\s"'>]+-p-\d+[^\s"'>]*)''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (trendyolMatch != null) {
+      return trendyolMatch.group(1)!;
+    }
+
+    // Hepsiburada: -p-HBV... veya -pm-...
+    final hbMatch = RegExp(
+      r'''(https?://(?:www\.)?hepsiburada\.com/[^\s"'>]+-(?:p|pm)-[a-zA-Z0-9]+[^\s"'>]*)''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (hbMatch != null) {
+      return hbMatch.group(1)!;
+    }
+
+    // N11: /urun/...-12345
+    final n11Match = RegExp(
+      r'''(https?://(?:www\.)?n11\.com/urun/[^\s"'>]+-\d+[^\s"'>]*)''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (n11Match != null) {
+      return n11Match.group(1)!;
+    }
+
+    // Pazarama: -p-...
+    final pazaramaMatch = RegExp(
+      r'''(https?://(?:www\.)?pazarama\.com/[^\s"'>]+-p-[a-zA-Z0-9-]+[^\s"'>]*)''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (pazaramaMatch != null) {
+      return pazaramaMatch.group(1)!;
+    }
+
+    return null;
+  }
+
+  /// amzlinks.in linklerini (amzlinks.in/...) uzun Amazon ürün linkine çözer
+  Future<String> resolveAmzlinksShortLink(String url) async {
+    try {
+      _log('🔗 amzlinks kısa linki çözülüyor: $url');
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(url))
+        ..followRedirects = false
+        ..headers['User-Agent'] = 'WhatsApp/2.23.4.15 A'
+        ..headers['Accept-Language'] = 'tr-TR,tr;q=0.9,en-US;q=0.8';
+      final response = await client.send(request).timeout(const Duration(seconds: 6));
+      
+      final location = response.headers['location'] ?? response.headers['Location'];
+      if (location != null && location.isNotEmpty) {
+        client.close();
+        _log('✅ amzlinks Location header ile çözüldü: $location');
+        return location;
+      }
+
+      if (response.statusCode == 200) {
+        final body = await response.stream.bytesToString();
+        client.close();
+        final extracted = _extractRedirectUrlFromBody(body, url);
+        if (extracted != null && extracted.isNotEmpty) {
+          _log('✅ amzlinks HTML body üzerinden çözüldü: $extracted');
+          return extracted;
+        }
+      }
+      client.close();
+    } catch (e) {
+      _log('⚠️ amzlinks kısa link çözme hatası: $e');
+    }
+    return url;
   }
 
   // N11 kısa linklerini (sl.n11.com/n/...) uzun ürün linkine çözer

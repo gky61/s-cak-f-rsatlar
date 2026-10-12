@@ -16,47 +16,21 @@ void main() {
       const amznText = 'Amazon Fırsatı: https://amzn.eu/d/1a2b3c';
       expect(DealUrlDetector.extractUrl(amznText), 'https://amzn.eu/d/1a2b3c');
 
-      // Mavi Mobil Uygulaması Paylaşımı (Relatif yol: /.../p/...)
-      const maviSharedText = '/mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
-      expect(
-        DealUrlDetector.extractUrl(maviSharedText),
-        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
-      );
+      // Mavi Standart HTTP/HTTPS URL Paylaşımı
+      const maviUrl = 'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
+      expect(DealUrlDetector.extractUrl(maviUrl), maviUrl);
 
-      // Mavi Mobil Paylaşımı (Metin içerisinde)
-      const maviInText = 'Mavi gömlek fırsatı: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804 mutlaka bak!';
-      expect(
-        DealUrlDetector.extractUrl(maviInText),
-        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
-      );
+      // Mavi Metin İçerisinde Paylaşım
+      const maviInText = 'Mavi gömlek fırsatı: https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804 mutlaka bak!';
+      expect(DealUrlDetector.extractUrl(maviInText), maviUrl);
 
-      // Mavi Mobil Paylaşımı (Başında slash olmayan format)
-      const maviNoSlash = 'mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
-      expect(
-        DealUrlDetector.extractUrl(maviNoSlash),
-        'https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804',
-      );
+      // Boyner Standart HTTP/HTTPS URL Paylaşımı
+      const boynerUrl = 'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996';
+      expect(DealUrlDetector.extractUrl(boynerUrl), boynerUrl);
 
-      // Boyner Mobil Uygulaması Paylaşımı (Ürün slug formatı: ...-p-...)
-      const boynerSharedText = 'patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996';
-      expect(
-        DealUrlDetector.extractUrl(boynerSharedText),
-        'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
-      );
-
-      // Boyner Mobil Paylaşımı (Metin içerisinde ve noktalama işaretli)
-      const boynerInText = 'Boyner indiriminde buldum: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996.';
-      expect(
-        DealUrlDetector.extractUrl(boynerInText),
-        'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
-      );
-
-      // Boyner Mobil Paylaşımı (Başında slash olan format)
-      const boynerSlash = '/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996';
-      expect(
-        DealUrlDetector.extractUrl(boynerSlash),
-        'https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
-      );
+      // Boyner Metin İçerisinde ve Noktalama İşaretli Paylaşım
+      const boynerInText = 'Boyner indiriminde buldum: https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996.';
+      expect(DealUrlDetector.extractUrl(boynerInText), boynerUrl);
 
       // Şemasız Mağaza Alan Adı (www. veya çıplak domain)
       const bareMavi = 'www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804';
@@ -71,8 +45,17 @@ void main() {
         'https://boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996',
       );
 
-      // Link içermeyen veya sahte pozitif olabilecek metinler
+      // Şemasız subdomain kısa linkleri (app.hb.biz, sl.n11.com, pzrm.me)
+      expect(DealUrlDetector.extractUrl('app.hb.biz/xyz456'), 'https://app.hb.biz/xyz456');
+      expect(DealUrlDetector.extractUrl('sl.n11.com/n/abc123'), 'https://sl.n11.com/n/abc123');
+      expect(DealUrlDetector.extractUrl('pzrm.me/item123'), 'https://pzrm.me/item123');
+
+      // Link içermeyen veya düz yazı metinler (artık URL olarak kabul EDİLMEMELİDİR)
       expect(DealUrlDetector.extractUrl('Bugün hava çok güzel hiçbir link yok.'), isNull);
+      expect(DealUrlDetector.extractUrl('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isNull);
+      expect(DealUrlDetector.extractUrl('mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isNull);
+      expect(DealUrlDetector.extractUrl('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isNull);
+      expect(DealUrlDetector.extractUrl('/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isNull);
       expect(DealUrlDetector.extractUrl('Bugün p/ahmet ile buluştuk.'), isNull);
       expect(DealUrlDetector.extractUrl('Toplantı notları 3/p/5 maddesi.'), isNull);
       expect(DealUrlDetector.extractUrl('Sadece rastgele kelime-p-abc.'), isNull);
@@ -87,15 +70,21 @@ void main() {
       expect(DealUrlDetector.detectStoreName('https://amzn.to/3abcdef'), 'Amazon');
       expect(DealUrlDetector.detectStoreName('https://www.teknosa.com/apple-iphone-15-p-123'), 'Teknosa');
       expect(DealUrlDetector.detectStoreName('https://www.n11.com/urun/samsung-galaxy-123'), 'N11');
+      expect(DealUrlDetector.detectStoreName('https://sl.n11.com/n/abc123'), 'N11');
       expect(DealUrlDetector.detectStoreName('https://www.pazarama.com/laptop-p-123'), 'Pazarama');
+      expect(DealUrlDetector.detectStoreName('https://pzrm.me/item123'), 'Pazarama');
+      expect(DealUrlDetector.detectStoreName('https://www.idefix.com/kitap-p-123'), 'İdefix');
       expect(DealUrlDetector.detectStoreName('https://www.vatanbilgisayar.com/asus-rog-laptop.html'), 'Vatan Bilgisayar');
       expect(DealUrlDetector.detectStoreName('https://www.mediamarkt.com.tr/tr/product/123.html'), 'MediaMarkt');
       expect(DealUrlDetector.detectStoreName('https://www.itopya.com/hazir-sistemler/'), 'İtopya');
       expect(DealUrlDetector.detectStoreName('https://www.zara.com/tr/tr/gomlek-p123.html'), 'Zara');
       expect(DealUrlDetector.detectStoreName('https://www.boyner.com.tr/ayakkabi-c-123'), 'Boyner');
-      expect(DealUrlDetector.detectStoreName('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), 'Mavi');
-      expect(DealUrlDetector.detectStoreName('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), 'Boyner');
+      expect(DealUrlDetector.detectStoreName('https://www.mavi.com/p/0212124-70804'), 'Mavi');
       expect(DealUrlDetector.detectStoreName('https://fenom.io/amzn-vd612'), 'Amazon');
+
+      // Düz yazı veya göreli yollar artık mağaza olarak tespit EDİLMEMELİDİR (Link değiller)
+      expect(DealUrlDetector.detectStoreName('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isNull);
+      expect(DealUrlDetector.detectStoreName('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isNull);
 
       // Desteklenmeyen / Alakasız link
       expect(DealUrlDetector.detectStoreName('https://google.com/search?q=test'), isNull);
@@ -105,9 +94,15 @@ void main() {
     test('Desteklenen e-ticaret kontrolü (isSupportedEcommerceUrl)', () {
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://ty.gl/123'), isTrue);
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://app.hb.biz/456'), isTrue);
-      expect(DealUrlDetector.isSupportedEcommerceUrl('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isTrue);
-      expect(DealUrlDetector.isSupportedEcommerceUrl('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isTrue);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('https://pzrm.me/item123'), isTrue);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('https://sl.n11.com/n/123'), isTrue);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isTrue);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isTrue);
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://fenom.io/amzn-vd612'), isTrue);
+
+      // Düz yazı / göreli yollar artık e-ticaret URL'si değildir
+      expect(DealUrlDetector.isSupportedEcommerceUrl('/mavi-logo-baskili-mavi-gomlek/p/0212124-70804'), isFalse);
+      expect(DealUrlDetector.isSupportedEcommerceUrl('patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996'), isFalse);
       expect(DealUrlDetector.isSupportedEcommerceUrl('https://google.com'), isFalse);
     });
   });

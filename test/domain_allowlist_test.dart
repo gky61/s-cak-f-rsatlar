@@ -48,6 +48,22 @@ void main() {
         expect(DomainAllowlistService.isDomainAllowed(url), isFalse, reason: 'Should reject $url');
       }
     });
+
+    test('Supported short links should be allowed', () {
+      final shortUrls = [
+        'https://amzn.eu/d/07A3YdHA',
+        'https://amzn.to/3kR2abc',
+        'https://link.amazon/07A3YdHA',
+        'https://ty.gl/xyz123',
+        'https://hb.biz/abc789',
+        'https://app.hb.biz/abc789',
+        'https://sl.n11.com/n/abc123',
+        'https://pzrm.me/item123',
+      ];
+      for (final url in shortUrls) {
+        expect(DomainAllowlistService.isDomainAllowed(url), isTrue, reason: 'Short link failed: $url');
+      }
+    });
   });
 
   group('isProductUrl Tests (Fallback - product_path_rules yüklenmemiş)', () {

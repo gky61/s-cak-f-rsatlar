@@ -94,6 +94,9 @@ let lastSeenMessageIds = new Map();
 let channelPtsMap = new Map(); // Kanal PTS takibi (getChannelDifference için)
 let processedMsgIds = new Set(); // Push + Polling tekrar engelleme (dedup)
 let pollingInterval = null;
+let isPollingInProgress = false; // P0: Eşzamanlı polling çakışmasını engelleyen mutex kilidi
+const inFlightUrls = new Map(); // P1: cleanUrl -> timestamp (Aynı anda işlenen URL'lerin yarış durumu kilidi)
+const IN_FLIGHT_TIMEOUT_MS = 30000; // 30 saniye maksimum in-flight bekleme zaman aşımı
 
 // Sayaçlar ve Durum Değişkenleri
 let msgCount = 0;
@@ -249,10 +252,11 @@ async function executeSystemCleanup() {
     const initialMem = process.memoryUsage();
     addLog(`🧠 Başlangıç RAM: ${(initialMem.heapUsed / 1024 / 1024).toFixed(2)} MB Heap (RSS: ${(initialMem.rss / 1024 / 1024).toFixed(2)} MB)`);
 
-    // 1. Mükerrer Mesaj Haritası Temizliği
+    // 1. Mükerrer Mesaj Haritası ve In-Flight Kilit Temizliği
     const dedupBefore = processedMsgIds.size;
     processedMsgIds.clear();
-    addLog(`🗑️ Mükerrer mesaj kimlik önbelleği temizlendi (${dedupBefore} kayıt silindi).`);
+    inFlightUrls.clear();
+    addLog(`🗑️ Mükerrer mesaj kimlik önbelleği ve in-flight kilitleri temizlendi (${dedupBefore} kayıt silindi).`);
 
     // 2. V8 Engine Garbage Collector
     if (typeof global.gc === 'function') {
@@ -1080,6 +1084,35 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       }
     });
 
+    // 🛡️ P0 - Kalite Kapısı (Quality Gate):
+    // Kural: Fiyat çekilemezse, başlık belirsizse veya görsel yoksa fırsat ASLA atlanmaz/kaçırılmaz,
+    // ancak appSettings 'otomatik onay' olsa dahi KESİNLİKLE admin onayına zorlanır!
+    const isMissingPrice = !finalPrice || finalPrice <= 0;
+    const isGenericTitle = !cleanedTitle || cleanedTitle === 'Fırsat Ürünü' || cleanedTitle.length < 3;
+    const isMissingImage = !imageUrl;
+
+    let requiresManualReview = false;
+    const reviewReasons = [];
+
+    if (isMissingPrice) {
+      requiresManualReview = true;
+      reviewReasons.push('Fiyat tespit edilemedi (0 TL)');
+    }
+    if (isGenericTitle) {
+      requiresManualReview = true;
+      reviewReasons.push('Jenerik / Belirsiz başlık');
+    }
+    if (isMissingImage) {
+      requiresManualReview = true;
+      reviewReasons.push('Görsel bulunamadı');
+    }
+
+    let isApprovedFinal = !dealApprovalRequired;
+    if (requiresManualReview) {
+      isApprovedFinal = false;
+      console.log(`🛡️ [QUALITY GATE] Fırsat eksik veri sebebiyle admin onayına zorlandı (${uniqueDocId}): ${reviewReasons.join(', ')}`);
+    }
+
     // Deal objesi
     const deal = {
       title: cleanedTitle,
@@ -1094,7 +1127,9 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       imageUrl: imageUrl,
       store: storeFromLink,
       category: finalCategory,
-      isApproved: !dealApprovalRequired,
+      isApproved: isApprovedFinal,
+      requiresManualReview: requiresManualReview,
+      reviewReason: reviewReasons.length > 0 ? reviewReasons.join(', ') : null,
       isUserSubmitted: false,
       isActive: true,
       isExpired: false,
@@ -1405,6 +1440,22 @@ async function handleTelegramMessageEvent(event) {
       console.warn(`[DUPLICATE-CHECK] ⚠️ Yönlendirme çözülemedi: ${e.message}`);
     }
     const cleanUrl = cleanProductUrl(resolvedLink);
+
+    // 🛡️ P1: In-Flight URL Yarış Durumu (Race Condition) Kalkanı:
+    // Eğer aynı kanonik ürün URL'si şu anda başka bir kanaldan işleniyorsa, fırsatı ATMAYIZ!
+    // İlk işlemin veritabanına yazması için 4 saniye bekleriz.
+    if (cleanUrl) {
+      const nowTs = Date.now();
+      for (const [k, ts] of inFlightUrls.entries()) {
+        if (nowTs - ts > IN_FLIGHT_TIMEOUT_MS) inFlightUrls.delete(k);
+      }
+
+      if (inFlightUrls.has(cleanUrl)) {
+        console.log(`⏳ [IN-FLIGHT WAIT] ${cleanUrl} şu an başka bir kanaldan işleniyor. Fırsat kaybını önlemek için sonuç bekleniyor (4 sn)...`);
+        await new Promise(resolve => setTimeout(resolve, 4000));
+      }
+    }
+
     let isDuplicate = false;
     if (cleanUrl) {
       const querySnapshot = await db.collection('deals')
@@ -1483,9 +1534,21 @@ async function handleTelegramMessageEvent(event) {
 
     console.log(`📝 Mesaj içeriği: ${message.message?.substring(0, 100)}...`);
 
-    const success = await saveDealToFirebase(message, matchedChannel);
-    if (success) {
-      dealCount++;
+    // İşlem başlarken in-flight kilidi koy
+    if (cleanUrl) {
+      inFlightUrls.set(cleanUrl, Date.now());
+    }
+
+    let success = false;
+    try {
+      success = await saveDealToFirebase(message, matchedChannel);
+      if (success) {
+        dealCount++;
+      }
+    } finally {
+      if (cleanUrl) {
+        inFlightUrls.delete(cleanUrl);
+      }
     }
   } catch (error) {
     errCount++;
@@ -1497,103 +1560,115 @@ async function handleTelegramMessageEvent(event) {
 async function pollMonitoredChannels() {
   if (!client || !isRunning || !botEnabled) return;
 
-  const processedInputs = new Set();
+  if (isPollingInProgress) {
+    console.log('⏳ Önceki kanal takip (polling) döngüsü henüz tamamlanmadı, çakışmayı önlemek için bu tur atlandı.');
+    return;
+  }
 
-  for (const [key, channelInfo] of monitoredMap.entries()) {
-    if (!channelInfo || processedInputs.has(channelInfo.cleanId)) continue;
-    processedInputs.add(channelInfo.cleanId);
+  isPollingInProgress = true;
+  try {
+    const processedInputs = new Set();
 
-    try {
-      const cleanId = channelInfo.cleanId;
-      const currentPts = channelPtsMap.get(cleanId);
+    for (const [key, channelInfo] of monitoredMap.entries()) {
+      if (!channelInfo || processedInputs.has(channelInfo.cleanId)) continue;
+      processedInputs.add(channelInfo.cleanId);
 
-      // PTS varsa getChannelDifference kullan (daha verimli)
-      if (currentPts && channelInfo.accessHash) {
-        try {
-          const inputChannel = new Api.InputChannel({
-            channelId: BigInt(cleanId),
-            accessHash: BigInt(channelInfo.accessHash)
-          });
+      try {
+        const cleanId = channelInfo.cleanId;
+        const currentPts = channelPtsMap.get(cleanId);
 
-          const diff = await client.invoke(new Api.updates.GetChannelDifference({
-            force: false,
-            channel: inputChannel,
-            filter: new Api.ChannelMessagesFilterEmpty(),
-            pts: currentPts,
-            limit: 10
-          }));
+        // PTS varsa getChannelDifference kullan (daha verimli)
+        if (currentPts && channelInfo.accessHash) {
+          try {
+            const inputChannel = new Api.InputChannel({
+              channelId: BigInt(cleanId),
+              accessHash: BigInt(channelInfo.accessHash)
+            });
 
-          // PTS güncelle
-          const newPts = diff.pts || diff.dialog?.pts;
-          if (newPts) {
-            channelPtsMap.set(cleanId, newPts);
-          }
+            const diff = await client.invoke(new Api.updates.GetChannelDifference({
+              force: false,
+              channel: inputChannel,
+              filter: new Api.ChannelMessagesFilterEmpty(),
+              pts: currentPts,
+              limit: 10
+            }));
 
-          // Yeni mesajlar var mı?
-          if (diff.newMessages && diff.newMessages.length > 0) {
-            for (const msg of diff.newMessages) {
-              // Dedup kontrolü
-              const dedupKey = `${cleanId}_${msg.id}`;
-              if (processedMsgIds.has(dedupKey)) continue;
-              processedMsgIds.add(dedupKey);
+            // PTS güncelle
+            const newPts = diff.pts || diff.dialog?.pts;
+            if (newPts) {
+              channelPtsMap.set(cleanId, newPts);
+            }
 
-              console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via ChannelDiff)`);
+            // Yeni mesajlar var mı?
+            if (diff.newMessages && diff.newMessages.length > 0) {
+              for (const msg of diff.newMessages) {
+                // Dedup kontrolü
+                const dedupKey = `${cleanId}_${msg.id}`;
+                if (processedMsgIds.has(dedupKey)) continue;
+                processedMsgIds.add(dedupKey);
 
-              const fakeEvent = {
-                message: msg,
-                chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
-              };
-              await handleTelegramMessageEvent(fakeEvent);
+                console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via ChannelDiff)`);
+
+                const fakeEvent = {
+                  message: msg,
+                  chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
+                };
+                await handleTelegramMessageEvent(fakeEvent);
+              }
+            }
+
+            // Dedup setini temiz tut
+            if (processedMsgIds.size > 500) {
+              const arr = [...processedMsgIds];
+              processedMsgIds = new Set(arr.slice(arr.length - 250));
+            }
+
+            continue; // Başarılı - sonraki kanala geç
+          } catch (eDiff) {
+            // getChannelDifference başarısız olursa getMessages fallback'e düş
+            if (!eDiff.message?.includes('CHANNEL_PRIVATE')) {
+              console.log(`ℹ️ [${channelInfo.title}] ChannelDiff uyarısı: ${eDiff.message}, getMessages fallback kullanılıyor.`);
             }
           }
-
-          // Dedup setini temiz tut
-          if (processedMsgIds.size > 500) {
-            const arr = [...processedMsgIds];
-            processedMsgIds = new Set(arr.slice(arr.length - 250));
-          }
-
-          continue; // Başarılı - sonraki kanala geç
-        } catch (eDiff) {
-          // getChannelDifference başarısız olursa getMessages fallback'e düş
-          if (!eDiff.message?.includes('CHANNEL_PRIVATE')) {
-            console.log(`ℹ️ [${channelInfo.title}] ChannelDiff uyarısı: ${eDiff.message}, getMessages fallback kullanılıyor.`);
-          }
         }
+
+        // FALLBACK: getMessages ile polling (PTS yoksa veya ChannelDiff başarısız olduysa)
+        const messages = await client.getMessages(channelInfo.input, { limit: 2 });
+        if (!messages || !messages.length) continue;
+
+        const lastSeenId = lastSeenMessageIds.get(cleanId) || 0;
+
+        if (lastSeenId === 0) {
+          lastSeenMessageIds.set(cleanId, messages[0].id);
+          continue;
+        }
+
+        const newMessages = messages.filter(m => m.id > lastSeenId).sort((a, b) => a.id - b.id);
+
+        for (const msg of newMessages) {
+          lastSeenMessageIds.set(cleanId, Math.max(lastSeenMessageIds.get(cleanId) || 0, msg.id));
+
+          // Dedup kontrolü
+          const dedupKey = `${cleanId}_${msg.id}`;
+          if (processedMsgIds.has(dedupKey)) continue;
+          processedMsgIds.add(dedupKey);
+
+          console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via Polling Fallback)`);
+
+          const fakeEvent = {
+            message: msg,
+            chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
+          };
+          await handleTelegramMessageEvent(fakeEvent);
+        }
+      } catch (ePoll) {
+        // Polling hataları yutulur
       }
-
-      // FALLBACK: getMessages ile polling (PTS yoksa veya ChannelDiff başarısız olduysa)
-      const messages = await client.getMessages(channelInfo.input, { limit: 2 });
-      if (!messages || !messages.length) continue;
-
-      const lastSeenId = lastSeenMessageIds.get(cleanId) || 0;
-
-      if (lastSeenId === 0) {
-        lastSeenMessageIds.set(cleanId, messages[0].id);
-        continue;
-      }
-
-      const newMessages = messages.filter(m => m.id > lastSeenId).sort((a, b) => a.id - b.id);
-
-      for (const msg of newMessages) {
-        lastSeenMessageIds.set(cleanId, Math.max(lastSeenMessageIds.get(cleanId) || 0, msg.id));
-
-        // Dedup kontrolü
-        const dedupKey = `${cleanId}_${msg.id}`;
-        if (processedMsgIds.has(dedupKey)) continue;
-        processedMsgIds.add(dedupKey);
-
-        console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via Polling Fallback)`);
-
-        const fakeEvent = {
-          message: msg,
-          chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
-        };
-        await handleTelegramMessageEvent(fakeEvent);
-      }
-    } catch (ePoll) {
-      // Polling hataları yutulur
     }
+  } catch (eGlobalPoll) {
+    console.warn('⚠️ pollMonitoredChannels genel döngü uyarısı:', eGlobalPoll.message);
+  } finally {
+    isPollingInProgress = false;
   }
 }
 
@@ -1659,9 +1734,10 @@ async function startBot() {
     console.log('🎉 Bot başarıyla başlatıldı! Kanallar dinleniyor...');
 
     // Akıllı Kanal Takip Döngüsü (getChannelDifference + Polling Fallback)
+    // P0: 10 kanal için Telegram FloodWait kalkanı - 1 dakika (60.000 ms) periyot
     if (pollingInterval) clearInterval(pollingInterval);
-    pollingInterval = setInterval(pollMonitoredChannels, 5000);
-    console.log('⚡ Akıllı kanal takip döngüsü başlatıldı (getChannelDifference + Push + Polling Fallback)!');
+    pollingInterval = setInterval(pollMonitoredChannels, 60000);
+    console.log('⚡ Akıllı kanal takip döngüsü başlatıldı (1 dk periyot, push destekli fallback)!');
 
     // Keep-alive
     setInterval(() => {

@@ -8,21 +8,7 @@ class DealUrlDetector {
 
   /// Bilinen e-ticaret mağaza alan adları (şemasız veya www ile başlayan paylaşımlar için)
   static final RegExp _bareDomainRegex = RegExp(
-    r'(?:^|[\s(])((?:www\.)?(?:mavi\.com|boyner\.com\.tr|trendyol\.com|hepsiburada\.com|amazon\.com\.tr|amazon\.com|teknosa\.com|n11\.com|pazarama\.com|vatanbilgisayar\.com|mediamarkt\.com\.tr|idefix\.com|itopya\.com|incehesap\.com|migros\.com\.tr|getir\.com|beymen\.com|zara\.com|mango\.com|defacto\.com\.tr|pttavm\.com|havitstore\.com\.tr|gamer\.gen\.tr|gaming\.gen\.tr|fenom\.io)\/[^\s)]*)',
-    caseSensitive: false,
-  );
-
-  /// Mavi mobil uygulaması göreli ürün yolu kalıbı:
-  /// Örn: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804 veya mavi-logo-baskili-mavi-gomlek/p/0212124-70804
-  static final RegExp _maviRelativePathRegex = RegExp(
-    r'(?:^|[\s(])(\/?(?:[a-zA-Z0-9_\u00C0-\u017F-]+\/)?p\/[a-zA-Z0-9_-]*\d{4,}[a-zA-Z0-9_-]*(?:\?[^\s)]*)?)',
-    caseSensitive: false,
-  );
-
-  /// Boyner mobil uygulaması ürün slug kalıbı:
-  /// Örn: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996 veya /patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996
-  static final RegExp _boynerProductSlugRegex = RegExp(
-    r'(?:^|[\s(])(\/?[a-zA-Z0-9_\u00C0-\u017F-]+-p-\d{5,}(?:\?[^\s)]*)?)',
+    r'(?:^|[\s(])((?:www\.)?(?:mavi\.com|boyner\.com\.tr|trendyol\.com|ty\.gl|hepsiburada\.com|(?:app\.)?hb\.biz|amazon\.com\.tr|amazon\.com|amzn\.eu|amzn\.to|link\.amazon|amzlinks\.in|teknosa\.com|(?:sl\.)?n11\.com|pazarama\.com|pzrm\.me|vatanbilgisayar\.com|mediamarkt\.com\.tr|idefix\.com|itopya\.com|incehesap\.com|migros\.com\.tr|getir\.com|beymen\.com|zara\.com|mango\.com|defacto\.com\.tr|pttavm\.com|havitstore\.com\.tr|gamer\.gen\.tr|gaming\.gen\.tr|fenom\.io)\/[^\s)]*)',
     caseSensitive: false,
   );
 
@@ -33,8 +19,18 @@ class DealUrlDetector {
         clean.endsWith(';') ||
         clean.endsWith(')') ||
         clean.endsWith('!') ||
-        clean.endsWith('?')) {
+        clean.endsWith('?') ||
+        clean.endsWith('"') ||
+        clean.endsWith('\'') ||
+        clean.endsWith('>') ||
+        clean.endsWith(']')) {
       clean = clean.substring(0, clean.length - 1);
+    }
+    while (clean.startsWith('"') ||
+        clean.startsWith('\'') ||
+        clean.startsWith('<') ||
+        clean.startsWith('[')) {
+      clean = clean.substring(1);
     }
     return clean;
   }
@@ -44,10 +40,6 @@ class DealUrlDetector {
   /// Desteklenen Giriş Türleri:
   /// 1. Standart HTTP/HTTPS URL'leri (Örn: https://www.mavi.com/... veya https://ty.gl/...)
   /// 2. Şemasız Mağaza Alan Adları (Örn: www.boyner.com.tr/... -> https://www.boyner.com.tr/...)
-  /// 3. Mavi Mobil Uygulama Göreli Yolları (Örn: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804
-  ///    -> https://www.mavi.com/mavi-logo-baskili-mavi-gomlek/p/0212124-70804)
-  /// 4. Boyner Mobil Uygulama Ürün Slug'ları (Örn: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996
-  ///    -> https://www.boyner.com.tr/patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996)
   static String? extractUrl(String text) {
     final trimmedText = text.trim();
     if (trimmedText.isEmpty) return null;
@@ -67,28 +59,6 @@ class DealUrlDetector {
       final clean = _cleanTrailingPunctuation(raw);
       if (clean.isNotEmpty) {
         return 'https://$clean';
-      }
-    }
-
-    // 3. Mavi mobil uygulama göreli ürün yolu (Örn: /mavi-logo-baskili-mavi-gomlek/p/0212124-70804)
-    final maviMatch = _maviRelativePathRegex.firstMatch(trimmedText);
-    if (maviMatch != null) {
-      final raw = maviMatch.group(1) ?? '';
-      final clean = _cleanTrailingPunctuation(raw);
-      if (clean.isNotEmpty) {
-        final path = clean.startsWith('/') ? clean : '/$clean';
-        return 'https://www.mavi.com$path';
-      }
-    }
-
-    // 4. Boyner mobil uygulama ürün slug'ı (Örn: patrizia-pepe-ekru-kadin-deri-loafer-8z0137-p-15871996)
-    final boynerMatch = _boynerProductSlugRegex.firstMatch(trimmedText);
-    if (boynerMatch != null) {
-      final raw = boynerMatch.group(1) ?? '';
-      final clean = _cleanTrailingPunctuation(raw);
-      if (clean.isNotEmpty) {
-        final slug = clean.startsWith('/') ? clean.substring(1) : clean;
-        return 'https://www.boyner.com.tr/$slug';
       }
     }
 

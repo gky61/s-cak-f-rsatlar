@@ -10,6 +10,7 @@ import 'adapters/n11_affiliate_adapter.dart';
 import 'adapters/gittigidiyor_affiliate_adapter.dart';
 import 'adapters/incehesap_affiliate_adapter.dart';
 import '../link_preview_service.dart';
+import '../domain_allowlist_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -269,16 +270,7 @@ class AffiliateService {
     String targetUrl = originalUrl.trim();
     try {
       final lower = targetUrl.toLowerCase();
-      final isShortOrRedirect = lower.contains('paylaskazan.teknosa.com') ||
-          lower.contains('hb.biz') ||
-          lower.contains('app.hb.biz') ||
-          lower.contains('ty.gl') ||
-          lower.contains('sl.n11.com') ||
-          lower.contains('amzn.to') ||
-          lower.contains('amzn.eu') ||
-          lower.contains('link.amazon') ||
-          lower.contains('bit.ly') ||
-          lower.contains('tinyurl.com');
+      final isShortOrRedirect = DomainAllowlistService.isShortLink(targetUrl);
 
       if (isShortOrRedirect) {
         _log('🔍 [AFFILIATE-TEST] Kısa / yönlendirmeli link tespit edildi: $targetUrl');

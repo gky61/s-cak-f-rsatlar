@@ -24,11 +24,11 @@ if (!allowlistConfig || !allowlistConfig.stores) {
   console.error('⚠️ Hiçbir domain allowlist JSON dosyası okunamadı, 20 mağazalık varsayılan fallback kullanılıyor.');
   allowlistConfig = {
     stores: {
-      "trendyol": ["trendyol.com"],
-      "hepsiburada": ["hepsiburada.com"],
-      "amazon_tr": ["amazon.com.tr"],
+      "trendyol": ["trendyol.com", "ty.gl"],
+      "hepsiburada": ["hepsiburada.com", "hb.biz"],
+      "amazon_tr": ["amazon.com.tr", "amzn.eu", "amzn.to", "link.amazon", "amzlinks.in"],
       "n11": ["n11.com"],
-      "pazarama": ["pazarama.com"],
+      "pazarama": ["pazarama.com", "pzrm.me"],
       "idefix": ["idefix.com"],
       "pttavm": ["pttavm.com"],
       "teknosa": ["teknosa.com"],
@@ -37,9 +37,9 @@ if (!allowlistConfig || !allowlistConfig.stores) {
       "itopya": ["itopya.com"],
       "incehesap": ["incehesap.com"],
       "mavi": ["mavi.com"],
-      "defacto_tr": ["defacto.com.tr"],
-      "zara_tr": ["zara.com"],
-      "mango_tr": ["mango.com"],
+      "defacto": ["defacto.com.tr"],
+      "zara": ["zara.com"],
+      "mango": ["mango.com"],
       "beymen": ["beymen.com"],
       "migros": ["migros.com.tr"],
       "getir": ["getir.com"],

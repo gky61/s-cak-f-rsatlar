@@ -18,13 +18,20 @@ function runTests() {
     { url: 'https://www.itopya.com/item', expectedStore: 'itopya' },
     { url: 'https://www.incehesap.com/item', expectedStore: 'incehesap' },
     { url: 'https://www.mavi.com/item', expectedStore: 'mavi' },
-    { url: 'https://www.defacto.com.tr/item', expectedStore: 'defacto_tr' },
-    { url: 'https://www.zara.com/tr/item', expectedStore: 'zara_tr' },
-    { url: 'https://www.mango.com/tr/item', expectedStore: 'mango_tr' },
+    { url: 'https://www.defacto.com.tr/item', expectedStore: 'defacto' },
+    { url: 'https://www.zara.com/tr/item', expectedStore: 'zara' },
+    { url: 'https://www.mango.com/tr/item', expectedStore: 'mango' },
     { url: 'https://www.beymen.com/item', expectedStore: 'beymen' },
     { url: 'https://www.migros.com.tr/item', expectedStore: 'migros' },
     { url: 'https://getir.com/item', expectedStore: 'getir' },
-    { url: 'https://www.havitstore.com.tr/item', expectedStore: 'havit_turkiye' }
+    { url: 'https://www.havitstore.com.tr/item', expectedStore: 'havit_turkiye' },
+    { url: 'https://amzn.eu/d/07A3YdHA', expectedStore: 'amazon_tr' },
+    { url: 'https://link.amazon/07A3YdHA', expectedStore: 'amazon_tr' },
+    { url: 'https://ty.gl/xyz123', expectedStore: 'trendyol' },
+    { url: 'https://hb.biz/abc789', expectedStore: 'hepsiburada' },
+    { url: 'https://app.hb.biz/abc789', expectedStore: 'hepsiburada' },
+    { url: 'https://sl.n11.com/n/abc123', expectedStore: 'n11' },
+    { url: 'https://pzrm.me/item123', expectedStore: 'pazarama' }
   ];
 
   let passed = 0;

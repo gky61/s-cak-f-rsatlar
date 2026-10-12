@@ -4,19 +4,26 @@
   "match_mode": "exact_domain_or_subdomain",
   "stores": {
     "trendyol": [
-      "trendyol.com"
+      "trendyol.com",
+      "ty.gl"
     ],
     "hepsiburada": [
-      "hepsiburada.com"
+      "hepsiburada.com",
+      "hb.biz"
     ],
     "amazon_tr": [
-      "amazon.com.tr"
+      "amazon.com.tr",
+      "amzn.eu",
+      "amzn.to",
+      "link.amazon",
+      "amzlinks.in"
     ],
     "n11": [
       "n11.com"
     ],
     "pazarama": [
-      "pazarama.com"
+      "pazarama.com",
+      "pzrm.me"
     ],
     "idefix": [
       "idefix.com"
@@ -42,13 +49,13 @@
     "mavi": [
       "mavi.com"
     ],
-    "defacto_tr": [
+    "defacto": [
       "defacto.com.tr"
     ],
-    "zara_tr": [
+    "zara": [
       "zara.com"
     ],
-    "mango_tr": [
+    "mango": [
       "mango.com"
     ],
     "beymen": [
@@ -62,6 +69,15 @@
     ],
     "havit_turkiye": [
       "havitstore.com.tr"
+    ],
+    "boyner": [
+      "boyner.com.tr"
+    ],
+    "gamer_gen": [
+      "gamer.gen.tr"
+    ],
+    "gaming_gen": [
+      "gaming.gen.tr"
     ]
   }
 }

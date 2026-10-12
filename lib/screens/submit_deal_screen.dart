@@ -100,7 +100,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       matchedStore = 'Hepsiburada';
     } else if (lowerName.contains('n11')) {
       matchedStore = 'N11';
-    } else if (lowerName.contains('amazon') || lowerName.contains('amzn')) {
+    } else if (lowerName.contains('amazon') || lowerName.contains('amzn') || lowerName.contains('amzlinks')) {
       matchedStore = 'Amazon';
     } else if (lowerName.contains('pazarama') || lowerName.contains('pzrm')) {
       matchedStore = 'Pazarama';
@@ -407,42 +407,47 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     }
 
     String url = rawUrl;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      final normalized = DealUrlDetector.extractUrl(url);
-      if (normalized != null && (normalized.startsWith('http://') || normalized.startsWith('https://'))) {
-        url = normalized;
+    final extractedUrl = DealUrlDetector.extractUrl(rawUrl);
+    if (extractedUrl != null && (extractedUrl.startsWith('http://') || extractedUrl.startsWith('https://'))) {
+      url = extractedUrl;
+      if (rawUrl != url) {
+        final remainingText = rawUrl.replaceAll(url, '').trim()
+            .replaceAll(RegExp(r'^[:\-\s]+|[:\-\s]+$'), '');
+        if (remainingText.length >= 3 && _titleController.text.trim().isEmpty) {
+          _titleController.text = remainingText;
+        }
         _lastProcessedUrl = url;
         _urlController.value = TextEditingValue(
           text: url,
           selection: TextSelection.collapsed(offset: url.length),
         );
-      } else {
-        _urlDebounceTimer?.cancel();
-        setState(() {
-          _isAutoDetecting = false;
-          _isLoadingImage = false;
-          _titleController.clear();
-          _descriptionController.clear();
-          _priceController.clear();
-          _storeController.clear();
-          _customStoreController.clear();
-          _selectedStore = null;
-          _imageUrlController.clear();
-          _previewImageUrl = null;
-          _selectedCategory = 'elektronik';
-          _selectedSubCategory = null;
-          _isCategoryLockedByScraper = false;
-          _isAmazonWarehouse = false;
-          _scrapedOriginalPrice = null;
-          _scrapedRatingValue = null;
-          _scrapedRatingCount = null;
-          _scrapedBrand = null;
-          _priceLabel = null;
-          _detectedPriceLabel = null;
-          _isSpecialBadgeEnabled = false;
-        });
-        return;
       }
+    } else {
+      _urlDebounceTimer?.cancel();
+      setState(() {
+        _isAutoDetecting = false;
+        _isLoadingImage = false;
+        _titleController.clear();
+        _descriptionController.clear();
+        _priceController.clear();
+        _storeController.clear();
+        _customStoreController.clear();
+        _selectedStore = null;
+        _imageUrlController.clear();
+        _previewImageUrl = null;
+        _selectedCategory = 'elektronik';
+        _selectedSubCategory = null;
+        _isCategoryLockedByScraper = false;
+        _isAmazonWarehouse = false;
+        _scrapedOriginalPrice = null;
+        _scrapedRatingValue = null;
+        _scrapedRatingCount = null;
+        _scrapedBrand = null;
+        _priceLabel = null;
+        _detectedPriceLabel = null;
+        _isSpecialBadgeEnabled = false;
+      });
+      return;
     }
 
     setState(() {

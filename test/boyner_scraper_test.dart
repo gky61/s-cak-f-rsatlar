@@ -257,5 +257,28 @@ void main() {
       final label = await scraper.scrapePriceLabel(document);
       expect(label, equals('%25 İndirim'));
     });
+
+    test('Product #8 (Adidas Handball Spezial) - Should scrape title, brand, discounted price (6999 TL), old price (7499 TL), and campaign info correctly', () async {
+      final file = File('scratch/boyner_handball.html');
+      if (!file.existsSync()) return;
+      final html = await file.readAsString();
+      final document = html_parser.parse(html);
+
+      final title = scraper.scrapeTitle(document);
+      expect(title, contains('Adidas Originals IF6490 HANDBALL SPEZIAL'));
+
+      final brand = scraper.scrapeBrand(document);
+      expect(brand, equals('Adidas'));
+
+      final price = await scraper.scrapePrice(document);
+      expect(price, equals(6999.0));
+
+      final originalPrice = await scraper.scrapeOriginalPrice(document, price);
+      expect(originalPrice, equals(7499.0));
+
+      final label = await scraper.scrapePriceLabel(document);
+      expect(label, equals("2000 TL'ye 500 TL İndirim"));
+    });
   });
 }
+
