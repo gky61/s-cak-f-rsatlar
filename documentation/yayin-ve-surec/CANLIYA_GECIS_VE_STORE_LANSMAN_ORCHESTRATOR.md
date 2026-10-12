@@ -189,6 +189,14 @@ graph TD
   - Mobil Birim Testleri: `flutter test` (13/13 Auth ve uyumluluk testleri PASS).  
   - Cloud Functions Testleri: `npm test` (33/33 servis ve kural testleri PASS).  
   - Güvenlik Denetimi: `npm audit --omit=dev` ➔ 0 yüksek/kritik güvenlik açığı.
+* 🟢 **Adım 3.11: Pre-Launch Hata Çözümleri & Telemetri Temizliği (Hata #1 & Hata #2)**  
+  - *Hata #1 (DealCreateException Telemetri Kirliliği):* Mükerrer fırsat paylaşımı denemesi bir sistem hatası değil, beklenen iş mantığı (business logic) validasyonudur. `DealBusinessException` sealed sınıfı ve `DealPendingApprovalException` / `DealAlreadySharedException` somut tipleri geliştirildi. Hata telemetrisi kirletilmeden doğrudan UI diyaloğuna aktarıldı (`test/error_fix_verification_test.dart` %100 PASS).  
+  - *Hata #2 (SelectionArea Scrollable Crash):* `DealDetailScreen` dışındaki tüm ekranı saran `SelectionArea` kaldırıldı; Flutter framework'ünün `_SelectableScrollablePosition` içindeki `Null check operator used on a null value` çökmesi kökten temizlendi.
+* 🟢 **Adım 3.12: Sıfır Fırsat Kaybı (Zero Deal Loss) & Kanonik Link Paritesi**  
+  - *Kural:* *"Admin onayında aynı 2 ürün linki olması, 2 farklı ürünün aynı zannedilerek engellenmesinden çok daha kabul edilebilirdir."*  
+  - *Amazon ASIN Normalizasyonu:* Amazon ürün linkleri başlık slug varyasyonlarından arındırılarak `/dp/ASIN` kanonik formatına çekildi. ASIN benzersiz olduğu için yanlış pozitif riski %0'dır.  
+  - *Pazaryeri Satıcı Paritesi:* Hepsiburada (`magaza`) ve Teknosa (`shopId`) satıcı parametreleri Flutter, Bot ve Web Admin'de korunarak farklı satıcıların fırsatlarının engellenmesi önlendi.  
+  - *Parite Doğrulama:* `lib/models/deal.dart`, `cloud-run-bot/affiliate_manager.js` ve `web/admin/affiliate_manager.js` arasında %100 tam kanonik senkronizasyon sağlandı (`test/deal_clean_url_test.dart` 13/13 PASS).
 
 ---
 
