@@ -3,6 +3,7 @@ package com.sicakfirsatlar.sicak_firsatlar
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -12,6 +13,11 @@ class MainActivity: FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         createNotificationChannelsIfNeeded()
         super.onCreate(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 
     override fun configureFlutterEngine(flutterEngine: io.flutter.embedding.engine.FlutterEngine) {
@@ -91,6 +97,24 @@ class MainActivity: FlutterActivity() {
                         } catch (_: Exception) {}
                     }
                     result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Android Paylaşım Intent Sıfırlama ve Tüketim Kanalı (Stale Intent Re-delivery Kalkanı)
+        io.flutter.plugin.common.MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.sicakfirsatlar.app/share_intent").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "clearIntent" -> {
+                    try {
+                        intent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_LAUNCHER)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
                 }
                 else -> result.notImplemented()
             }

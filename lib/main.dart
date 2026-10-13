@@ -248,21 +248,25 @@ void main() async {
     }
     FlutterError.presentError(details);
 
-    // Layout/RenderFlex taşmaları uygulamayı çökertmez (Crashlytics'te fatal: false olarak izlenir)
-    // Ancak kesinlikle çözülmesi gereken UI hatalarıdır; Web Admin panelinde ve Firestore'da görünmesi için 'error' olarak kaydedilir
+    // Layout/RenderFlex taşmaları ve görsel UI assertion'ları uygulamayı çökertmez (Crashlytics'te fatal: false olarak izlenir)
+    // Bu tür UI durumları Crashlytics crash-free kullanıcı oranını düşürmemeli ve ana iş parçacığında kilitlenmeye yol açmamalıdır.
     final isFirebaseReady = Firebase.apps.isNotEmpty;
-    final isOverflow = details.exceptionAsString().contains('overflowed by');
-    if (isOverflow) {
+    final excStr = details.exceptionAsString();
+    final isOverflow = excStr.contains('overflowed by');
+    final isVisualAssertion = excStr.contains('ListTile background color') ||
+        excStr.contains('ink splashes may be invisible');
+
+    if (isOverflow || isVisualAssertion) {
       if (isFirebaseReady) {
         FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
       }
       SystemLogService.instance.logError(
         category: 'mobile',
-        subCategory: 'ui_layout',
-        errorType: 'RenderFlexOverflow',
-        message: details.exceptionAsString(),
+        subCategory: isOverflow ? 'ui_layout' : 'ui_style',
+        errorType: isOverflow ? 'RenderFlexOverflow' : 'FlutterVisualAssertion',
+        message: excStr,
         stack: details.stack,
-        severity: SystemErrorSeverity.error,
+        severity: isOverflow ? SystemErrorSeverity.error : SystemErrorSeverity.warning,
       );
       return;
     }
@@ -273,7 +277,7 @@ void main() async {
     SystemLogService.instance.logError(
       category: 'app_crash',
       errorType: 'FlutterError',
-      message: details.exceptionAsString(),
+      message: excStr,
       stack: details.stack,
       severity: SystemErrorSeverity.fatal,
     );

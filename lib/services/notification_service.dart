@@ -84,6 +84,22 @@ class NotificationService {
   static bool _notificationListenersSetup = false;
   static bool _isLocalNotificationsInitialized = false;
   static bool _hasHandledColdStartNotification = false;
+  static bool _hasHandledFcmInitialMessage = false;
+
+  /// Uygulamanın soğuk başlangıçta bir bildirim tıklaması ile açılıp açılmadığını belirtir.
+  /// ShareIntentService bu bayrağı dinleyerek eski/takılı kalmış paylaşım intent'lerini bastırır.
+  static bool isColdStartNotificationTapActive = false;
+
+  /// Soğuk açılış bildirim kontrolünün tamamlandığını bildiren Future / Completer.
+  /// ShareIntentService soğuk başlangıçta bildirim kontrolüyle senkronize olmak için bunu dinler.
+  static Completer<bool>? _coldStartNotificationCompleter;
+  static Future<bool> get coldStartNotificationFuture {
+    if (_coldStartNotificationCompleter != null) {
+      return _coldStartNotificationCompleter!.future;
+    }
+    return Future.value(isColdStartNotificationTapActive);
+  }
+
   static const MethodChannel _iosNotificationChannel = MethodChannel('com.sicakfirsatlar.app/notifications');
   static bool _isIosChannelSetup = false;
 
@@ -182,6 +198,7 @@ class NotificationService {
       try {
         final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
         if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+          isColdStartNotificationTapActive = true;
           final payload = launchDetails.notificationResponse?.payload;
           if (payload != null && payload.isNotEmpty) {
             _log('🚀 Uygulama kapalıyken tıklanan yerel bildirim (cold start): $payload');
@@ -2193,6 +2210,13 @@ class NotificationService {
         _log('ℹ️ Yönlendirme gerektirmeyen bildirim: $data');
         break;
     }
+
+    // Soğuk açılış yönlendirmesi icra edildikten sonra statik bayrağı nazikçe temizle (oturum kirliliği önleyici)
+    if (isColdStartNotificationTapActive) {
+      Timer(const Duration(seconds: 4), () {
+        isColdStartNotificationTapActive = false;
+      });
+    }
   }
 
   // Kuponlar sayfasına yönlendirme (Topluluk Kuponları sekmesi)
@@ -2773,7 +2797,19 @@ class NotificationService {
   /// Hem iOS Native AppDelegate köprüsünü hem de FirebaseMessaging.getInitialMessage'ı
   /// sorgular; iOS'taki asenkron delegate gecikmesini telafi etmek için retry mekanizması içerir.
   Future<void> checkInitialNotification() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      if (!(_coldStartNotificationCompleter?.isCompleted ?? true)) {
+        _coldStartNotificationCompleter?.complete(false);
+      }
+      return;
+    }
+
+    _coldStartNotificationCompleter ??= Completer<bool>();
+    void markDone(bool found) {
+      if (!(_coldStartNotificationCompleter?.isCompleted ?? true)) {
+        _coldStartNotificationCompleter?.complete(found);
+      }
+    }
 
     // 1. iOS Özel: Native AppDelegate kanalından başlangıç bildirim verisini sorgula
     if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -2782,6 +2818,8 @@ class NotificationService {
         if (rawData != null && rawData is Map) {
           final data = Map<String, dynamic>.from(rawData);
           if (data.isNotEmpty) {
+            isColdStartNotificationTapActive = true;
+            markDone(true);
             _log('🚀 [iOS Native Bridge] Cold start bildirimi yakalandı: $data');
             _handleNotificationTap(data);
             return;
@@ -2793,25 +2831,30 @@ class NotificationService {
     }
 
     // 2. Firebase Messaging getInitialMessage (iOS asenkron delegate gecikmesi için retry mekanizmalı)
-    try {
-      RemoteMessage? initialMessage = await _messaging.getInitialMessage();
-      if (initialMessage == null && defaultTargetPlatform == TargetPlatform.iOS) {
-        // iOS UNUserNotificationCenter delegate yanıtı asenkron aktığından
-        // ilk mikrosaniyede null dönebilir. 150ms aralıklarla 4 kez tekrar dene.
-        for (int i = 0; i < 4; i++) {
-          await Future.delayed(const Duration(milliseconds: 150));
-          initialMessage = await _messaging.getInitialMessage();
-          if (initialMessage != null) break;
+    if (!_hasHandledFcmInitialMessage) {
+      try {
+        RemoteMessage? initialMessage = await _messaging.getInitialMessage();
+        if (initialMessage == null && defaultTargetPlatform == TargetPlatform.iOS) {
+          // iOS UNUserNotificationCenter delegate yanıtı asenkron aktığından
+          // ilk mikrosaniyede null dönebilir. 150ms aralıklarla 4 kez tekrar dene.
+          for (int i = 0; i < 4; i++) {
+            await Future.delayed(const Duration(milliseconds: 150));
+            initialMessage = await _messaging.getInitialMessage();
+            if (initialMessage != null) break;
+          }
         }
-      }
 
-      if (initialMessage != null) {
-        _log('🔔 Uygulama kapalıyken FCM bildirimiyle açıldı: ${initialMessage.data}');
-        _handleNotificationTap(initialMessage.data);
-        return;
+        if (initialMessage != null) {
+          _hasHandledFcmInitialMessage = true;
+          isColdStartNotificationTapActive = true;
+          markDone(true);
+          _log('🔔 Uygulama kapalıyken FCM bildirimiyle açıldı: ${initialMessage.data}');
+          _handleNotificationTap(initialMessage.data);
+          return;
+        }
+      } catch (e) {
+        _log('⚠️ getInitialMessage hatası: $e');
       }
-    } catch (e) {
-      _log('⚠️ getInitialMessage hatası: $e');
     }
 
     // 3. Android Yerel Bildirim Cold Start kontrolü (Local Notifications)
@@ -2820,16 +2863,21 @@ class NotificationService {
       try {
         final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
         if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+          isColdStartNotificationTapActive = true;
+          markDone(true);
           final payload = launchDetails.notificationResponse?.payload;
           if (payload != null && payload.isNotEmpty) {
             _log('🚀 Uygulama kapalıyken tıklanan yerel bildirim (cold start): $payload');
             _handlePayloadString(payload);
           }
+          return;
         }
       } catch (e) {
         _log('⚠️ Cold start yerel bildirim kontrol hatası: $e');
       }
     }
+
+    markDone(false);
   }
 
   // Yerel bildirim gösterme yardımcısı (Boş/başlıksız bildirim korumalı & deterministik ID)

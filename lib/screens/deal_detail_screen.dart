@@ -952,19 +952,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(
-                                        Icons.hourglass_top_rounded,
-                                        size: 20,
-                                        color: Color(0xFFD97706),
+                                      Icon(
+                                        _isAdmin ? Icons.admin_panel_settings_rounded : Icons.hourglass_top_rounded,
+                                        size: 22,
+                                        color: const Color(0xFFD97706),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Text(
-                                              'Paylaşımınız İncelemede',
-                                              style: TextStyle(
+                                            Text(
+                                              _isAdmin ? 'Moderatör Paneli • Onay Bekliyor' : 'Paylaşımınız İncelemede',
+                                              style: const TextStyle(
                                                 fontSize: 12.5,
                                                 fontWeight: FontWeight.w800,
                                                 color: Color(0xFFD97706),
@@ -972,7 +972,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              'Bu fırsat şu anda moderasyon ekibimiz tarafından incelenmektedir. Onaylandıktan sonra tüm kullanıcılara açılacaktır.',
+                                              _isAdmin
+                                                  ? 'Bu fırsat onayınızı bekliyor. Fiyatı veya detayları kontrol edip tek tıkla güncelleyebilirsiniz.'
+                                                  : 'Bu fırsat şu anda moderasyon ekibimiz tarafından incelenmektedir. Onaylandıktan sonra tüm kullanıcılara açılacaktır.',
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 height: 1.35,
@@ -982,6 +984,45 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                           ],
                                         ),
                                       ),
+                                      if (_isAdmin) ...[
+                                        const SizedBox(width: 8),
+                                        InkWell(
+                                          onTap: () {
+                                            HapticFeedback.lightImpact();
+                                            _showPriceEditDialog(deal);
+                                          },
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFD97706),
+                                              borderRadius: BorderRadius.circular(8),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(0xFFD97706).withValues(alpha: 0.35),
+                                                  blurRadius: 5,
+                                                  offset: const Offset(0, 1.5),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.bolt_rounded, size: 14, color: Colors.white),
+                                                SizedBox(width: 3),
+                                                Text(
+                                                  'Fiyat Düzenle',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w900,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1483,33 +1524,105 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            // Price Column
+                            // Price Column (Sadece Onay Bekleyen Fırsatlarda Admin Hızlı Fiyat Düzenleme)
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (!deal.hidePrice)
-                                    () {
-                                      final hasStoreBadge = StorePriceBadge.hasBadge(deal: deal);
+                              child: Builder(
+                                builder: (context) {
+                                  final bool canQuickEditPrice = _isAdmin && (deal.isApproved == false || deal.isPending);
+                                  return InkWell(
+                                  onTap: canQuickEditPrice
+                                      ? () {
+                                          HapticFeedback.lightImpact();
+                                          _showPriceEditDialog(deal);
+                                        }
+                                      : null,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: canQuickEditPrice
+                                        ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+                                        : EdgeInsets.zero,
+                                    decoration: canQuickEditPrice
+                                        ? BoxDecoration(
+                                            color: isDark
+                                                ? const Color(0xFF1E293B).withValues(alpha: 0.6)
+                                                : const Color(0xFFF8FAFC),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35),
+                                              width: 1.0,
+                                            ),
+                                          )
+                                        : null,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (canQuickEditPrice) ...[
+                                          Padding(
+                                            padding: const EdgeInsets.only(bottom: 2),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.bolt_rounded,
+                                                  size: 11,
+                                                  color: Color(0xFFF59E0B),
+                                                ),
+                                                const SizedBox(width: 2),
+                                                Text(
+                                                  'ONAY ÖNCESİ FİYAT',
+                                                  style: TextStyle(
+                                                    fontSize: 8.5,
+                                                    fontWeight: FontWeight.w900,
+                                                    letterSpacing: 0.3,
+                                                    color: isDark ? const Color(0xFFFCD34D) : const Color(0xFFD97706),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 3),
+                                                const Icon(
+                                                  Icons.edit_rounded,
+                                                  size: 9.5,
+                                                  color: Color(0xFFF59E0B),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      if (!deal.hidePrice)
+                                        () {
+                                          final hasStoreBadge = StorePriceBadge.hasBadge(deal: deal);
 
-                                      return FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerLeft,
-                                        child: Row(
-                                          crossAxisAlignment: hasStoreBadge
-                                              ? CrossAxisAlignment.end
-                                              : CrossAxisAlignment.center,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // Sol: Rozetli Sütun veya Tek Fiyat
-                                            if (hasStoreBadge)
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  StorePriceBadge(deal: deal),
-                                                  const SizedBox(height: 3.5),
+                                          return FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              crossAxisAlignment: hasStoreBadge
+                                                  ? CrossAxisAlignment.end
+                                                  : CrossAxisAlignment.center,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                // Sol: Rozetli Sütun veya Tek Fiyat
+                                                if (hasStoreBadge)
+                                                  Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      StorePriceBadge(deal: deal),
+                                                      const SizedBox(height: 3.5),
+                                                      FormattedPriceText(
+                                                        value: deal.price,
+                                                        style: const TextStyle(
+                                                          fontSize: 23,
+                                                          fontWeight: FontWeight.w900,
+                                                          color: AppTheme.primary,
+                                                          height: 1.0,
+                                                          letterSpacing: -0.5,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  )
+                                                else
                                                   FormattedPriceText(
                                                     value: deal.price,
                                                     style: const TextStyle(
@@ -1520,68 +1633,87 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                                                       letterSpacing: -0.5,
                                                     ),
                                                   ),
-                                                ],
-                                              )
-                                            else
-                                              FormattedPriceText(
-                                                value: deal.price,
-                                                style: const TextStyle(
-                                                  fontSize: 23,
-                                                  fontWeight: FontWeight.w900,
-                                                  color: AppTheme.primary,
-                                                  height: 1.0,
-                                                  letterSpacing: -0.5,
-                                                ),
-                                              ),
-                                            // Sağ Sütun: İndirim Etiketi üstte, İndirimsiz Fiyat altta
-                                            if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
-                                              const SizedBox(width: 8),
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  // İndirim Etiketi
-                                                  if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
-                                                    Container(
-                                                      margin: const EdgeInsets.only(bottom: 2),
-                                                      padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2),
-                                                      decoration: BoxDecoration(
-                                                        gradient: const LinearGradient(
-                                                          colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                                                // Sağ Sütun: İndirim Etiketi üstte, İndirimsiz Fiyat altta
+                                                if (deal.originalPrice != null && deal.originalPrice! > deal.price) ...[
+                                                  const SizedBox(width: 8),
+                                                  Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      // İndirim Etiketi
+                                                      if (deal.effectiveDiscountRate != null && deal.effectiveDiscountRate! > 0)
+                                                        Container(
+                                                          margin: const EdgeInsets.only(bottom: 2),
+                                                          padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            gradient: const LinearGradient(
+                                                              colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                                                            ),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: Text(
+                                                            '%${deal.effectiveDiscountRate} İndirim',
+                                                            style: const TextStyle(
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.w900,
+                                                              color: Colors.white,
+                                                              letterSpacing: 0.2,
+                                                            ),
+                                                          ),
                                                         ),
-                                                        borderRadius: BorderRadius.circular(4),
-                                                      ),
-                                                      child: Text(
-                                                        '%${deal.effectiveDiscountRate} İndirim',
-                                                        style: const TextStyle(
-                                                          fontSize: 9,
-                                                          fontWeight: FontWeight.w900,
-                                                          color: Colors.white,
-                                                          letterSpacing: 0.2,
+                                                      // İndirimsiz (Eski) Fiyat
+                                                      FormattedPriceText(
+                                                        value: deal.originalPrice,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                                                          decoration: TextDecoration.lineThrough,
+                                                          decorationThickness: 1.5,
                                                         ),
                                                       ),
-                                                    ),
-                                                  // İndirimsiz (Eski) Fiyat
-                                                  FormattedPriceText(
-                                                    value: deal.originalPrice,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                                                      decoration: TextDecoration.lineThrough,
-                                                      decorationThickness: 1.5,
-                                                    ),
+                                                    ],
                                                   ),
                                                 ],
+                                              ],
+                                            ),
+                                          );
+                                        }()
+                                      else
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              _isAdmin ? Icons.visibility_off_rounded : Icons.campaign_rounded,
+                                              size: 15,
+                                              color: _isAdmin
+                                                  ? Colors.blue
+                                                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _isAdmin ? 'Fiyat Gizli (Belirle)' : 'Kampanyalı Fırsat',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: _isAdmin
+                                                    ? Colors.blue
+                                                    : (isDark ? Colors.grey[300] : Colors.grey[700]),
                                               ),
+                                            ),
+                                            if (_isAdmin) ...[
+                                              const SizedBox(width: 3),
+                                              const Icon(Icons.edit_rounded, size: 11, color: Colors.blue),
                                             ],
                                           ],
                                         ),
-                                      );
-                                    }(),
-                                ],
-                              ),
-                            ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
 
                             const SizedBox(width: 10),
 
@@ -2067,6 +2199,11 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
 
 
   Future<void> _showAdminEditDialog(Deal deal) => DealAdminDialogs.showAdminEditDialog(
+    context: context, deal: deal, dealId: widget.dealId,
+    firestoreService: _firestoreService, onDealUpdated: _loadDeal,
+  );
+
+  Future<void> _showPriceEditDialog(Deal deal) => DealAdminDialogs.showPriceEditDialog(
     context: context, deal: deal, dealId: widget.dealId,
     firestoreService: _firestoreService, onDealUpdated: _loadDeal,
   );

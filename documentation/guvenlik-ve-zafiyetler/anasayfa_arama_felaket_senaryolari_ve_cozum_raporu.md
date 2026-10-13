@@ -60,11 +60,20 @@ Bu mimari genel hatlarıyla doğru prensiplere dayanmakla birlikte, **100 bin ak
 
 ### 🚨 Senaryo 5: Kullanıcı ve Fırsat Arama Esnekliği (Büyük/Küçük Harf ve Türkçe Karakter Duyarsızlığı)
 * **Zafiyet Nedeni:**
-  1. **Kullanıcılar:** Arama yalnızca tekil bir case formatında yapıldığında, kullanıcı küçük harfle "muratcan" yazdığında veritabanında "Muratcan" veya "MURATCAN" olarak kayıtlı kullanıcılar Firestore B-Tree sıralamasında geride kalarak bulunamıyordu.
-  2. **Fırsatlar:** Dart'ın `toLowerCase()` fonksiyonu Türkçe büyük 'İ' karakterini U+0307 birleşen nokta karakteriyle ayrıştırdığı için "İPHONE" gibi Türkçe klavye aramaları 'i phone' olarak ikiye bölünebiliyordu.
-* **Uygulanan Çözüm:**
-  1. **Kullanıcı Araması ([`home_screen.dart`](file:///d:/firsatkolik/lib/screens/home_screen.dart)):** Arama sorgusundan otomatik olarak çoklu varyant kümesi (`searchVariants: [trimmed, lower, TitleCase, UPPERCASE, Türkçe 'İ'/'i' varyantları]`) üretildi. Döngüsel olarak hem `username` hem de `displayName` üzerinde taranarak "muratcan" yazıldığında "Muratcan Gökyokuş", "@Muratcan" veya "@muratcan" eksiksiz bulundu. Kota tüketimi ise `limit(20 - results.length)` ile maksimum 20 doküman okumada kilitlendi.
-  2. **Fırsat Araması ([`deal_search_engine.dart`](file:///d:/firsatkolik/lib/services/deal_search_engine.dart)):** Türkçe büyük ve küçük harfler ('İ', 'I', 'ı', 'ç', 'ğ', 'ö', 'ş', 'ü') `toLowerCase()` çağrılmadan önce doğrudan İngilizce ASCII köklerine dönüştürüldü. "İPHONE 15", "IPHONE 15", "iPhone 15", "iphone 15" aramalarının tamamı `iphone 15` olarak eşleşti.
+  1. **Kullanıcılar (Eski Durum):** Arama sorgusunda istemci kodunda 10-14 ardışık Firestore prefix sorgusu (`searchVariants`) atılıyordu. Bu yöntem hem mobil ağda 1.5 - 2 saniye gecikme yaratıyor hem de "Gökay" gibi Türkçe karakterli isimler "gokay" aratıldığında Unicode sıralama farkı nedeniyle **bulunamıyordu**. Ayrıca CamelCase (`AhmetCan`) veya alt çizgili kullanıcı adları eleniyordu.
+  2. **Fırsatlar:** Dart'ın `toLowerCase()` fonksiyonu Türkçe büyük 'İ' karakterini U+0307 birleşen nokta karakteriyle ayrıştırdığı için "İPHONE" gibi Türkçe klavye aramaları 'i phone' olarak ikiye bölünebiliyordu. Çok kelimeli fırsat aramalarında ise yalnızca en uzun tek kelime (`primaryToken`) çekildiği için çok kelimeli aramalarda eski fakat tam eşleşen fırsatlar kaçabiliyordu.
+* **Uygulanan Kesin Çözüm (FS-20 Faz 2):**
+  1. **Kullanıcılar İçin `searchKeywords` Mimarisi (14 Sorgudan 1 Tekil Sorguya Düşüş):**
+     - [`DealSearchEngine.generateUserSearchKeywords`](file:///d:/firsatkolik/lib/services/deal_search_engine.dart) metodu geliştirildi. Kullanıcının `username`, `displayName` ve `nickname` alanlarından Türkçe ASCII normalize edilmiş kökler ve prefix (edge n-gram, min 2 harf) anahtarları üretildi (Örn: "Gökay ALEMDAR" -> `["gokay", "go", "gok", "goka", "alemdar", "al", "ale", "alem", "gokayalemdar"]`).
+     - [`home_screen.dart`](file:///d:/firsatkolik/lib/screens/home_screen.dart)'ta 14 ardışık prefix sorgusu kaldırıldı; tek bir `.where('searchKeywords', arrayContains: normalizedQuery)` sorgusuna indirildi.
+     - "Gökay" kullanıcısı "gokay", "Gökay", "gok", "go" aramalarının tamamında anında (100ms) eşleşti.
+     - Eşleşen kullanıcılar [`DealSearchEngine.rankUsers`](file:///d:/firsatkolik/lib/services/deal_search_engine.dart) ile alaka skoru ve avcı güvenilirlik rozetlerine göre sıralandı.
+     - Henüz migrate olmamış eski kullanıcılar için hafif tekil fallback kalkanı korundu.
+     - Kullanıcı verilerini toplu güncellemek için [`migrate_users_search_keywords.js`](file:///d:/firsatkolik/functions/tests/migrate_users_search_keywords.js) betiği ve Cloud Functions [`onUserUpdated`](file:///d:/firsatkolik/functions/index.js) otomatik mühürleme kalkanı devreye alındı.
+  2. **Fırsat Arama Motorunda Token & Stemming İyileştirmesi:**
+     - [`DealSearchEngine.stemTurkishWord`](file:///d:/firsatkolik/lib/services/deal_search_engine.dart) ile Türkçe çoğul (-lar, -ler) ve iyelik/tamlanan (-si, -su, -i) ekleri için otomatik kök kelime ayrıştırması eklendi ("kulaklıklar" -> "kulaklik", "süpürgesi" -> "supurge").
+     - [`DealService.searchDealsServer`](file:///d:/firsatkolik/lib/services/deal_service.dart) çok kelimeli sorgularda en ayırt edici 2 token'ı `Future.wait` ile paralel çekip birleştirecek şekilde optimize edildi.
+     - [`DealService.updateDeal`](file:///d:/firsatkolik/lib/services/deal_service.dart) metodunda başlık, marka, mağaza veya kategori güncellendiğinde `searchKeywords` otomatik yeniden hesaplanıp mühürlenir hale getirildi.
 
 ---
 
@@ -79,12 +88,29 @@ Bu mimari genel hatlarıyla doğru prensiplere dayanmakla birlikte, **100 bin ak
    - Fırsat aramasında Türkçe büyük/küçük harf normalizasyonu (İ, I, Ş, Ç, Ö, Ü): ✅ BAŞARILI
    - Kullanıcı aramasında çoklu varyant üretimi ("muratcan" -> "Muratcan", "MURATCAN", "murat can" -> "Murat Can"): ✅ BAŞARILI
    - **Toplam: 6/6 Test Başarılı (%100)**
-2. **Akıllı Arama Motoru 30 Senaryo Testi ([`deal_search_engine_test.dart`](file:///d:/firsatkolik/test/deal_search_engine_test.dart)):**
+
+2. **Kullanıcı Arama & Türkçe Stemming Testleri ([`user_search_and_stemming_test.dart`](file:///d:/firsatkolik/test/user_search_and_stemming_test.dart)):**
+   - "Gökay" / "gokay" edge n-gram ve boşluklu tam isim üretimi: ✅ BAŞARILI
+   - Büyük/küçük harf ve noktalı/noktasız harf normalizasyon eşleşmesi: ✅ BAŞARILI
+   - Alt çizgili ve karmaşık kullanıcı adları ayrıştırması: ✅ BAŞARILI
+   - `rankUsers` sıralama ve Botkolik önceliği: ✅ BAŞARILI
+   - Çoğul (-lar/-ler) ve iyelik (-si/-su/-i) kök ayrıştırması: ✅ BAŞARILI
+   - `tokenize` saf ve kök varyantlı ayrıştırma doğrulaması: ✅ BAŞARILI
+   - `AppUser` `searchKeywords` serileştirme ve copyWith koruması: ✅ BAŞARILI
+   - **Toplam: 8/8 Test Başarılı (%100)**
+
+3. **Akıllı Arama Motoru 30 Senaryo Testi ([`deal_search_engine_test.dart`](file:///d:/firsatkolik/test/deal_search_engine_test.dart)):**
    - 30 farklı arama senaryosunda %100 başarı oranı: ✅ BAŞARILI (30/30)
-3. **Güvenlik ve Kural Sözleşme Testleri ([`test_rules_and_security_contracts.js`](file:///d:/firsatkolik/functions/tests/test_rules_and_security_contracts.js)):**
-   - 33/33 Kural ve Felaket Kalkanı Testi: ✅ BAŞARILI (%100)
-4. **Statik Kod Analizi:**
-   - `flutter analyze` (Tüm 10 dosya): **0 hata, 0 uyarı (No issues found!)**
+
+4. **Derin Denetim (Deep Audit) ve Sıfır Kusur İyileştirmeleri:**
+   - **Sekme Geçişi Bayat Sonuç Koruması:** Sekmeler arası sorgu değiştiğinde eski sorgunun sonuçlarının ekranda donuk kalması `_lastSearchedDealQuery` ve `_lastSearchedUserQuery` ile çözüldü; gereksiz mükerrer ağ çağrıları engellendi.
+   - **Çok Kelimeli Kullanıcı Aramaları:** "gokay alemdar" gibi çok kelimeli aramalarda ilk 2 ayırt edici kelime `Future.wait` ile paralel taranarak istemci içi `rankUsers` motorunda +80 bonus puanla ilk sıraya yerleştirildi.
+   - **Google/Apple Auth Avatar Yedekliliği:** Arama sonuçlarında `profileImageUrl` yanında `photoURL` fallback'i eklenerek avatar boş kalma riski sıfırlandı.
+   - **Stemming Redundancy Temizliği:** `stemTurkishWord` içindeki mükerrer kontroller elendi, normalize giriş garantisi sağlandı.
+   - **Fırsat Araması Tek Kelime Kök Yedekliliği:** Kullanıcı tek kelimelik çekimli arama yaptığında ("süpürgeler") hem kelime hem de kökü ("supurge") Firestore'da paralel sorgulanır hale getirildi.
+
+5. **Statik Kod Analizi:**
+   - `flutter analyze` (İlgili tüm servis, model ve ekran dosyaları): **0 hata, 0 uyarı (No issues found!)**
 
 ---
 

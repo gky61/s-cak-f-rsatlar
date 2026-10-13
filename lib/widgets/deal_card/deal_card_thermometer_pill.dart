@@ -169,23 +169,45 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                       ],
                     ),
                     child: AnimatedSize(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeInOutCubic,
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
                       child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (child, animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: ScaleTransition(
-                              scale: Tween<double>(begin: 0.94, end: 1.0).animate(animation),
-                              child: child,
-                            ),
+                        duration: const Duration(milliseconds: 260),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: <Widget>[
+                              ...previousChildren.map((w) => Positioned.fill(
+                                child: OverflowBox(
+                                  minWidth: 0,
+                                  maxWidth: 300,
+                                  minHeight: 0,
+                                  maxHeight: 100,
+                                  alignment: Alignment.center,
+                                  child: w,
+                                ),
+                              )),
+                              if (currentChild != null) currentChild,
+                            ],
                           );
                         },
+                        transitionBuilder: (child, animation) => FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            scale: Tween<double>(begin: 0.92, end: 1.0).animate(
+                              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                            ),
+                            child: child,
+                          ),
+                        ),
                         child: _showBreakdown
-                            // ─── DOKUNULDUĞUNDA: ŞIK OY DAĞILIM PANELLİ ──────────
+                            // ─── 1. DOKUNULDUĞUNDA: ŞIK OY DAĞILIM PANELLİ ──────────
                             ? Row(
-                                key: const ValueKey('breakdown'),
+                                key: const ValueKey<String>('breakdown'),
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
@@ -200,7 +222,7 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                       ),
                                       const SizedBox(width: 1.5),
                                       Text(
-                                        '$hotVotes',
+                                        PriceFormatUtil.format(hotVotes, includeSymbol: false),
                                         style: TextStyle(
                                           color: isDark ? Colors.white : const Color(0xFF0F172A),
                                           fontSize: widget.compact ? 8.5 : 9.5,
@@ -230,7 +252,7 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                       ),
                                       const SizedBox(width: 1.5),
                                       Text(
-                                        '$coldVotes',
+                                        PriceFormatUtil.format(coldVotes, includeSymbol: false),
                                         style: TextStyle(
                                           color: isDark ? Colors.white : const Color(0xFF0F172A),
                                           fontSize: widget.compact ? 8.5 : 9.5,
@@ -242,9 +264,9 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                   ),
                                 ],
                               )
-                            // ─── VARSAYILAN: MİKRO TERMOMETRE VE DERECE KAPSÜLÜ ──
+                            // ─── 2. VARSAYILAN: MİKRO TERMOMETRE VE DERECE KAPSÜLÜ ──
                             : Row(
-                                key: const ValueKey('gauge'),
+                                key: const ValueKey<String>('gauge'),
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [

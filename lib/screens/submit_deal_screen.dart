@@ -24,6 +24,7 @@ import '../widgets/store_price_badge.dart';
 import 'deal_detail_screen.dart';
 import '../widgets/deal_restriction_bottom_sheet.dart';
 import '../widgets/app_snack_bar.dart';
+import '../services/share_intent_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -912,11 +913,15 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   @override
   void dispose() {
+    if (widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty) {
+      ShareIntentService.instance.markUrlConsumed(widget.initialUrl!);
+    }
     _authSub?.cancel();
     _urlDebounceTimer?.cancel();
     _textDebounceTimer?.cancel();
     _titleController.removeListener(_onTextChanged);
     _descriptionController.removeListener(_onTextChanged);
+    _urlController.removeListener(_onUrlChanged);
     _imageUrlController.removeListener(_onImageUrlChanged);
     _titleController.dispose();
     _descriptionController.dispose();
@@ -1076,6 +1081,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         );
 
         if (mounted) {
+          final submittedUrl = _urlController.text.trim();
+          ShareIntentService.instance.markUrlConsumed(submittedUrl);
           Navigator.pop(context);
           final isDirectlyApproved = submitResult?.isApproved == true;
           AppSnackBar.showPostPop(
@@ -1088,10 +1095,18 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           );
         }
       } on DealAlreadySharedException catch (e) {
+        final submittedUrl = _urlController.text.trim();
+        if (submittedUrl.isNotEmpty) {
+          ShareIntentService.instance.markUrlConsumed(submittedUrl);
+        }
         if (mounted) {
           _showAlreadySharedDialog(context, e.existingDealId);
         }
       } on DealPendingApprovalException {
+        final submittedUrl = _urlController.text.trim();
+        if (submittedUrl.isNotEmpty) {
+          ShareIntentService.instance.markUrlConsumed(submittedUrl);
+        }
         if (mounted) {
           _showPendingApprovalDialog(context);
         }
@@ -1099,9 +1114,17 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         if (mounted) {
           final errorMsg = e.toString();
           if (errorMsg.contains('already_shared:')) {
+            final submittedUrl = _urlController.text.trim();
+            if (submittedUrl.isNotEmpty) {
+              ShareIntentService.instance.markUrlConsumed(submittedUrl);
+            }
             final dealId = errorMsg.split('already_shared:')[1].trim();
             _showAlreadySharedDialog(context, dealId);
           } else if (errorMsg.contains('pending_approval:')) {
+            final submittedUrl = _urlController.text.trim();
+            if (submittedUrl.isNotEmpty) {
+              ShareIntentService.instance.markUrlConsumed(submittedUrl);
+            }
             _showPendingApprovalDialog(context);
           } else if (errorMsg.contains('permission-denied') ||
                      errorMsg.contains('yetkiniz kaldırılmış') ||

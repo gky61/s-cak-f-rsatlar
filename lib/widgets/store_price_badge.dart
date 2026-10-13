@@ -50,6 +50,16 @@ class StorePriceBadge extends StatelessWidget {
     end: Alignment.bottomRight,
   );
 
+  /// FırsatKolik imza canlı geçişli turuncu degrade (Fiyatı Güncelle butonundaki gibi fade efektli)
+  static const LinearGradient promoGradient = LinearGradient(
+    colors: [
+      Color(0xFFFF6B35), // Sıcak Turuncu
+      Color(0xFFFF8E53), // Canlı Açık Turuncu
+    ],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
   /// Fırsatın herhangi bir özel rozeti veya fiyat etiketi var mı?
   static bool hasBadge({Deal? deal, String? label, String? store}) {
     final effectiveLabel = (label ?? deal?.priceLabel)?.trim();
@@ -91,22 +101,62 @@ class StorePriceBadge extends StatelessWidget {
 
   bool get isMoney {
     final lblUpper = effectiveLabel.toUpperCase();
+    // Eğer özel bir etiket varsa ve etiket içinde MONEY geçmiyorsa ASLA Money rozeti olamaz!
+    if (lblUpper.isNotEmpty) {
+      return lblUpper.contains('MONEY');
+    }
     final strLower = effectiveStore;
-    return lblUpper.contains('MONEY') || strLower.contains('migros') || (deal != null && MigrosMoneyBadge.isMigrosMoneyDeal(deal));
+    return strLower.contains('migros') && (deal != null && MigrosMoneyBadge.isMigrosMoneyDeal(deal));
   }
 
-  String get emblem {
+  bool get isPrime {
     final lblUpper = effectiveLabel.toUpperCase();
-    final strLower = effectiveStore;
+    // Eğer özel bir etiket varsa ve etiket içinde PRIME geçmiyorsa ASLA Prime rozeti olamaz!
+    if (lblUpper.isNotEmpty) {
+      return lblUpper.contains('PRIME');
+    }
+    return deal != null && AmazonPrimeBadge.isAmazonPrimeDeal(deal);
+  }
 
-    if (lblUpper.contains('MONEY') || strLower.contains('migros')) {
-      return 'M';
+  bool get isPremium {
+    final lblUpper = effectiveLabel.toUpperCase();
+    // Eğer özel bir etiket varsa ve etiket içinde PREMIUM geçmiyorsa ASLA Premium rozeti olamaz!
+    if (lblUpper.isNotEmpty) {
+      return lblUpper.contains('PREMIUM');
     }
-    if (lblUpper.contains('PLUS') || strLower.contains('trendyol') || strLower.contains('pazarama')) {
-      return '+';
+    return deal != null &&
+        (HepsiburadaPremiumBadge.isHepsiburadaPremiumDeal(deal) || IdefixPremiumBadge.isIdefixPremiumDeal(deal));
+  }
+
+  bool get isPlus {
+    final lblUpper = effectiveLabel.toUpperCase();
+    // Eğer özel bir etiket varsa ve etiket içinde PLUS geçmiyorsa ASLA Plus rozeti olamaz!
+    if (lblUpper.isNotEmpty) {
+      return lblUpper.contains('PLUS');
     }
-    // Varsayılan ve Prime / Premium için 'P'
-    return 'P';
+    return deal != null &&
+        (TrendyolPlusBadge.isTrendyolPlusDeal(deal) || PazaramaPlusBadge.isPazaramaPlusDeal(deal));
+  }
+
+  /// Prime, Premium, Plus veya Money gibi özel üyelik/sadakat programı mı?
+  bool get isLoyaltyBadge => isMoney || isPrime || isPremium || isPlus;
+
+  String get emblem {
+    if (isMoney) return 'M';
+    if (isPlus) return '+';
+    if (isPrime || isPremium) return 'P';
+    return '';
+  }
+
+  /// Genel kampanya etiketleri için minimalist sembol
+  static IconData getPromoIcon(String labelText) {
+    final upper = labelText.toUpperCase();
+    if (upper.contains('KUPON')) return Icons.confirmation_number_rounded;
+    if (upper.contains('SEPET')) return Icons.shopping_bag_rounded;
+    if (upper.contains('GÜN') || upper.contains('GUN')) return Icons.local_fire_department_rounded;
+    if (upper.contains('%') || upper.contains('ÜRÜN') || upper.contains('URUN')) return Icons.discount_rounded;
+    if (upper.contains('FLAŞ') || upper.contains('FLAS') || upper.contains('ŞOK') || upper.contains('SOK')) return Icons.bolt_rounded;
+    return Icons.local_offer_rounded;
   }
 
   @override
@@ -161,29 +211,55 @@ class StorePriceBadge extends StatelessWidget {
         );
       }
 
+      if (isLoyaltyBadge) {
+        return Container(
+          width: compactSize,
+          height: compactSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: badgeGradient,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF6000).withValues(alpha: 0.25),
+                blurRadius: 1.5,
+                offset: const Offset(0, 0.5),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              emblemText,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: compactSize * (emblemText == '+' ? 0.72 : 0.62),
+                height: 1.0,
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Genel Kampanya Etiketleri (Günün Fırsatı, Kuponla, 2. Ürüne %50 vb.)
       return Container(
         width: compactSize,
         height: compactSize,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: badgeGradient,
+          gradient: promoGradient,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFF6000).withValues(alpha: 0.25),
+              color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
               blurRadius: 1.5,
               offset: const Offset(0, 0.5),
             ),
           ],
         ),
         child: Center(
-          child: Text(
-            emblemText,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: compactSize * (emblemText == '+' ? 0.72 : 0.62),
-              height: 1.0,
-            ),
+          child: Icon(
+            getPromoIcon(labelText),
+            size: compactSize * 0.65,
+            color: Colors.white,
           ),
         ),
       );
@@ -267,46 +343,87 @@ class StorePriceBadge extends StatelessWidget {
       );
     }
 
-    return Container(
-      padding: padding ?? const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2.5),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2A1C36) : const Color(0xFFF5F0FF),
-        borderRadius: borderRadius ?? BorderRadius.circular(6),
-        border: Border.all(
-          color: const Color(0xFF9333EA).withValues(alpha: isDark ? 0.35 : 0.25),
-          width: 0.75,
+    if (isLoyaltyBadge) {
+      return Container(
+        padding: padding ?? const EdgeInsets.symmetric(horizontal: 6.5, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A1C36) : const Color(0xFFF5F0FF),
+          borderRadius: borderRadius ?? BorderRadius.circular(6),
+          border: Border.all(
+            color: const Color(0xFF9333EA).withValues(alpha: isDark ? 0.35 : 0.25),
+            width: 0.75,
+          ),
         ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: iconSize,
+              height: iconSize,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: badgeGradient,
+              ),
+              child: Center(
+                child: Text(
+                  emblemText,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: iconSize * (emblemText == '+' ? 0.72 : 0.62),
+                    height: 1.0,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4.5),
+            Text(
+              labelText,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w800,
+                color: isDark ? const Color(0xFFE9D5FF) : const Color(0xFF6B21A8),
+                letterSpacing: 0.1,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Genel Kampanya & Fırsat Etiketleri (Günün Fırsatı, 2. Ürüne %50, Kuponla, Sepette İndirimli vb.)
+    // "Fiyatı Güncelle" butonundaki gibi geçişli fade degrade efektli, statik minimalist ve canlı tasarım
+    return Container(
+      padding: padding ?? const EdgeInsets.symmetric(horizontal: 7.5, vertical: 2.5),
+      decoration: BoxDecoration(
+        gradient: promoGradient,
+        borderRadius: borderRadius ?? BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF6B35).withValues(alpha: isDark ? 0.35 : 0.22),
+            blurRadius: 4,
+            offset: const Offset(0, 1.2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: iconSize,
-            height: iconSize,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: badgeGradient,
-            ),
-            child: Center(
-              child: Text(
-                emblemText,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: iconSize * (emblemText == '+' ? 0.72 : 0.62),
-                  height: 1.0,
-                ),
-              ),
-            ),
+          Icon(
+            getPromoIcon(labelText),
+            size: iconSize * 0.88,
+            color: Colors.white,
           ),
           const SizedBox(width: 4.5),
           Text(
             labelText,
             style: TextStyle(
               fontSize: fontSize,
-              fontWeight: FontWeight.w800,
-              color: isDark ? const Color(0xFFE9D5FF) : const Color(0xFF6B21A8),
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
               letterSpacing: 0.1,
               height: 1.1,
             ),

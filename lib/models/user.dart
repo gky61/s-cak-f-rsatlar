@@ -23,6 +23,7 @@ class AppUser {
   final List<String> badges; // Rozet listesi (örn: ['gold', 'top_reviewer', 'helpful'])
   final String? pinnedBadge; // Kullanıcının vitrinde/profilinde sabitlediği öncelikli rozet
   final bool isBot;
+  final List<String>? searchKeywords; // Aranabilir normalize kök ve prefix kelimeler
 
   AppUser({
     required this.uid,
@@ -39,6 +40,7 @@ class AppUser {
     this.badges = const [],
     this.pinnedBadge,
     this.isBot = false,
+    this.searchKeywords,
   });
 
   // displayName getter (nickname varsa nickname, yoksa username, en son fallback 'Kullanıcı')
@@ -132,6 +134,7 @@ class AppUser {
     List<String>? badges,
     String? pinnedBadge,
     bool? isBot,
+    List<String>? searchKeywords,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -148,6 +151,7 @@ class AppUser {
       badges: badges ?? this.badges,
       pinnedBadge: pinnedBadge ?? this.pinnedBadge,
       isBot: isBot ?? this.isBot,
+      searchKeywords: searchKeywords ?? this.searchKeywords,
     );
   }
 
@@ -266,6 +270,21 @@ class AppUser {
         return defaultValue;
       }
       
+      // searchKeywords alanını güvenli bir şekilde parse et
+      List<String>? searchKeywords;
+      try {
+        final kwData = data['searchKeywords'];
+        if (kwData is List) {
+          searchKeywords = kwData
+              .where((e) => e != null)
+              .map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      } catch (e) {
+        _log('SearchKeywords parse hatası: $e');
+      }
+
       return AppUser(
         uid: doc.id,
         username: data['username']?.toString() ?? data['displayName']?.toString() ?? data['nickname']?.toString() ?? '',
@@ -281,6 +300,7 @@ class AppUser {
         badges: badges,
         pinnedBadge: data['pinnedBadge']?.toString(),
         isBot: data['isBot'] == true,
+        searchKeywords: searchKeywords,
       );
     } catch (e, stackTrace) {
       _log('❌ AppUser.fromFirestore hatası: $e');
@@ -316,6 +336,7 @@ class AppUser {
         badges: [],
         pinnedBadge: null,
         isBot: dataMap['isBot'] == true,
+        searchKeywords: null,
       );
     }
   }
@@ -337,6 +358,8 @@ class AppUser {
       'badges': badges,
       if (pinnedBadge != null) 'pinnedBadge': pinnedBadge,
       'isBot': isBot,
+      if (searchKeywords != null && searchKeywords!.isNotEmpty)
+        'searchKeywords': searchKeywords,
     };
   }
 }

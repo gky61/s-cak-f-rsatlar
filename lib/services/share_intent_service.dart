@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'dart:async';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart'; // navigatorKey
 import 'auth_service.dart';
+import 'notification_service.dart';
 import '../utils/deal_url_detector.dart';
 import '../screens/submit_deal_screen.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
@@ -20,7 +23,13 @@ class ShareIntentService {
   ShareIntentService._();
   static final ShareIntentService instance = ShareIntentService._();
 
-  final AuthService _authService = AuthService();
+  static const MethodChannel _nativeChannel = MethodChannel('com.sicakfirsatlar.app/share_intent');
+  static const String _prefConsumedUrl = 'share_intent_last_consumed_url';
+  static const String _prefConsumedTime = 'share_intent_last_consumed_time';
+  static const String _prefConsumedUrlList = 'share_intent_consumed_urls_list';
+  static const int _maxConsumedUrlsToKeep = 30;
+
+  AuthService get _authService => AuthService();
 
   StreamSubscription? _intentSub;
   String? _pendingUrl;
@@ -30,6 +39,81 @@ class ShareIntentService {
 
   String? _lastHandledUrl;
   DateTime? _lastHandledTime;
+
+  /// Android Activity intent'ini nötrler (ACTION_MAIN), böylece Activity yeniden
+  /// oluşturulduğunda eski ACTION_SEND intent'i tekrar tetiklenmez.
+  Future<void> _clearNativeIntent() async {
+    if (kIsWeb) return;
+    try {
+      await _nativeChannel.invokeMethod('clearIntent');
+    } catch (e) {
+      _log('⚠️ Native clearIntent çağrısı atlandı: $e');
+    }
+  }
+
+  /// Native ve Flutter katmanlarındaki paylaşım intent kuyruklarını güvenle sıfırlar.
+  Future<void> _resetSafely() async {
+    if (kIsWeb) return;
+    try {
+      await ReceiveSharingIntent.instance.reset();
+    } catch (e) {
+      _log('⚠️ ReceiveSharingIntent reset çağrısı atlandı: $e');
+    }
+    await _clearNativeIntent();
+  }
+
+  /// Fırsat başarıyla paylaşıldığında veya SubmitDealScreen kapatıldığında çağrılır.
+  /// URL'i hem diskte kalıcı olarak "tüketildi" (consumed) damgalar hem de Android
+  /// Activity intent'ini sıfırlayarak mükerrer açılışları %100 engeller.
+  Future<void> markUrlConsumed(String url) async {
+    if (url.trim().isEmpty) return;
+    final targetUrl = url.trim();
+    _lastHandledUrl = targetUrl;
+    _lastHandledTime = DateTime.now();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_prefConsumedUrlList) ?? <String>[];
+      list.remove(targetUrl);
+      list.insert(0, targetUrl);
+      if (list.length > _maxConsumedUrlsToKeep) {
+        list.removeRange(_maxConsumedUrlsToKeep, list.length);
+      }
+      await prefs.setStringList(_prefConsumedUrlList, list);
+      await prefs.setString(_prefConsumedUrl, targetUrl);
+      await prefs.setInt(_prefConsumedTime, DateTime.now().millisecondsSinceEpoch);
+    } catch (e) {
+      _log('⚠️ SharedPreferences markUrlConsumed kayıt hatası: $e');
+    }
+
+    await _resetSafely();
+    _log('🛡️ Paylaşım URL\'i başarıyla tüketildi ve intent temizlendi: $targetUrl');
+  }
+
+  /// URL'in daha önce başarıyla paylaşılıp tüketilmediğini diskten denetler.
+  Future<bool> _isUrlConsumed(String url) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final target = url.trim();
+      final list = prefs.getStringList(_prefConsumedUrlList);
+      if (list != null && list.contains(target)) {
+        return true;
+      }
+
+      final consumedUrl = prefs.getString(_prefConsumedUrl);
+      final consumedTimeMs = prefs.getInt(_prefConsumedTime);
+      if (consumedUrl != null && consumedTimeMs != null && consumedUrl == target) {
+        final consumedTime = DateTime.fromMillisecondsSinceEpoch(consumedTimeMs);
+        // Son 24 saat içinde bu URL tüketilmişse ve aynı URL soğuk başlangıçta geliyorsa
+        if (DateTime.now().difference(consumedTime) < const Duration(hours: 24)) {
+          return true;
+        }
+      }
+    } catch (e) {
+      _log('⚠️ SharedPreferences _isUrlConsumed okuma hatası: $e');
+    }
+    return false;
+  }
 
   /// Servisi başlatır. Hem soğuk başlangıç (getInitialMedia) hem de
   /// canlı dinleme (getMediaStream) kanallarını açar.
@@ -71,8 +155,17 @@ class ShareIntentService {
   }
 
   /// Gelen paylaşılan medya listesini analiz eder ve ilk geçerli e-ticaret URL'ini işleme alır.
-  void handleSharedMedia(List<SharedMediaFile> files, {bool isColdStart = false}) {
+  Future<void> handleSharedMedia(List<SharedMediaFile> files, {bool isColdStart = false}) async {
     if (files.isEmpty) return;
+
+    // 1. Bildirim Önceliği ve Karşılıklı Dışlama (Mutual Exclusion):
+    // Eğer uygulama bir bildirim tıklaması (Cold-Start Push) ile açılıyorsa,
+    // eski paylaşım medyasını bastır ve bildirimin (DealDetailScreen) önüne geçmesini engelle!
+    if (isColdStart && NotificationService.isColdStartNotificationTapActive) {
+      _log('🛡️ [Stale Intent Kalkanı] Bildirimle açılış aktif olduğundan soğuk paylaşım intent\'i bastırıldı.');
+      await _resetSafely();
+      return;
+    }
 
     // Birden fazla medya (küçük resim + url vb.) paylaşıldığında geçerli URL içeren öğeyi tara
     String? detectedUrl;
@@ -89,13 +182,25 @@ class ShareIntentService {
     if (detectedUrl == null || detectedUrl.isEmpty) {
       _log('⚠️ Paylaşılan metin veya dosyalarda geçerli bir HTTP/HTTPS linki bulunamadı.');
       // Geçersiz içerik için native intent kuyruğunu sıfırla ki takılı kalmasın
-      ReceiveSharingIntent.instance.reset();
+      await _resetSafely();
       return;
     }
 
     final targetUrl = detectedUrl;
 
-    // Mükerrer tetikleme koruması: Aynı URL son 3 saniye içinde işlendiyse atla
+    // 2. Soğuk Başlangıçta Tüketilmiş (Stale) Intent Kontrolü:
+    // Eğer kullanıcı dışarıdan taze bir paylaşım yapmadıysa (isColdStart == true) ve bu URL
+    // daha önce başarıyla paylaşılmış/tüketilmişse, Android OS'un eski intent re-delivery'sidir!
+    if (isColdStart) {
+      final isConsumed = await _isUrlConsumed(targetUrl);
+      if (isConsumed) {
+        _log('🛡️ [Stale Intent Kalkanı] Soğuk başlangıçta eski tüketilmiş link yakalandı ve yutuldu: $targetUrl');
+        await _resetSafely();
+        return;
+      }
+    }
+
+    // 3. Mükerrer tetikleme koruması: Aynı URL son 3 saniye içinde işlendiyse atla
     final now = DateTime.now();
     if (_lastHandledUrl == targetUrl &&
         _lastHandledTime != null &&
@@ -131,12 +236,34 @@ class ShareIntentService {
 
     if (currentToken != _shareCheckToken || _pendingUrl == null || _isNavigating) return;
 
+    // Bekleme esnasında bir bildirim tıklaması devreye girdiyse paylaşım yönlendirmesini iptal et
+    if (isColdStart) {
+      if (NotificationService.isColdStartNotificationTapActive) {
+        _log('🛡️ [Stale Intent Kalkanı] Bekleyen paylaşım kontrolünde bildirim açılışı tespit edildi, yönlendirme iptal edildi.');
+        _pendingUrl = null;
+        await _resetSafely();
+        return;
+      }
+
+      // Soğuk başlangıçta bildirim kontrolünün sonucunu kısa bir emniyet payı (handshake) ile bekle
+      try {
+        final hadNotification = await NotificationService.coldStartNotificationFuture
+            .timeout(const Duration(milliseconds: 150), onTimeout: () => false);
+        if (hadNotification || NotificationService.isColdStartNotificationTapActive) {
+          _log('🛡️ [Stale Intent Kalkanı] Bildirim el sıkışmasında (handshake) bildirim tespit edildi, yönlendirme iptal edildi.');
+          _pendingUrl = null;
+          await _resetSafely();
+          return;
+        }
+      } catch (_) {}
+    }
+
     final navState = navigatorKey.currentState;
     final navContext = navigatorKey.currentContext;
     if (navState == null || navContext == null || !navContext.mounted) {
       _log('⚠️ ShareIntentService zaman aşımı: Navigator hazır hale gelmedi.');
       _pendingUrl = null;
-      ReceiveSharingIntent.instance.reset();
+      await _resetSafely();
       return;
     }
 
@@ -193,7 +320,7 @@ class ShareIntentService {
             _executeNavigation(url);
           },
         );
-        ReceiveSharingIntent.instance.reset();
+        await _resetSafely();
         return;
       }
 
@@ -216,8 +343,8 @@ class ShareIntentService {
         ),
       );
 
-      // Yönlendirme icra edildikten hemen sonra native intent kuyruğunu sıfırla
-      ReceiveSharingIntent.instance.reset();
+      // Yönlendirme icra edildikten hemen sonra native intent kuyruğunu ve Android Activity intent'ini sıfırla
+      await _resetSafely();
     } catch (e) {
       _log('❌ Paylaşım yönlendirme hatası: $e');
     } finally {

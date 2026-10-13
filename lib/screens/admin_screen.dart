@@ -55,6 +55,26 @@ class AdminScreen extends StatefulWidget {
 
 enum _AdminListType { pending, userSubmitted, published, expired }
 
+/// Sekmeler arası geçişlerde widget durumunu (scroll, arama metni, seçimler) koruyan hafif sarmalayıcı
+class _KeepAliveTabWrapper extends StatefulWidget {
+  final Widget child;
+  const _KeepAliveTabWrapper({required this.child});
+
+  @override
+  State<_KeepAliveTabWrapper> createState() => _KeepAliveTabWrapperState();
+}
+
+class _KeepAliveTabWrapperState extends State<_KeepAliveTabWrapper> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   final UserService _userService = UserService();
@@ -66,6 +86,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   bool _isCheckingAdmin = true;
   bool _isAdmin = false;
   
+  // Canlı Firestore Yayınları (Re-subscription ve Focus/Klavye Kaybını Önlemek İçin Önbellekli)
+  Stream<List<Deal>>? _pendingDealsStream;
+  Stream<List<Deal>>? _userSubmittedDealsStream;
+  Stream<List<Kupon>>? _pendingCouponsStream;
+  Stream<QuerySnapshot>? _usersStream;
+
   // Tab bildirim sayıları
   int _pendingCount = 0;
   int _userSubmittedCount = 0;
@@ -178,7 +204,27 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         ? widget.initialTabIndex!
         : 0;
     _tabController = TabController(length: 6, vsync: this, initialIndex: initialIndex);
+    _initStreams();
     _verifyAdminAccess();
+  }
+
+  void _initStreams() {
+    _pendingDealsStream = _firestoreService.getPendingDealsStream();
+    _userSubmittedDealsStream = _firestoreService.getUserSubmittedPendingDealsStream();
+    _pendingCouponsStream = _kuponService.getPendingKuponlarStream();
+    _updateUsersStream();
+  }
+
+  void _updateUsersStream() {
+    Query usersQuery;
+    if (_userRoleFilter == 'admins') {
+      usersQuery = FirebaseFirestore.instance.collection('users').where('isAdmin', isEqualTo: true);
+    } else if (_userRoleFilter == 'blocked') {
+      usersQuery = FirebaseFirestore.instance.collection('users').where('isBlocked', isEqualTo: true);
+    } else {
+      usersQuery = FirebaseFirestore.instance.collection('users').orderBy('points', descending: true).limit(200);
+    }
+    _usersStream = usersQuery.snapshots();
   }
 
   /// Admin yetkisini doğrula; yetkisiz ise Firestore stream'lerini başlatmadan sayfayı kapat
@@ -386,11 +432,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           TabBarView(
             controller: _tabController,
             children: [
-              _buildDealList(_AdminListType.pending),
-              _buildDealList(_AdminListType.userSubmitted),
-              _buildPendingCouponsList(),
+              _KeepAliveTabWrapper(child: _buildDealList(_AdminListType.pending)),
+              _KeepAliveTabWrapper(child: _buildDealList(_AdminListType.userSubmitted)),
+              _KeepAliveTabWrapper(child: _buildPendingCouponsList()),
               const AdminExpiredDealsView(),
-              _buildUsersList(),
+              _KeepAliveTabWrapper(child: _buildUsersList()),
               const AdminReportsList(),
             ],
           ),
@@ -482,60 +528,32 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         ? _selectedPendingDealIds
         : _selectedUserSubmittedDealIds;
 
+    final Stream<List<Deal>> stream = switch (type) {
+      _AdminListType.pending => _pendingDealsStream ?? _firestoreService.getPendingDealsStream(),
+      _AdminListType.userSubmitted => _userSubmittedDealsStream ?? _firestoreService.getUserSubmittedPendingDealsStream(),
+      _AdminListType.published => _firestoreService.getApprovedDealsStream(),
+      _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
+    };
+
     return StreamBuilder<List<Deal>>(
-      stream: switch (type) {
-        _AdminListType.pending => _firestoreService.getPendingDealsStream(),
-        _AdminListType.userSubmitted => _firestoreService.getUserSubmittedPendingDealsStream(),
-        _AdminListType.published => _firestoreService.getApprovedDealsStream(),
-        _AdminListType.expired => _firestoreService.getExpiredDealsStream(),
-      },
+      stream: stream,
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 48),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Fırsatlar yüklenirken bir sorun oluştu.',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${snapshot.error}',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: 4,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) => const DealCardSkeleton(viewMode: CardViewMode.horizontal),
-          );
-        }
-
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final bool isLoading = snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
         final deals = snapshot.data ?? [];
 
-        // Canlı Arama Filtresi (Akıllı Türkçe Karakter ve Çoklu Token Koruması)
+        // Canlı Arama Filtresi (Akıllı Türkçe Karakter ve Çoklu Token Koruması - Önceden Hesaplanmış)
+        final String normQ = searchQuery.isEmpty ? '' : DealSearchEngine.normalizeText(searchQuery);
+        final String lowerQ = searchQuery.isEmpty ? '' : searchQuery.toLowerCase().trim();
+        final List<String> tokens = searchQuery.isEmpty ? const <String>[] : DealSearchEngine.tokenize(searchQuery);
+        final bool hasMultipleTokens = tokens.length > 1;
+
         final filteredDeals = deals.where((d) {
           if (searchQuery.isEmpty) return true;
-          final normQ = DealSearchEngine.normalizeText(searchQuery);
           final normTitle = DealSearchEngine.normalizeText(d.title);
           final normStore = DealSearchEngine.normalizeText(d.store);
           final normBrand = DealSearchEngine.normalizeText(d.brand ?? '');
           final lowerId = d.id.toLowerCase();
-          final lowerQ = searchQuery.toLowerCase().trim();
 
           if (lowerId.contains(lowerQ) ||
               normTitle.contains(normQ) ||
@@ -544,8 +562,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             return true;
           }
 
-          final tokens = DealSearchEngine.tokenize(searchQuery);
-          if (tokens.length > 1) {
+          if (hasMultipleTokens) {
             final combined = '$normTitle $normStore $normBrand';
             return tokens.every((token) => combined.contains(token));
           }
@@ -559,16 +576,20 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           selectedSet.removeWhere((id) => !liveIds.contains(id));
         }
 
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-
         return RefreshIndicator(
           onRefresh: () async {
-            setState(() {});
+            setState(() {
+              if (isPending) {
+                _pendingDealsStream = _firestoreService.getPendingDealsStream();
+              } else if (isUserSubmitted) {
+                _userSubmittedDealsStream = _firestoreService.getUserSubmittedPendingDealsStream();
+              }
+            });
             await Future.delayed(const Duration(milliseconds: 300));
           },
           child: Column(
             children: [
-              // 🔍 Arama ve Çoklu Seçim Üst Kontrol Paneli (Sadece Pending ve UserSubmitted için)
+              // 🔍 Arama ve Çoklu Seçim Üst Kontrol Paneli (HER ZAMAN GÖRÜNÜR, ASLA UNMOUNT OLMAZ)
               if (isPending || isUserSubmitted)
                 Container(
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
@@ -600,7 +621,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                           hintText: isPending ? 'Bot fırsatlarında ara (başlık, mağaza)...' : 'Kullanıcı fırsatlarında ara...',
                           hintStyle: TextStyle(color: Colors.grey[500], fontSize: 13),
                           prefixIcon: const Icon(Icons.search, size: 20),
-                          suffixIcon: searchQuery.isNotEmpty
+                          suffixIcon: searchController.text.isNotEmpty
                               ? IconButton(
                                   icon: const Icon(Icons.clear, size: 18),
                                   onPressed: () {
@@ -630,9 +651,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                       Row(
                         children: [
                           Text(
-                            searchQuery.isNotEmpty
-                                ? '${filteredDeals.length} / ${deals.length} fırsat'
-                                : '${deals.length} onay bekleyen fırsat',
+                            isLoading
+                                ? 'Fırsatlar yükleniyor...'
+                                : (searchQuery.isNotEmpty
+                                    ? '${filteredDeals.length} / ${deals.length} fırsat'
+                                    : '${deals.length} onay bekleyen fırsat'),
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -640,7 +663,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                             ),
                           ),
                           const Spacer(),
-                          if (deals.isNotEmpty)
+                          if (!isLoading && deals.isNotEmpty)
                             InkWell(
                               onTap: () {
                                 setState(() {
@@ -721,7 +744,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 ),
 
               // ⚡ ÇOKLU SEÇİM AKSİYON ÇUBUĞU (Aktifse)
-              if (isSelectionMode)
+              if (!isLoading && isSelectionMode)
                 Container(
                   margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -782,7 +805,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ),
                 )
               // 🚀 SEÇİM MODU KAPALIYKEN: HIZLI TÜMÜNÜ ONAYLA & TÜMÜNÜ REDDET BUTONLARI
-              else if ((isPending || isUserSubmitted) && filteredDeals.isNotEmpty)
+              else if (!isLoading && (isPending || isUserSubmitted) && filteredDeals.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
                   child: Row(
@@ -830,59 +853,107 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ),
                 ),
 
-              // 📋 Fırsatlar Listesi
+              // 📋 Fırsatlar Listesi VEYA İskelet VEYA Hata
               Expanded(
-                child: filteredDeals.isEmpty
-                    ? ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.4,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.check_circle_outline,
-                                  size: 56,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  searchQuery.isNotEmpty
-                                      ? '"$searchQuery" ile eşleşen fırsat bulunamadı'
-                                      : (isPending ? 'Onay bekleyen bot fırsatı yok 🎉' : 'Kullanıcı paylaşımı bekleyen yok 🎉'),
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                child: isLoading
+                    ? ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: 4,
+                        separatorBuilder: (context, index) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) => const DealCardSkeleton(viewMode: CardViewMode.horizontal),
                       )
-                    : ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                        itemCount: filteredDeals.length,
-                        itemBuilder: (context, index) {
-                          final deal = filteredDeals[index];
-                          final isSelected = selectedSet.contains(deal.id);
-                          return _buildAdminCard(
-                            deal,
-                            type,
-                            isSelected: isSelected,
-                            isSelectionMode: isSelectionMode,
-                            onToggleSelect: () {
-                              setState(() {
-                                if (isSelected) {
-                                  selectedSet.remove(deal.id);
-                                } else {
-                                  selectedSet.add(deal.id);
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
+                    : snapshot.hasError
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 48),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'Fırsatlar yüklenirken bir sorun oluştu.',
+                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${snapshot.error}',
+                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : filteredDeals.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.all(24),
+                                children: [
+                                  SizedBox(
+                                    height: MediaQuery.of(context).size.height * 0.4,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.check_circle_outline,
+                                          size: 56,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          searchQuery.isNotEmpty
+                                              ? '"$searchQuery" ile eşleşen fırsat bulunamadı'
+                                              : (isPending ? 'Onay bekleyen bot fırsatı yok 🎉' : 'Kullanıcı paylaşımı bekleyen yok 🎉'),
+                                          style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500),
+                                        ),
+                                        if (searchQuery.isNotEmpty) ...[
+                                          const SizedBox(height: 14),
+                                          OutlinedButton.icon(
+                                            onPressed: () {
+                                              searchController.clear();
+                                              setState(() {
+                                                if (isPending) {
+                                                  _pendingSearchQuery = '';
+                                                } else {
+                                                  _userSubmittedSearchQuery = '';
+                                                }
+                                              });
+                                            },
+                                            icon: const Icon(Icons.clear, size: 16),
+                                            label: const Text('Aramayı Temizle'),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                                itemCount: filteredDeals.length,
+                                itemBuilder: (context, index) {
+                                  final deal = filteredDeals[index];
+                                  final isSelected = selectedSet.contains(deal.id);
+                                  return _buildAdminCard(
+                                    deal,
+                                    type,
+                                    isSelected: isSelected,
+                                    isSelectionMode: isSelectionMode,
+                                    onToggleSelect: () {
+                                      setState(() {
+                                        if (isSelected) {
+                                          selectedSet.remove(deal.id);
+                                        } else {
+                                          selectedSet.add(deal.id);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
               ),
             ],
           ),
@@ -2219,6 +2290,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             HapticFeedback.lightImpact();
             setState(() {
               _userRoleFilter = key;
+              _updateUsersStream();
             });
           }
         },
@@ -2258,7 +2330,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
     return Column(
       children: [
-        // Arama ve Filtreleme Başlığı
+        // Arama ve Filtreleme Başlığı (HER ZAMAN GÖRÜNÜR, ASLA UNMOUNT OLMAZ)
         Container(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
           decoration: BoxDecoration(
@@ -2284,7 +2356,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                           child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                         )
                       : const Icon(Icons.search, size: 20),
-                  suffixIcon: _userSearchQuery.isNotEmpty
+                  suffixIcon: _userSearchController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () {
@@ -2315,17 +2387,16 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 style: const TextStyle(fontSize: 13),
                 onChanged: (value) {
                   final val = value.toLowerCase().trim();
+                  _userSearchDebounce?.cancel();
                   setState(() {
                     _userSearchQuery = val;
+                    if (val.length < 3) {
+                      _directUserSearchResults = [];
+                    }
                   });
-                  _userSearchDebounce?.cancel();
                   if (val.length >= 3) {
                     _userSearchDebounce = Timer(const Duration(milliseconds: 500), () {
                       _performDirectUserSearch(val);
-                    });
-                  } else {
-                    setState(() {
-                      _directUserSearchResults = [];
                     });
                   }
                 },
@@ -2351,9 +2422,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
         // Kullanıcı listesi
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: usersQuery.snapshots(),
+            stream: _usersStream ?? usersQuery.snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              final isLoading = snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
+              if (isLoading) {
                 return const UserListSkeleton(itemCount: 6, padding: EdgeInsets.all(16));
               }
 
@@ -2400,7 +2472,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   return normUsername.contains(normCleanQuery) ||
                       normNickname.contains(normCleanQuery) ||
                       email.contains(_userSearchQuery) ||
-                      uid.contains(_userSearchQuery);
+                      email.contains(cleanUserQuery) ||
+                      uid.contains(_userSearchQuery) ||
+                      uid.contains(cleanUserQuery);
                 }).toList();
               }
 
@@ -2413,7 +2487,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
               return RefreshIndicator(
                 onRefresh: () async {
-                  setState(() {});
+                  setState(() {
+                    _updateUsersStream();
+                  });
                   await Future.delayed(const Duration(milliseconds: 300));
                 },
                 child: mergedDocs.isEmpty
@@ -2439,12 +2515,31 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                                   style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold, fontSize: 14),
                                   textAlign: TextAlign.center,
                                 ),
-                                if (_userSearchQuery.isNotEmpty && !_isSearchingUsersDirectly) ...[
+                                if (_userSearchQuery.isNotEmpty) ...[
                                   const SizedBox(height: 12),
-                                  OutlinedButton.icon(
-                                    onPressed: () => _performDirectUserSearch(_userSearchQuery),
-                                    icon: const Icon(Icons.travel_explore_rounded, size: 16),
-                                    label: const Text('Tüm Veritabanında Doğrudan Ara'),
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      OutlinedButton.icon(
+                                        onPressed: () {
+                                          _userSearchController.clear();
+                                          setState(() {
+                                            _userSearchQuery = '';
+                                            _directUserSearchResults = [];
+                                          });
+                                        },
+                                        icon: const Icon(Icons.clear, size: 16),
+                                        label: const Text('Aramayı Temizle'),
+                                      ),
+                                      if (!_isSearchingUsersDirectly)
+                                        ElevatedButton.icon(
+                                          onPressed: () => _performDirectUserSearch(_userSearchQuery),
+                                          icon: const Icon(Icons.travel_explore_rounded, size: 16),
+                                          label: const Text('Tüm Veritabanında Doğrudan Ara'),
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ],
@@ -3621,30 +3716,30 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<List<Kupon>>(
-      stream: _kuponService.getPendingKuponlarStream(),
+      stream: _pendingCouponsStream ?? _kuponService.getPendingKuponlarStream(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
+        final isLoading = snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
         final kuponlar = snapshot.data ?? [];
 
         // Eşzamanlılık Kalkanı: Canlı listeden çıkan kupon ID'lerini temizle
-        if (_selectedKuponIds.isNotEmpty) {
+        if (_selectedKuponIds.isNotEmpty && snapshot.hasData) {
           final liveIds = kuponlar.map((k) => k.id).toSet();
           _selectedKuponIds.removeWhere((id) => !liveIds.contains(id));
         }
 
-        // Canlı Arama Filtresi (Akıllı Türkçe ve Çoklu Token Koruması)
+        // Canlı Arama Filtresi (Akıllı Türkçe ve Çoklu Token Koruması - Önceden Hesaplanmış)
+        final String normQ = _kuponSearchQuery.isEmpty ? '' : DealSearchEngine.normalizeText(_kuponSearchQuery);
+        final String lowerQ = _kuponSearchQuery.isEmpty ? '' : _kuponSearchQuery.trim().toLowerCase();
+        final List<String> tokens = _kuponSearchQuery.isEmpty ? const <String>[] : DealSearchEngine.tokenize(_kuponSearchQuery);
+        final bool hasMultipleTokens = tokens.length > 1;
+
         final filteredKuponlar = kuponlar.where((k) {
           if (_kuponSearchQuery.isEmpty) return true;
-          final normQ = DealSearchEngine.normalizeText(_kuponSearchQuery);
           final normMagaza = DealSearchEngine.normalizeText(k.magazaAdi);
           final normBaslik = DealSearchEngine.normalizeText(k.baslik);
           final normKod = DealSearchEngine.normalizeText(k.kuponKodu);
           final normAciklama = DealSearchEngine.normalizeText(k.aciklama);
           final lowerId = k.id.toLowerCase();
-          final lowerQ = _kuponSearchQuery.trim().toLowerCase();
 
           bool matches = lowerId.contains(lowerQ) ||
               normMagaza.contains(normQ) ||
@@ -3652,24 +3747,23 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               normKod.contains(normQ) ||
               normAciklama.contains(normQ);
 
-          if (!matches) {
-            final tokens = DealSearchEngine.tokenize(_kuponSearchQuery);
-            if (tokens.length > 1) {
-              final combined = '$normMagaza $normBaslik $normKod $normAciklama';
-              matches = tokens.every((t) => combined.contains(t));
-            }
+          if (!matches && hasMultipleTokens) {
+            final combined = '$normMagaza $normBaslik $normKod $normAciklama';
+            matches = tokens.every((t) => combined.contains(t));
           }
           return matches;
         }).toList();
 
         return RefreshIndicator(
           onRefresh: () async {
-            setState(() {});
+            setState(() {
+              _pendingCouponsStream = _kuponService.getPendingKuponlarStream();
+            });
             await Future.delayed(const Duration(milliseconds: 300));
           },
           child: Column(
             children: [
-              // 🔍 Arama ve Çoklu Seçim Kontrol Çubuğu
+              // 🔍 Arama ve Çoklu Seçim Kontrol Çubuğu (HER ZAMAN GÖRÜNÜR, ASLA UNMOUNT OLMAZ)
               Container(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                 decoration: BoxDecoration(
@@ -3696,7 +3790,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                         hintText: 'Kuponlarda ara (mağaza, başlık, kod)...',
                         hintStyle: TextStyle(color: Colors.grey[500], fontSize: 13),
                         prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon: _kuponSearchQuery.isNotEmpty
+                        suffixIcon: _kuponSearchController.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear, size: 18),
                                 onPressed: () {
@@ -3722,9 +3816,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     Row(
                       children: [
                         Text(
-                          _kuponSearchQuery.isNotEmpty
-                              ? '${filteredKuponlar.length} / ${kuponlar.length} kupon'
-                              : '${kuponlar.length} onay bekleyen kupon',
+                          isLoading
+                              ? 'Kuponlar yükleniyor...'
+                              : (_kuponSearchQuery.isNotEmpty
+                                  ? '${filteredKuponlar.length} / ${kuponlar.length} kupon'
+                                  : '${kuponlar.length} onay bekleyen kupon'),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -3732,7 +3828,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                           ),
                         ),
                         const Spacer(),
-                        if (kuponlar.isNotEmpty)
+                        if (kuponlar.isNotEmpty && !isLoading)
                           InkWell(
                             onTap: () {
                               setState(() {
@@ -3805,7 +3901,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               ),
 
               // ⚡ ÇOKLU SEÇİM AKSİYON ÇUBUĞU (Aktifse)
-              if (_isKuponSelectionMode)
+              if (_isKuponSelectionMode && !isLoading)
                 Container(
                   margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -3866,7 +3962,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                   ),
                 )
               // 🚀 SEÇİM MODU KAPALIYKEN: HIZLI TÜMÜNÜ ONAYLA & TÜMÜNÜ REDDET BUTONLARI
-              else if (filteredKuponlar.isNotEmpty)
+              else if (filteredKuponlar.isNotEmpty && !isLoading)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
                   child: Row(
@@ -3912,34 +4008,70 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
               // 📋 Kupon Listesi
               Expanded(
-                child: filteredKuponlar.isEmpty
-                    ? ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.4,
+                child: isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : snapshot.hasError
+                        ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  _kuponSearchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.confirmation_number_outlined,
-                                  size: 56,
-                                  color: isDark ? Colors.grey[700] : Colors.grey[400],
-                                ),
-                                const SizedBox(height: 12),
+                                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                                const SizedBox(height: 16),
                                 Text(
-                                  _kuponSearchQuery.isNotEmpty
-                                      ? '"$_kuponSearchQuery" ile eşleşen kupon bulunamadı'
-                                      : 'Onay bekleyen kupon yok 🎉',
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500),
+                                  'Hata: ${snapshot.error}',
+                                  style: const TextStyle(color: Colors.red),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      )
-                    : ListView.builder(
+                          )
+                        : filteredKuponlar.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.all(24),
+                                children: [
+                                  SizedBox(
+                                    height: MediaQuery.of(context).size.height * 0.4,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          _kuponSearchQuery.isNotEmpty
+                                              ? Icons.search_off_rounded
+                                              : Icons.confirmation_number_outlined,
+                                          size: 56,
+                                          color: isDark ? Colors.grey[700] : Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          _kuponSearchQuery.isNotEmpty
+                                              ? '"$_kuponSearchQuery" ile eşleşen kupon bulunamadı'
+                                              : 'Onay bekleyen kupon yok 🎉',
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        if (_kuponSearchQuery.isNotEmpty) ...[
+                                          const SizedBox(height: 12),
+                                          OutlinedButton.icon(
+                                            onPressed: () {
+                                              _kuponSearchController.clear();
+                                              setState(() {
+                                                _kuponSearchQuery = '';
+                                              });
+                                            },
+                                            icon: const Icon(Icons.clear, size: 16),
+                                            label: const Text('Aramayı Temizle'),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView.builder(
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
                         itemCount: filteredKuponlar.length,

@@ -1,12 +1,8 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../../models/deal.dart';
 import '../../../services/firestore_service.dart';
 import 'admin_edit_sheet.dart';
-
-void _log(String message) {
-  if (kDebugMode) print(message);
-}
+import 'quick_price_edit_sheet.dart';
 
 /// Admin detay düzenleme dialog'u - tek ve zengin showAdminEditSheet'e yönlendirir.
 Future<void> showAdminEditDialog({
@@ -24,7 +20,7 @@ Future<void> showAdminEditDialog({
   );
 }
 
-/// Fiyat düzenleme dialog'u - tek ve zengin showAdminEditSheet'e yönlendirir.
+/// Fiyat düzenleme dialog'u - admin tek tıkla hızlı fiyat güncelleme modalını açar.
 Future<void> showPriceEditDialog({
   required BuildContext context,
   required Deal deal,
@@ -32,7 +28,7 @@ Future<void> showPriceEditDialog({
   required FirestoreService firestoreService,
   required VoidCallback onDealUpdated,
 }) async {
-  showAdminEditSheet(
+  showQuickPriceEditSheet(
     context: context,
     deal: deal,
     firestoreService: firestoreService,

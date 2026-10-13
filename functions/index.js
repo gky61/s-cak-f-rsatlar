@@ -5126,6 +5126,58 @@ exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', asy
  *    etkilemesini engeller.
  * 4. Kapsamlı Telemetri: Taranan, güncellenen ve atlanan doküman sayıları detaylı olarak loglanır.
  */
+function generateUserSearchKeywords(username, displayName, nickname) {
+  const normalize = (str) => {
+    if (!str || typeof str !== 'string') return '';
+    return str
+      .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
+      .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+      .replace(/Ğ/g, 'g').replace(/ğ/g, 'g')
+      .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+      .replace(/Ş/g, 's').replace(/ş/g, 's')
+      .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const kwSet = new Set();
+  const addTokens = (name) => {
+    const norm = normalize(name);
+    if (!norm) return;
+    const tokens = norm.split(' ').filter(t => t.length >= 2 || /^\d+$/.test(t));
+    tokens.forEach(token => {
+      kwSet.add(token);
+      const maxLen = Math.min(token.length, 25);
+      for (let i = 2; i <= maxLen; i++) {
+        kwSet.add(token.substring(0, i));
+      }
+    });
+    if (tokens.length > 1) {
+      const spaceJoined = tokens.join(' ');
+      if (spaceJoined.length >= 2 && spaceJoined.length <= 40) {
+        kwSet.add(spaceJoined);
+      }
+      const joined = tokens.join('');
+      if (joined.length >= 2 && joined.length <= 30) {
+        kwSet.add(joined);
+        const maxJ = Math.min(joined.length, 20);
+        for (let i = 2; i <= maxJ; i++) {
+          kwSet.add(joined.substring(0, i));
+        }
+      }
+    }
+  };
+
+  addTokens(username);
+  if (displayName && displayName !== username) addTokens(displayName);
+  if (nickname && nickname !== username && nickname !== displayName) addTokens(nickname);
+
+  return Array.from(kwSet).slice(0, 60);
+}
+
 exports.onUserUpdated = functions.firestore
   .document('users/{userId}')
   .onUpdate(wrapTrigger('onUserUpdated', async (change, context) => {
@@ -5150,6 +5202,25 @@ exports.onUserUpdated = functions.firestore
 
     const photoChanged = oldPhoto !== newPhoto;
     const nameChanged = oldName !== newName;
+    const isKeywordsMissing = !Array.isArray(after.searchKeywords) || after.searchKeywords.length === 0;
+
+    // FS-20: Kullanıcı searchKeywords senkronizasyonu
+    if (nameChanged || isKeywordsMissing) {
+      const generatedKeywords = generateUserSearchKeywords(after.username, after.displayName, after.nickname);
+      const isAlreadySame = Array.isArray(after.searchKeywords) &&
+                            after.searchKeywords.length === generatedKeywords.length &&
+                            generatedKeywords.every((kw, idx) => after.searchKeywords[idx] === kw);
+      if (!isAlreadySame && generatedKeywords.length > 0) {
+        try {
+          await admin.firestore().collection('users').doc(userId).set({
+            searchKeywords: generatedKeywords
+          }, { merge: true });
+          functions.logger.info(`🔍 [USERS-SEARCH] searchKeywords mühürlendi (${userId}): ${generatedKeywords.length} anahtar`);
+        } catch (kwErr) {
+          functions.logger.warn(`⚠️ User searchKeywords mühürleme hatası (${userId}):`, kwErr.message);
+        }
+      }
+    }
 
     if (!photoChanged && !nameChanged) {
       functions.logger.info(`ℹ️ User ${userId} güncellendi ancak fotoğraf veya isim değişmedi. Senkronizasyon atlandı.`);

@@ -162,14 +162,14 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                 children: [
                   // Görsel Container (Aspect Square yerine modern dikdörtgen)
                   SizedBox(
-                    height: 142,
+                    height: 138,
                     width: double.infinity,
                     child: Stack(
                       children: [
                         // Görsel
                         Container(
                           width: double.infinity,
-                          height: 142,
+                          height: 138,
                           decoration: const BoxDecoration(
                             color: Colors.white, // Beyaz zemin
                             borderRadius: BorderRadius.only(
@@ -303,7 +303,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                   // ─── ALT İÇERİK GÖVDESİ (SİMETRİK VE CETVEL HİZALI) ────────
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+                      padding: const EdgeInsets.fromLTRB(9, 5.5, 9, 5.5),
                       child: Stack(
                         children: [
                           // 1. ÜST & ORTA İÇERİK (HİZALI AKIŞ)
@@ -348,11 +348,11 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ],
                               ),
-                              const SizedBox(height: 4.0),
+                              const SizedBox(height: 3.0),
 
-                              // 1.2 Başlık (Sabit 30px Yükseklik - Cetvel Hizası)
+                              // 1.2 Başlık (Sabit 29px Yükseklik - Cetvel Hizası)
                               SizedBox(
-                                height: 30,
+                                height: 29,
                                 child: Text(
                                   deal.title,
                                   maxLines: 2,
@@ -360,7 +360,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w600,
-                                    height: 1.22,
+                                    height: 1.20,
                                     letterSpacing: -0.2,
                                     color: (isExpired || deal.expiredVotes >= 15)
                                         ? const Color(0xFFDC2626) 
@@ -372,7 +372,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 3.0),
+                              const SizedBox(height: 2.5),
 
                               // 1.3 Puan, Sosyal Kanıt & Mağaza Rozetleri (Sabit 16px Yükseklik)
                               SizedBox(
@@ -464,7 +464,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 5.0),
+                              const SizedBox(height: 3.5),
 
                               // 1.4 FİYAT (Puanın hemen altında, göz önünde ve cetvel hizasında!)
                               _buildPriceAndBadgeSection(isDark, isExpired),

@@ -535,7 +535,7 @@ class _DealThermometerState extends State<DealThermometer> with TickerProviderSt
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
               gradient: outerGradient,
               borderRadius: BorderRadius.circular(18 - outerBorderWidth),
@@ -611,7 +611,7 @@ class _DealThermometerState extends State<DealThermometer> with TickerProviderSt
                           onTap: () => _onVoteTap(false),
                           borderRadius: BorderRadius.circular(13),
                           child: Container(
-                            width: 58,
+                            width: 56,
                             padding: const EdgeInsets.symmetric(vertical: 7),
                             decoration: BoxDecoration(
                               gradient: isColdActive
@@ -687,7 +687,7 @@ class _DealThermometerState extends State<DealThermometer> with TickerProviderSt
                     // ─── CENTER: TEMPERATURE GAUGE & HERO METRICS ─────
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 11),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -845,20 +845,86 @@ class _DealThermometerState extends State<DealThermometer> with TickerProviderSt
                               ),
                             ),
 
-                            const SizedBox(height: 5.5),
+                            const SizedBox(height: 6),
 
-                            // 3. Toplam Oy Sayısı & Consensus Subtitle
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-                              child: Text(
-                                '$totalVotes Değerlendirme',
-                                key: ValueKey<int>(totalVotes),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                  letterSpacing: 0.1,
+                            // 3. Oylama Dağılım Kapsülü (Solda Soğuk ❄️ / Sağda Sıcak 🔥)
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFF0F172A).withValues(alpha: 0.85)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? (hotPercentage >= 50
+                                            ? const Color(0xFFFF5722).withValues(alpha: 0.45)
+                                            : const Color(0xFF0284C7).withValues(alpha: 0.45))
+                                        : (hotPercentage >= 50
+                                            ? const Color(0xFFFF5722).withValues(alpha: 0.35)
+                                            : const Color(0xFF0284C7).withValues(alpha: 0.35)),
+                                    width: 1.0,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (hotPercentage >= 50
+                                              ? const Color(0xFFFF5722)
+                                              : const Color(0xFF0284C7))
+                                          .withValues(alpha: isDark ? 0.22 : 0.08),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 1.5),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // 1. SOLDA: Soğuk / GEÇ Oyları (❄️)
+                                    const Icon(
+                                      Icons.ac_unit_rounded,
+                                      size: 11.5,
+                                      color: Color(0xFF0284C7),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      PriceFormatUtil.format(currentColdVotes, includeSymbol: false),
+                                      style: TextStyle(
+                                        color: isDark ? const Color(0xFFBAE6FD) : const Color(0xFF0284C7),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                    // Ayrıcı Çizgi
+                                    Container(
+                                      width: 1,
+                                      height: 9,
+                                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.22)
+                                          : Colors.black.withValues(alpha: 0.18),
+                                    ),
+                                    // 2. SAĞDA: Sıcak / AL! Oyları (🔥)
+                                    const Icon(
+                                      Icons.local_fire_department_rounded,
+                                      size: 12,
+                                      color: Color(0xFFFF5722),
+                                    ),
+                                    const SizedBox(width: 2.5),
+                                    Text(
+                                      PriceFormatUtil.format(currentHotVotes, includeSymbol: false),
+                                      style: TextStyle(
+                                        color: isDark ? const Color(0xFFFFCCBC) : const Color(0xFFD84315),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -876,7 +942,7 @@ class _DealThermometerState extends State<DealThermometer> with TickerProviderSt
                           onTap: () => _onVoteTap(true),
                           borderRadius: BorderRadius.circular(13),
                           child: Container(
-                            width: 58,
+                            width: 56,
                             padding: const EdgeInsets.symmetric(vertical: 7),
                             decoration: BoxDecoration(
                               gradient: isHotActive

@@ -92,8 +92,8 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
       style: ElevatedButton.styleFrom(
         backgroundColor: isExpired ? const Color(0xFF64748B) : AppTheme.primary,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
-        minimumSize: const Size(0, 28),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+        minimumSize: const Size(0, 26),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999), // rounded-full
         ),
@@ -192,10 +192,10 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Sol tarafta görsel - Esnek ve yüksek kaliteli (min. 140px)
+                    // Sol tarafta görsel - Esnek ve yüksek kaliteli (min. 148px)
                     Container(
                       width: 135,
-                      constraints: const BoxConstraints(minHeight: 142),
+                      constraints: const BoxConstraints(minHeight: 148),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         color: Colors.white, // Beyaz arka plan
@@ -412,18 +412,18 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 3),
+                              const SizedBox(height: 2.0),
                               // 2. Başlık Satırı (Maksimum 2 satır, temiz ve okunaklı)
                               Padding(
-                                padding: const EdgeInsets.only(top: 1, bottom: 2),
+                                padding: const EdgeInsets.only(top: 0.5, bottom: 1.5),
                                 child: Text(
                                   deal.title,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 12.5,
+                                    fontSize: 12.0,
                                     fontWeight: FontWeight.w600,
-                                    height: 1.22,
+                                    height: 1.20,
                                     letterSpacing: -0.2,
                                     color: (isExpired || deal.expiredVotes >= 15)
                                         ? const Color(0xFFDC2626) 
@@ -436,7 +436,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 3.0),
+                              const SizedBox(height: 2.0),
                               // 3. Değerlendirme & Termometre Satırı (Mağaza Puanı / Migros İçin Zaman + Canlı Termometre)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -509,7 +509,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 3.5),
+                              const SizedBox(height: 2.0),
                               // 4. Zaman & Yorum Satırı (Migros için Kampanya Rozeti / Diğerleri için Zaman)
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -561,7 +561,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2.5),
                           // 5. Alt Bölüm: Fiyat ve İncele Butonu
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

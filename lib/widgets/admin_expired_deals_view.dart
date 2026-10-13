@@ -20,15 +20,25 @@ class AdminExpiredDealsView extends StatefulWidget {
   State<AdminExpiredDealsView> createState() => _AdminExpiredDealsViewState();
 }
 
-class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
+class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> with AutomaticKeepAliveClientMixin {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
 
+  Stream<List<Deal>>? _expiredDealsStream;
   String _searchQuery = '';
   String _activeFilter = 'all'; // 'all', 'community', 'bot', 'approved', 'unapproved'
   bool _isSelectionMode = false;
   final Set<String> _selectedDealIds = {};
   bool _isPerformingBatch = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _expiredDealsStream = _firestoreService.getExpiredDealsStream();
+  }
 
   @override
   void dispose() {
@@ -87,46 +97,13 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<List<Deal>>(
-      stream: _firestoreService.getExpiredDealsStream(),
+      stream: _expiredDealsStream ?? _firestoreService.getExpiredDealsStream(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 48),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Süresi biten fırsatlar yüklenirken bir sorun oluştu.',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${snapshot.error}',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: 4,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (_, __) => const DealCardSkeleton(viewMode: CardViewMode.horizontal),
-          );
-        }
-
+        final bool isLoading = snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData;
         final allDeals = snapshot.data ?? [];
 
         // Eşzamanlılık Kalkanı: Canlı listeden düşen seçili ID'leri temizle
@@ -142,7 +119,13 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
         final int approvedCount = allDeals.where((d) => d.isApproved == true).length;
         final int unapprovedCount = allDeals.where((d) => d.isApproved != true).length;
 
-        // Filtreleme
+        // Filtreleme (Önceden Hesaplanmış Arama Değerleri)
+        final String cleanQuery = _searchQuery.trim();
+        final String normQ = cleanQuery.isEmpty ? '' : DealSearchEngine.normalizeText(cleanQuery);
+        final String lowerQ = cleanQuery.isEmpty ? '' : cleanQuery.toLowerCase();
+        final List<String> tokens = cleanQuery.isEmpty ? const <String>[] : DealSearchEngine.tokenize(cleanQuery);
+        final bool hasMultipleTokens = tokens.length > 1;
+
         final filteredDeals = allDeals.where((deal) {
           // Filtre Çipi
           if (_activeFilter == 'community' && deal.isBotkolik) return false;
@@ -151,14 +134,12 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
           if (_activeFilter == 'unapproved' && deal.isApproved == true) return false;
 
           // Arama Sorgusu (Akıllı Türkçe ve Token Koruması)
-          if (_searchQuery.trim().isNotEmpty) {
-            final normQ = DealSearchEngine.normalizeText(_searchQuery);
+          if (cleanQuery.isNotEmpty) {
             final normTitle = DealSearchEngine.normalizeText(deal.title);
             final normStore = DealSearchEngine.normalizeText(deal.store);
             final normBrand = DealSearchEngine.normalizeText(deal.brand ?? '');
             final normCategory = DealSearchEngine.normalizeText(deal.category);
             final lowerId = deal.id.toLowerCase();
-            final lowerQ = _searchQuery.trim().toLowerCase();
 
             bool matches = lowerId.contains(lowerQ) ||
                 normTitle.contains(normQ) ||
@@ -166,12 +147,9 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                 normBrand.contains(normQ) ||
                 normCategory.contains(normQ);
 
-            if (!matches) {
-              final tokens = DealSearchEngine.tokenize(_searchQuery);
-              if (tokens.length > 1) {
-                final combined = '$normTitle $normStore $normBrand $normCategory';
-                matches = tokens.every((token) => combined.contains(token));
-              }
+            if (!matches && hasMultipleTokens) {
+              final combined = '$normTitle $normStore $normBrand $normCategory';
+              matches = tokens.every((token) => combined.contains(token));
             }
             if (!matches) return false;
           }
@@ -181,7 +159,7 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
 
         return Column(
           children: [
-            // 🔍 Arama ve Filtreleme Başlığı
+            // 🔍 Arama ve Filtreleme Başlığı (HER ZAMAN GÖSTERİLİR, ASLA UNMOUNT OLMAZ)
             _buildSearchAndFilterHeader(
               isDark: isDark,
               allCount: allCount,
@@ -192,37 +170,76 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
             ),
 
             // ⚡ Toplu İşlem & Çoklu Seçim Çubuğu
-            if (allDeals.isNotEmpty)
+            if (!isLoading && allDeals.isNotEmpty)
               _buildBatchActionBar(
                 isDark: isDark,
                 filteredDeals: filteredDeals,
                 allDeals: allDeals,
               ),
 
-            // 📋 Fırsat Listesi veya Boş Durum
+            // 📋 Fırsat Listesi veya Boş Durum veya Yükleniyor İskeleti
             Expanded(
-              child: _isPerformingBatch
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Toplu işlem gerçekleştiriliyor...', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
+              child: isLoading
+                  ? ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: 4,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (_, __) => const DealCardSkeleton(viewMode: CardViewMode.horizontal),
                     )
-                  : filteredDeals.isEmpty
-                      ? _buildEmptyState(isDark: isDark, hasQuery: _searchQuery.isNotEmpty || _activeFilter != 'all')
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
-                          itemCount: filteredDeals.length,
-                          itemBuilder: (context, index) {
-                            final deal = filteredDeals[index];
-                            return _buildExpiredDealCard(deal, isDark);
-                          },
-                        ),
+                  : snapshot.hasError
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 48),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Süresi biten fırsatlar yüklenirken bir sorun oluştu.',
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${snapshot.error}',
+                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _isPerformingBatch
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text('Toplu işlem gerçekleştiriliyor...', style: TextStyle(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () async {
+                                setState(() {
+                                  _expiredDealsStream = _firestoreService.getExpiredDealsStream();
+                                });
+                                await Future.delayed(const Duration(milliseconds: 300));
+                              },
+                              child: filteredDeals.isEmpty
+                                  ? _buildEmptyState(isDark: isDark, hasQuery: _searchQuery.isNotEmpty || _activeFilter != 'all')
+                                  : ListView.builder(
+                                      physics: const AlwaysScrollableScrollPhysics(),
+                                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
+                                      itemCount: filteredDeals.length,
+                                      itemBuilder: (context, index) {
+                                        final deal = filteredDeals[index];
+                                        return _buildExpiredDealCard(deal, isDark);
+                                      },
+                                    ),
+                            ),
             ),
           ],
         );
@@ -285,7 +302,7 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                   size: 19,
                   color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                 ),
-                suffixIcon: _searchQuery.isNotEmpty
+                suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 17),
                         onPressed: () {

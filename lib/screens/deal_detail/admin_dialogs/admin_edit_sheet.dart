@@ -588,6 +588,34 @@ void showAdminEditSheet({
                               runSpacing: 6,
                               children: [
                                 _buildBadgeChip(
+                                  label: 'Günün Fırsatı',
+                                  color: const Color(0xFFFF6B35),
+                                  isSelected: priceLabelController.text == 'Günün Fırsatı',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Günün Fırsatı'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: '2. Ürüne %50',
+                                  color: const Color(0xFFFF6B35),
+                                  isSelected: priceLabelController.text == '2. Ürüne %50',
+                                  onTap: () => setSheetState(() => priceLabelController.text = '2. Ürüne %50'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: 'Kuponla',
+                                  color: const Color(0xFFFF6B35),
+                                  isSelected: priceLabelController.text == 'Kuponla',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Kuponla'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
+                                  label: 'Sepette İndirimli',
+                                  color: const Color(0xFFFF6B35),
+                                  isSelected: priceLabelController.text == 'Sepette İndirimli',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'Sepette İndirimli'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
                                   label: 'Prime Fırsatı',
                                   color: const Color(0xFFFF6000),
                                   isSelected: priceLabelController.text == 'Prime Fırsatı',
@@ -1251,6 +1279,8 @@ Widget _buildSwitchTile({
     ),
     child: Material(
       color: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
       child: SwitchListTile(
       value: value,
       onChanged: onChanged,

@@ -14,6 +14,7 @@ import 'analytics_service.dart';
 import '../models/user.dart' as app_user;
 import '../firebase_options.dart';
 import 'system_log_service.dart';
+import 'deal_search_engine.dart';
 
 /// Production-ready log fonksiyonu
 void _log(String message) {
@@ -318,6 +319,8 @@ class AuthService {
               'displayName': appUser.username,
               if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
               if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
+              if (appUser.searchKeywords != null && appUser.searchKeywords!.isNotEmpty)
+                'searchKeywords': appUser.searchKeywords,
             });
           } catch (updateErr) {
             _log('⚠️ Kurtarma sonrası güvenli profil güncelleme hatası: $updateErr');
@@ -325,14 +328,19 @@ class AuthService {
         }
       } else {
         // Yeni kullanıcı ise tam veriyi oluştur (create kuralı ile uyumlu)
+        final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
         appUser = app_user.AppUser(
           uid: currentUser.uid,
-          username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+          username: username,
           profileImageUrl: currentUser.photoURL ?? '',
           badges: [],
           points: 0,
           dealCount: 0,
           totalLikes: 0,
+          searchKeywords: DealSearchEngine.generateUserSearchKeywords(
+            username: username,
+            displayName: currentUser.displayName,
+          ),
         );
         
         await _firestore
@@ -530,6 +538,15 @@ class AuthService {
           if (existingData == null || !existingData.containsKey('createdAt')) {
             updateData['createdAt'] = FieldValue.serverTimestamp();
           }
+
+          // FS-20: searchKeywords eksikse veya isim değişmişse otomatik üret ve mühürle
+          if (shouldAdoptEffectiveName || existingData == null || !existingData.containsKey('searchKeywords') || (existingData['searchKeywords'] as List?)?.isEmpty == true) {
+            updateData['searchKeywords'] = DealSearchEngine.generateUserSearchKeywords(
+              username: appUser.username,
+              displayName: effectiveName,
+              nickname: appUser.nickname,
+            );
+          }
           
           // Sadece değişen alanlar varsa güncelle (following listesi korunur çünkü update() sadece belirtilen alanları günceller)
           if (updateData.isNotEmpty) {
@@ -558,6 +575,8 @@ class AuthService {
               if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
               if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
               if (firebaseUser.email != null) 'email': firebaseUser.email,
+              if (appUser.searchKeywords != null && appUser.searchKeywords!.isNotEmpty)
+                'searchKeywords': appUser.searchKeywords,
             });
           } catch (updateErr) {
             _log('⚠️ Parse hatası sonrası güvenli profil güncelleme hatası: $updateErr');
@@ -605,16 +624,21 @@ class AuthService {
   /// Varsayılan kullanıcı oluştur
   app_user.AppUser _createDefaultUser(User firebaseUser, {String? displayName}) {
     final effectiveName = displayName ?? firebaseUser.displayName;
+    final username = (effectiveName != null && effectiveName.isNotEmpty)
+        ? effectiveName
+        : (firebaseUser.email?.split('@')[0] ?? 'Kullanıcı');
     return app_user.AppUser(
       uid: firebaseUser.uid,
-      username: (effectiveName != null && effectiveName.isNotEmpty)
-          ? effectiveName
-          : (firebaseUser.email?.split('@')[0] ?? 'Kullanıcı'),
+      username: username,
       profileImageUrl: firebaseUser.photoURL ?? '',
       badges: [],
       points: 0,
       dealCount: 0,
       totalLikes: 0,
+      searchKeywords: DealSearchEngine.generateUserSearchKeywords(
+        username: username,
+        displayName: effectiveName,
+      ),
     );
   }
 

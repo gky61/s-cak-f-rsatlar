@@ -126,6 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Deal> _serverSearchResults = [];
   bool _isServerSearching = false;
   Timer? _dealSearchDebounceTimer;
+  String? _lastSearchedDealQuery;
+  String? _lastSearchedUserQuery;
   final ScrollController _scrollController = ScrollController();
   final ScrollController _categoryScrollController = ScrollController();
   bool _showScrollToTop = false;
@@ -1153,6 +1155,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _matchedUsers = [];
           _isSearchingUsers = false;
+          _lastSearchedUserQuery = null;
         });
       }
     } else {
@@ -1167,6 +1170,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _serverSearchResults = [];
             _isServerSearching = false;
+            _lastSearchedDealQuery = null;
           });
         }
       }
@@ -1177,6 +1181,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _searchDealsServer(String cleanQuery) async {
     if (cleanQuery.trim().length < 2) return;
     if (_activeSearchScope == SearchScope.users) return;
+
+    _lastSearchedDealQuery = cleanQuery.trim();
 
     if (mounted) {
       setState(() {
@@ -1216,6 +1222,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _isSearchingUsers = false;
       _serverSearchResults = [];
       _isServerSearching = false;
+      _lastSearchedDealQuery = null;
+      _lastSearchedUserQuery = null;
     });
   }
 
@@ -1224,6 +1232,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final normalized = DealSearchEngine.normalizeText(rawQuery);
     if (normalized.isEmpty) return;
 
+    _lastSearchedUserQuery = rawQuery.trim();
     setState(() => _isSearchingUsers = true);
     try {
       final results = <Map<String, dynamic>>[];
@@ -1241,56 +1250,37 @@ class _HomeScreenState extends State<HomeScreen> {
         seenIds.add('botkolik');
       }
 
-      // 2. P1-22 (R-SCL-03): İlk 30 doküman sınırı yerine veritabanı prefix sorgusu
+      // 2. FS-20 Kullanıcı Arama Radarı: Tekil/İkili searchKeywords array-contains sorgusu
       // Oturum açılmamışsa (misafir) users koleksiyonu Firestore kuralları (P1-19) gereği okunamayacağı için sorgu atlanır
       if (currentUserId != null) {
-        final trimmed = rawQuery.trim();
-        final lower = trimmed.toLowerCase();
+        final searchTokens = normalized.split(' ').where((t) => t.isNotEmpty).toList();
+        final primaryToken = searchTokens.isNotEmpty ? searchTokens.first : normalized;
+        final secondaryToken = (searchTokens.length > 1 &&
+                searchTokens[1] != primaryToken &&
+                searchTokens[1].length >= 3)
+            ? searchTokens[1]
+            : null;
 
-        // Çoklu varyant kümesi oluştur (Büyük-küçük harf duyarsızlığı garantisi)
-        // Örn: "muratcan" arandığında -> ["muratcan", "Muratcan", "MURATCAN"]
-        // Örn: "Muratcan" arandığında -> ["Muratcan", "muratcan", "MURATCAN"]
-        // Örn: "murat can" arandığında -> ["murat can", "Murat Can", "MURAT CAN"]
-        // Örn: "ismail" arandığında -> ["ismail", "İsmail", "Ismail"]
-        final searchVariants = <String>[];
-        void addVariant(String v) {
-          final t = v.trim();
-          if (t.isNotEmpty && !searchVariants.contains(t)) {
-            searchVariants.add(t);
+        Future<QuerySnapshot<Map<String, dynamic>>> fetchUsersForToken(String token) {
+          return FirebaseFirestore.instance
+              .collection('users')
+              .where('searchKeywords', arrayContains: token)
+              .limit(20)
+              .get();
+        }
+
+        try {
+          final List<QuerySnapshot<Map<String, dynamic>>> snaps;
+          if (secondaryToken != null) {
+            snaps = await Future.wait([
+              fetchUsersForToken(primaryToken),
+              fetchUsersForToken(secondaryToken),
+            ]);
+          } else {
+            snaps = [await fetchUsersForToken(primaryToken)];
           }
-        }
 
-        addVariant(trimmed);
-        addVariant(lower);
-        if (trimmed.length > 1) {
-          addVariant('${trimmed[0].toUpperCase()}${trimmed.substring(1).toLowerCase()}');
-          addVariant(trimmed.toUpperCase());
-        }
-        if (trimmed.contains(' ')) {
-          final words = trimmed.split(RegExp(r'\s+'));
-          final titleWords = words.map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '').join(' ');
-          addVariant(titleWords);
-        }
-        // Türkçe özel harf desteği ('i' ve 'İ')
-        if (lower.startsWith('i')) {
-          addVariant('İ${lower.substring(1)}');
-          addVariant('I${lower.substring(1)}');
-        } else if (trimmed.startsWith('İ') || trimmed.startsWith('I')) {
-          addVariant('i${trimmed.substring(1).toLowerCase()}');
-        }
-
-        // 1. username alanı üzerinde varyantlarla prefix taraması
-        for (final variant in searchVariants) {
-          if (results.length >= 20) break;
-          try {
-            final snap = await FirebaseFirestore.instance
-                .collection('users')
-                .orderBy('username')
-                .startAt([variant])
-                .endAt(['$variant\uf8ff'])
-                .limit(20 - results.length)
-                .get();
-
+          for (final snap in snaps) {
             for (final doc in snap.docs) {
               if (seenIds.contains(doc.id)) continue;
               seenIds.add(doc.id);
@@ -1305,52 +1295,130 @@ class _HomeScreenState extends State<HomeScreen> {
                 'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
                 'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
                 'isBot': false,
-                'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
+                'imageUrl': migrateAssetPath((data['profileImageUrl'] ?? data['photoURL'] ?? '').toString()),
                 'pinnedBadge': data['pinnedBadge']?.toString(),
+                'points': data['points'] ?? 0,
+                'dealCount': data['dealCount'] ?? 0,
               });
             }
-          } catch (_) {}
+          }
+        } catch (kwErr) {
+          _log('⚠️ searchKeywords kullanıcı arama uyarısı: $kwErr');
         }
 
-        // 2. displayName alanı üzerinde varyantlarla prefix taraması (Kullanıcı isimle arandığında)
-        for (final variant in searchVariants) {
-          if (results.length >= 20) break;
-          try {
-            final nameSnap = await FirebaseFirestore.instance
-                .collection('users')
-                .orderBy('displayName')
-                .startAt([variant])
-                .endAt(['$variant\uf8ff'])
-                .limit(20 - results.length)
-                .get();
+        // 3. Geriye Dönük Uyumluluk Kalkanı (Henüz migrate olmamış eski kullanıcılar için çift yönlü zeki fallback)
+        // Yalnızca searchKeywords sorgusu boş döndüyse ve arama en az 2 karakterse devreye girer
+        if (results.where((r) => r['id'] != 'botkolik').isEmpty && normalized.length >= 2) {
+          final fallbackVariants = DealSearchEngine.generateFallbackPrefixVariants(rawQuery);
 
-            for (final doc in nameSnap.docs) {
-              if (seenIds.contains(doc.id)) continue;
-              seenIds.add(doc.id);
-              if (doc.id == currentUserId) continue;
+          for (final variant in fallbackVariants) {
+            if (results.length >= 10) break;
+            try {
+              final fallbackSnap = await FirebaseFirestore.instance
+                  .collection('users')
+                  .orderBy('username')
+                  .startAt([variant])
+                  .endAt(['$variant\uf8ff'])
+                  .limit(10)
+                  .get();
 
-              final data = doc.data();
-              final username = (data['username'] ?? '').toString();
-              final displayName = (data['displayName'] ?? '').toString();
+              for (final doc in fallbackSnap.docs) {
+                if (seenIds.contains(doc.id)) continue;
+                seenIds.add(doc.id);
+                if (doc.id == currentUserId) continue;
 
-              results.add({
-                'id': doc.id,
-                'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
-                'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
-                'isBot': false,
-                'imageUrl': migrateAssetPath(data['profileImageUrl']?.toString() ?? ''),
-                'pinnedBadge': data['pinnedBadge']?.toString(),
-              });
+                final data = doc.data();
+                final username = (data['username'] ?? '').toString();
+                final displayName = (data['displayName'] ?? '').toString();
+
+                results.add({
+                  'id': doc.id,
+                  'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
+                  'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
+                  'isBot': false,
+                  'imageUrl': migrateAssetPath((data['profileImageUrl'] ?? data['photoURL'] ?? '').toString()),
+                  'pinnedBadge': data['pinnedBadge']?.toString(),
+                  'points': data['points'] ?? 0,
+                  'dealCount': data['dealCount'] ?? 0,
+                });
+
+                // Kendini İyileştirme (Self-Healing): Bu dokümanda searchKeywords eksikse arka planda Firestore'a mühürle
+                if (data['searchKeywords'] == null || (data['searchKeywords'] as List?)?.isEmpty == true) {
+                  try {
+                    final kw = DealSearchEngine.generateUserSearchKeywords(
+                      username: username,
+                      displayName: displayName,
+                      nickname: data['nickname']?.toString(),
+                    );
+                    FirebaseFirestore.instance.collection('users').doc(doc.id).update({
+                      'searchKeywords': kw,
+                    }).catchError((_) {});
+                  } catch (_) {}
+                }
+              }
+            } catch (_) {}
+          }
+
+          // Eğer hala sonuç bulunamadıysa ve kullanıcı displayName ile aranmış olabilirse
+          if (results.where((r) => r['id'] != 'botkolik').isEmpty) {
+            for (final variant in fallbackVariants) {
+              if (results.length >= 10) break;
+              try {
+                final fallbackSnap = await FirebaseFirestore.instance
+                    .collection('users')
+                    .orderBy('displayName')
+                    .startAt([variant])
+                    .endAt(['$variant\uf8ff'])
+                    .limit(10)
+                    .get();
+
+                for (final doc in fallbackSnap.docs) {
+                  if (seenIds.contains(doc.id)) continue;
+                  seenIds.add(doc.id);
+                  if (doc.id == currentUserId) continue;
+
+                  final data = doc.data();
+                  final username = (data['username'] ?? '').toString();
+                  final displayName = (data['displayName'] ?? '').toString();
+
+                  results.add({
+                    'id': doc.id,
+                    'name': displayName.isNotEmpty ? displayName : (username.isNotEmpty ? username : 'Kullanıcı'),
+                    'username': username.isNotEmpty ? username : (displayName.isNotEmpty ? displayName : 'kullanici'),
+                    'isBot': false,
+                    'imageUrl': migrateAssetPath((data['profileImageUrl'] ?? data['photoURL'] ?? '').toString()),
+                    'pinnedBadge': data['pinnedBadge']?.toString(),
+                    'points': data['points'] ?? 0,
+                    'dealCount': data['dealCount'] ?? 0,
+                  });
+
+                  if (data['searchKeywords'] == null || (data['searchKeywords'] as List?)?.isEmpty == true) {
+                    try {
+                      final kw = DealSearchEngine.generateUserSearchKeywords(
+                        username: username,
+                        displayName: displayName,
+                        nickname: data['nickname']?.toString(),
+                      );
+                      FirebaseFirestore.instance.collection('users').doc(doc.id).update({
+                        'searchKeywords': kw,
+                      }).catchError((_) {});
+                    } catch (_) {}
+                  }
+                }
+              } catch (_) {}
             }
-          } catch (_) {}
+          }
         }
       }
+
+      // 4. Alaka Düzeyi ve Güvenilirlik Sıralaması (Relevance Ranking)
+      final rankedResults = DealSearchEngine.rankUsers(results, rawQuery);
 
       // Async Race Condition Kalkanı: Yalnızca arama çubuğundaki sorgu ile eşleşen istek UI'ı günceller
       final expectedQuery = _searchQuery.replaceFirst('@', '').trim();
       if (mounted && expectedQuery.toLowerCase() == rawQuery.trim().toLowerCase()) {
         setState(() {
-          _matchedUsers = results;
+          _matchedUsers = rankedResults;
           _isSearchingUsers = false;
         });
       }
@@ -2954,8 +3022,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       _activeSearchScope = SearchScope.deals;
                     });
                     final cleanQuery = _searchQuery.trim();
-                    if (cleanQuery.length >= 2 && _serverSearchResults.isEmpty && !_isServerSearching) {
-                      _searchDealsServer(cleanQuery);
+                    if (cleanQuery.length >= 2) {
+                      if (_lastSearchedDealQuery != cleanQuery || _serverSearchResults.isEmpty) {
+                        _searchDealsServer(cleanQuery);
+                      }
                     }
                   }
                 },
@@ -3016,8 +3086,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       _activeSearchScope = SearchScope.users;
                     });
                     final query = _searchQuery.replaceFirst('@', '').trim();
-                    if (query.length >= 2 && _matchedUsers.isEmpty && !_isSearchingUsers) {
-                      _searchUsers(query);
+                    if (query.length >= 2) {
+                      if (_lastSearchedUserQuery != query || _matchedUsers.isEmpty) {
+                        _searchUsers(query);
+                      }
                     }
                   }
                 },

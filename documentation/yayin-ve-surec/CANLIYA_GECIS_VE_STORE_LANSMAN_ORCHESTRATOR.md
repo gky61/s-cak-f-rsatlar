@@ -215,6 +215,13 @@ graph TD
   - *Eylem Linki vs. Kimlik Linki Ayrımı:* Son kullanıcının tıkladığı "Mağazaya Git" butonu (`deal.link`), indirimli beden varyantını ve affiliate takip parametrelerini eksiksiz korurken; mükerrerlik kimliği (`deal.cleanUrl`) sayfanın `<link rel="canonical">` veya `<meta property="og:url">` etiketinden satıcı parametresi (`magaza`, `shopId`) korunarak türetildi (`buildCanonicalCleanUrl`).  
   - *Post-Scrape İkili Güvenlik Ağı & Zero Deal Loss:* Bot ve Dart servislerinde hem `finalCleanUrl` (kanonik) hem `rawCleanUrl` (varyant) sorgulanarak eski kayıtlarla geriye dönük %100 uyumluluk sağlandı. Eğer bir bedende gerçekten en az %5 fiyat düşüşü varsa paylaşım onaylanır; fiyat düşüşü yoksa veya ürün admin onayındaysa mükerrer kart açılması kesin olarak engellenir.  
   - *Doğrulama:* `cloud-run-bot/tests/deduplication_dual_protection.test.js` (Test 4a, 4b, 4c %100 PASS) ve `test/deal_clean_url_test.dart` (17/17 PASS).
+* 🟢 **Adım 3.17: Stale Share Intent & Bildirim Açılışı Karşılıklı Dışlama Kalkanı (`R-MOB-15`)**  
+  - *Problem:* Kullanıcı e-ticaret uygulamasından FırsatKolik'i seçip paylaşım yapıp onayladıktan sonra, arka planda işletim sistemi bellek yönetimi (process death / activity recreation) devreye girdiğinde; bildirime tıklanarak açılan uygulamada Android OS'in önceki `ACTION_SEND` intent'ini yeniden yüklemesi ve Fırsat Paylaş ekranının eski linkle açılması.  
+  - *Kök Neden & 3 Katmanlı Çözüm:*  
+    1. *Katman 1 (Native Intent Sanitization - `MainActivity.kt`):* `onNewIntent` override edilerek `setIntent(intent)` sağlandı. `com.sicakfirsatlar.app/share_intent` method kanalı üzerinden `clearIntent` aksiyonu ile `activity.intent = Intent(Intent.ACTION_MAIN)` çağrısı yapılarak Android OS hafızasındaki bayat intent silindi.  
+    2. *Katman 2 (Kalıcı Karantina - `ShareIntentService.dart` & `SubmitDealScreen.dart`):* `SharedPreferences` tabanlı tüketilen link listesi (`markUrlConsumed`, `_isUrlConsumed`) kuruldu. Soğuk başlangıçta (`isColdStart: true`) daha önce tüketilen linkler yutuldu. Sıcak paylaşımlarda (`isColdStart: false`) ise 0 ms gecikmeyle anında ekran açılışı korundu. Ekran submit veya dispose anında tüketim mühürlendi.  
+    3. *Katman 3 (Mutual Exclusion - `NotificationService.dart`):* Bildirim soğuk açılışlarında (`isColdStartNotificationTapActive = true`) paylaşım intent'i bastırılarak bildirimin hedeflediği ekranın açılması garanti edildi.  
+  - *Doğrulama & Hijyen:* `test/share_intent_stale_prevention_test.dart` (3/3 PASS), `flutter analyze` 0 hata/uyarı, AdMob ve paylaşım hızına 0 yan etki.
 
 ---
 

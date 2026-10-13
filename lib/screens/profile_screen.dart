@@ -10,6 +10,7 @@ import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
 import '../services/deal_sync_service.dart';
+import '../services/deal_search_engine.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
 import '../utils/asset_path_migration.dart';
@@ -328,14 +329,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
+            final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
             final newUser = AppUser(
               uid: currentUser.uid,
-              username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+              username: username,
               profileImageUrl: currentUser.photoURL ?? '',
               points: 0,
               dealCount: 0,
               totalLikes: 0,
               badges: [],
+              searchKeywords: DealSearchEngine.generateUserSearchKeywords(
+                username: username,
+                displayName: currentUser.displayName,
+              ),
             );
             try {
               _firestore.collection('users').doc(currentUser.uid).set({
@@ -380,14 +386,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (_isOwnProfile) {
             final currentUser = _authService.currentUser;
             if (currentUser != null) {
+              final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
               final fallbackUser = AppUser(
                 uid: currentUser.uid,
-                username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+                username: username,
                 profileImageUrl: currentUser.photoURL ?? '',
                 points: 0,
                 dealCount: 0,
                 totalLikes: 0,
                 badges: [],
+                searchKeywords: DealSearchEngine.generateUserSearchKeywords(
+                  username: username,
+                  displayName: currentUser.displayName,
+                ),
               );
               if (mounted) {
                 setState(() {
@@ -405,14 +416,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
+            final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
             final newUser = AppUser(
               uid: currentUser.uid,
-              username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+              username: username,
               profileImageUrl: currentUser.photoURL ?? '',
               points: 0,
               dealCount: 0,
               totalLikes: 0,
               badges: [],
+              searchKeywords: DealSearchEngine.generateUserSearchKeywords(
+                username: username,
+                displayName: currentUser.displayName,
+              ),
             );
             try {
               await _firestore.collection('users').doc(currentUser.uid).set({
@@ -1018,17 +1034,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _log('⚠️ Firebase Auth displayName güncelleme hatası: $authError');
       }
 
-      // 2. Firestore'daki username ve nickname'i güncelle
+      // 2. Firestore'daki username, nickname ve searchKeywords'ü güncelle
       // Not: nickname alanı da güncellenmeli, aksi halde eski değer görünür
+      final searchKeywords = DealSearchEngine.generateUserSearchKeywords(
+        username: newUsername,
+        displayName: newUsername,
+        nickname: newUsername,
+      );
       await _firestore
           .collection('users')
           .doc(user.uid)
           .set({
         'username': newUsername,
         'nickname': newUsername, // nickname'i de aynı değerle güncelle
+        'searchKeywords': searchKeywords,
       }, SetOptions(merge: true));
 
-      _log('✅ Firestore username ve nickname güncellendi: $newUsername');
+      _log('✅ Firestore username, nickname ve searchKeywords güncellendi: $newUsername');
 
       // 3. Kullanıcı verilerini yeniden yükle
       await _loadUserData();

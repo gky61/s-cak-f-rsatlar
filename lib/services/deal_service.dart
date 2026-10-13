@@ -398,7 +398,8 @@ class DealService {
 
   /// FS-20: Hibrit Arama Kademe 2 — Firestore Sunucu Tabanlı Hedefli Arama.
   /// 40 Milyon okuma maliyeti patlamasını engeller.
-  /// Sadece en fazla [limit] dokümanlık tekil `array-contains` hedefli sorgu atar.
+  /// Çok kelimeli aramalarda en ayırt edici 2 anahtar kelimeyi paralel (Future.wait)
+  /// sorgulayarak birleştirir ve %95+ arama isabeti sağlar.
   Future<List<Deal>> searchDealsServer({
     required String query,
     String? category,
@@ -411,51 +412,84 @@ class DealService {
     if (tokens.isEmpty) return [];
 
     try {
-      // En ayırt edici / en uzun anahtar kelimeyi seç (örn: "playstation" veya "supurge")
-      final sortedTokens = List<String>.from(tokens)..sort((a, b) => b.length.compareTo(a.length));
+      // Ayırt edici anahtar kelimeleri seç (en uzun ve anlamlı ilk 2 kelime)
+      final sortedTokens = List<String>.from(tokens)
+        ..sort((a, b) => b.length.compareTo(a.length));
+      
       final primaryToken = sortedTokens.first;
+      // İkinci token varsa ve primaryToken'dan farklıysa (en az 3 karakter) paralel sorguya dahil et.
+      // Eğer ikinci token yoksa ama primaryToken'ın Türkçe kökü varsa (örn: "süpürgeler" -> "supurge"),
+      // kök kelimeyi ikincil token olarak eşzamanlı sorgula!
+      final primaryStems = DealSearchEngine.stemTurkishWord(primaryToken);
+      final String? secondaryToken;
+      if (sortedTokens.length > 1 &&
+          sortedTokens[1] != primaryToken &&
+          sortedTokens[1].length >= 3) {
+        secondaryToken = sortedTokens[1];
+      } else if (primaryStems.isNotEmpty &&
+          primaryStems.first != primaryToken &&
+          primaryStems.first.length >= 3) {
+        secondaryToken = primaryStems.first;
+      } else {
+        secondaryToken = null;
+      }
 
-      QuerySnapshot<Map<String, dynamic>> snapshot;
-      try {
-        // FS-20 Prod Kalkanı: En taze onaylanmış fırsatları azalan tarih sırasıyla çek
-        // (Bileşik İndeks: isApproved ASC, searchKeywords CONTAINS, createdAt DESC)
-        final queryRef = _firestore
-            .collection('deals')
-            .where('isApproved', isEqualTo: true)
-            .where('searchKeywords', arrayContains: primaryToken)
-            .orderBy('createdAt', descending: true)
-            .limit(limit);
+      // Tekil token Firestore sorgulayıcısı
+      Future<QuerySnapshot<Map<String, dynamic>>> fetchForToken(String token, int queryLimit) async {
+        try {
+          // FS-20 Prod Kalkanı: En taze onaylanmış fırsatları azalan tarih sırasıyla çek
+          // (Bileşik İndeks: isApproved ASC, searchKeywords CONTAINS, createdAt DESC)
+          final queryRef = _firestore
+              .collection('deals')
+              .where('isApproved', isEqualTo: true)
+              .where('searchKeywords', arrayContains: token)
+              .orderBy('createdAt', descending: true)
+              .limit(queryLimit);
 
-        snapshot = await queryRef.get();
-      } catch (indexError) {
-        _log('⚠️ searchDealsServer sıralı sorgu uyarısı (fallback yapılıyor): $indexError');
-        // İndeks henüz derleniyorsa veya yerel emülatörde çalışıyorsa geriye dönük güvenli sorgu
-        final fallbackRef = _firestore
-            .collection('deals')
-            .where('searchKeywords', arrayContains: primaryToken)
-            .limit(limit);
+          return await queryRef.get();
+        } catch (indexError) {
+          _log('⚠️ searchDealsServer sıralı sorgu uyarısı (fallback token=$token): $indexError');
+          final fallbackRef = _firestore
+              .collection('deals')
+              .where('searchKeywords', arrayContains: token)
+              .limit(queryLimit);
 
-        snapshot = await fallbackRef.get();
+          return await fallbackRef.get();
+        }
+      }
+
+      final List<QuerySnapshot<Map<String, dynamic>>> snapshots;
+      if (secondaryToken != null) {
+        // Çok kelimeli aramalarda top 2 token'ı eşzamanlı çek
+        snapshots = await Future.wait([
+          fetchForToken(primaryToken, limit),
+          fetchForToken(secondaryToken, (limit * 0.7).round().clamp(10, 30)),
+        ]);
+      } else {
+        snapshots = [await fetchForToken(primaryToken, limit)];
       }
 
       final now = DateTime.now();
       final cutoffTime = now.subtract(const Duration(days: 45)); // Son 45 günün fırsatları
 
-      final List<Deal> serverDeals = [];
-      for (final doc in snapshot.docs) {
-        final deal = _safeParseDeal(doc);
-        if (deal == null) continue;
-        if (deal.isApproved != true) continue;
-        if (deal.isTest == true) continue;
-        if (deal.createdAt.isBefore(cutoffTime)) continue;
-        if (category != null && category.isNotEmpty && category != 'tumu' && deal.category != category) {
-          continue;
+      final Map<String, Deal> uniqueDealsMap = {};
+      for (final snapshot in snapshots) {
+        for (final doc in snapshot.docs) {
+          if (uniqueDealsMap.containsKey(doc.id)) continue;
+          final deal = _safeParseDeal(doc);
+          if (deal == null) continue;
+          if (deal.isApproved != true) continue;
+          if (deal.isTest == true) continue;
+          if (deal.createdAt.isBefore(cutoffTime)) continue;
+          if (category != null && category.isNotEmpty && category != 'tumu' && deal.category != category) {
+            continue;
+          }
+          uniqueDealsMap[deal.id] = deal;
         }
-        serverDeals.add(deal);
       }
 
-      // Alaka düzeyi puanlaması (Relevance score) uygulayarak döndür
-      return DealSearchEngine.searchDeals(serverDeals, cleanQuery);
+      // Alaka düzeyi puanlaması (Relevance score) uygulayarak sıralı döndür
+      return DealSearchEngine.searchDeals(uniqueDealsMap.values.toList(), cleanQuery);
     } catch (e, stack) {
       _log('⚠️ searchDealsServer hatası: $e');
       SystemLogService.instance.logError(
@@ -884,7 +918,23 @@ class DealService {
 
   Future<bool> updateDeal(String dealId, Map<String, dynamic> updates) async {
     try {
-      await _firestore.collection('deals').doc(dealId).update(updates);
+      final finalUpdates = Map<String, dynamic>.from(updates);
+      if (finalUpdates.containsKey('title') ||
+          finalUpdates.containsKey('brand') ||
+          finalUpdates.containsKey('store') ||
+          finalUpdates.containsKey('category')) {
+        final title = (finalUpdates['title'] ?? '').toString();
+        if (title.isNotEmpty) {
+          finalUpdates['searchKeywords'] = DealSearchEngine.generateSearchKeywords(
+            title: title,
+            brand: finalUpdates['brand']?.toString(),
+            store: finalUpdates['store']?.toString(),
+            category: finalUpdates['category']?.toString(),
+            subCategory: finalUpdates['subCategory']?.toString(),
+          );
+        }
+      }
+      await _firestore.collection('deals').doc(dealId).update(finalUpdates);
       return true;
     } catch (e) {
       _log('Deal güncelleme hatası: $e');

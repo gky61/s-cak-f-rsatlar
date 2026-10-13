@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +10,7 @@ import '../services/firestore_service.dart';
 import '../services/user_service.dart';
 import '../services/comment_service.dart';
 import '../services/message_service.dart';
+import '../services/deal_search_engine.dart';
 import '../screens/deal_detail_screen.dart';
 import '../screens/profile_screen.dart';
 import 'skeletons/notification_list_skeleton.dart';
@@ -22,7 +24,8 @@ class AdminReportsList extends StatefulWidget {
   State<AdminReportsList> createState() => _AdminReportsListState();
 }
 
-class _AdminReportsListState extends State<AdminReportsList> with SingleTickerProviderStateMixin {
+class _AdminReportsListState extends State<AdminReportsList>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final ReportService _reportService = ReportService();
   final FirestoreService _firestoreService = FirestoreService();
   final UserService _userService = UserService();
@@ -30,6 +33,10 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
   final MessageService _messageService = MessageService();
 
   late TabController _segmentTabController;
+
+  // Canlı Firestore Yayınları (Re-subscription ve Focus Kaybını Önlemek İçin Önbellekli)
+  Stream<List<Report>>? _complaintsStream;
+  Stream<List<AdminModerationAlarm>>? _autoModStream;
 
   // Tab 1 (Şikayetler) filtreleme ve çoklu seçim durumları
   String _complaintsSearchQuery = '';
@@ -46,9 +53,18 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
   final TextEditingController _autoModSearchController = TextEditingController();
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
     _segmentTabController = TabController(length: 2, vsync: this);
+    _initStreams();
+  }
+
+  void _initStreams() {
+    _complaintsStream = _reportService.getRecentReportsStream(limit: 100);
+    _autoModStream = _reportService.getAutoModAlarmsStream(limit: 150);
   }
 
   @override
@@ -61,6 +77,7 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final primaryColor = theme.colorScheme.primary;
 
@@ -121,7 +138,7 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
 
   Widget _buildComplaintsTab() {
     return StreamBuilder<List<Report>>(
-      stream: _reportService.getRecentReportsStream(limit: 100),
+      stream: _complaintsStream ?? _reportService.getRecentReportsStream(limit: 100),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
@@ -136,14 +153,19 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                   const SizedBox(height: 8),
                   Text('Hata detayı: ${snapshot.error}', style: const TextStyle(fontSize: 12, color: Colors.red), textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-                  ElevatedButton(onPressed: () => setState(() {}), child: const Text('Tekrar Dene')),
+                  ElevatedButton(
+                    onPressed: () => setState(() {
+                      _complaintsStream = _reportService.getRecentReportsStream(limit: 100);
+                    }),
+                    child: const Text('Tekrar Dene'),
+                  ),
                 ],
               ),
             ),
           );
         }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return const NotificationListSkeleton();
         }
 
@@ -181,7 +203,12 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
         );
 
         return RefreshIndicator(
-          onRefresh: () async => setState(() {}),
+          onRefresh: () async {
+            setState(() {
+              _complaintsStream = _reportService.getRecentReportsStream(limit: 100);
+            });
+            await Future.delayed(const Duration(milliseconds: 300));
+          },
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
@@ -312,6 +339,17 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                             : 'Henüz bildirilmiş şikayet yok',
                         style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
                       ),
+                      if (_complaintsSearchQuery.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            _complaintsSearchController.clear();
+                            setState(() => _complaintsSearchQuery = '');
+                          },
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text('Aramayı Temizle'),
+                        ),
+                      ],
                     ],
                   ),
                 )
@@ -394,7 +432,7 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                 hintText: 'Şikayet nedeni, içerik, ID veya kullanıcı ara...',
                 hintStyle: const TextStyle(fontSize: 12),
                 prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: _complaintsSearchQuery.isNotEmpty
+                suffixIcon: _complaintsSearchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
                         onPressed: () {
@@ -696,7 +734,7 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
 
   Widget _buildAutoModTab() {
     return StreamBuilder<List<AdminModerationAlarm>>(
-      stream: _reportService.getAutoModAlarmsStream(limit: 150),
+      stream: _autoModStream ?? _reportService.getAutoModAlarmsStream(limit: 150),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
@@ -711,14 +749,19 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                   const SizedBox(height: 8),
                   Text('Hata detayı: ${snapshot.error}', style: const TextStyle(fontSize: 12, color: Colors.red), textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-                  ElevatedButton(onPressed: () => setState(() {}), child: const Text('Tekrar Dene')),
+                  ElevatedButton(
+                    onPressed: () => setState(() {
+                      _autoModStream = _reportService.getAutoModAlarmsStream(limit: 150);
+                    }),
+                    child: const Text('Tekrar Dene'),
+                  ),
                 ],
               ),
             ),
           );
         }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return const NotificationListSkeleton();
         }
 
@@ -733,7 +776,12 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
         );
 
         return RefreshIndicator(
-          onRefresh: () async => setState(() {}),
+          onRefresh: () async {
+            setState(() {
+              _autoModStream = _reportService.getAutoModAlarmsStream(limit: 150);
+            });
+            await Future.delayed(const Duration(milliseconds: 300));
+          },
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
@@ -797,7 +845,7 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                           hintText: 'Kullanıcı, sebep veya içerik ara...',
                           hintStyle: const TextStyle(fontSize: 12),
                           prefixIcon: const Icon(Icons.search, size: 18),
-                          suffixIcon: _autoModSearchQuery.isNotEmpty
+                          suffixIcon: _autoModSearchController.text.isNotEmpty
                               ? IconButton(
                                   icon: const Icon(Icons.clear, size: 18),
                                   onPressed: () {
@@ -841,10 +889,23 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                     children: [
                       Icon(Icons.verified_user_outlined, size: 64, color: Colors.green[300]),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Kriterlere uygun moderasyon alarmı bulunamadı.',
-                        style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+                      Text(
+                        _autoModSearchQuery.isNotEmpty || _autoModFilter != 'all'
+                            ? 'Kriterlere uygun moderasyon alarmı bulunamadı.'
+                            : 'İncelenmeyi bekleyen moderasyon alarmı yok.',
+                        style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
                       ),
+                      if (_autoModSearchQuery.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            _autoModSearchController.clear();
+                            setState(() => _autoModSearchQuery = '');
+                          },
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text('Aramayı Temizle'),
+                        ),
+                      ],
                     ],
                   ),
                 )
@@ -1979,18 +2040,21 @@ extension _ReportFilterExt on List<Report> {
     required String statusFilter,
     required String typeFilter,
   }) {
-    final q = searchQuery.toLowerCase().trim();
+    final cleanQ = searchQuery.trim();
+    final normQ = cleanQ.isEmpty ? '' : DealSearchEngine.normalizeText(cleanQ);
+    final lowerQ = cleanQ.isEmpty ? '' : cleanQ.toLowerCase();
+
     return where((report) {
       if (statusFilter != 'all' && report.status != statusFilter) return false;
       if (typeFilter != 'all' && report.type != typeFilter) return false;
-      if (q.isNotEmpty) {
-        final idMatch = report.id.toLowerCase().contains(q);
-        final repIdMatch = report.reportedId.toLowerCase().contains(q);
-        final reporterMatch = report.reportedBy.toLowerCase().contains(q);
-        final reasonMatch = report.reason.toLowerCase().contains(q);
-        final descMatch = (report.description ?? '').toLowerCase().contains(q);
-        final contentMatch = (report.targetContent ?? '').toLowerCase().contains(q);
-        final authorMatch = (report.targetAuthor ?? '').toLowerCase().contains(q);
+      if (cleanQ.isNotEmpty) {
+        final idMatch = report.id.toLowerCase().contains(lowerQ);
+        final repIdMatch = report.reportedId.toLowerCase().contains(lowerQ);
+        final reporterMatch = report.reportedBy.toLowerCase().contains(lowerQ);
+        final reasonMatch = DealSearchEngine.normalizeText(report.reason).contains(normQ);
+        final descMatch = DealSearchEngine.normalizeText(report.description ?? '').contains(normQ);
+        final contentMatch = DealSearchEngine.normalizeText(report.targetContent ?? '').contains(normQ);
+        final authorMatch = DealSearchEngine.normalizeText(report.targetAuthor ?? '').contains(normQ);
         return idMatch || repIdMatch || reporterMatch || reasonMatch || descMatch || contentMatch || authorMatch;
       }
       return true;
@@ -2003,15 +2067,19 @@ extension _AlarmFilterExt on List<AdminModerationAlarm> {
     required String searchQuery,
     required String filter,
   }) {
-    final q = searchQuery.toLowerCase().trim();
+    final cleanQ = searchQuery.trim();
+    final normQ = cleanQ.isEmpty ? '' : DealSearchEngine.normalizeText(cleanQ);
+    final lowerQ = cleanQ.isEmpty ? '' : cleanQ.toLowerCase();
+
     return where((alarm) {
       if (filter == 'unread' && alarm.isRead) return false;
       if (filter == 'deals' && alarm.type != 'deal') return false;
       if (filter == 'comments' && alarm.type != 'comment') return false;
-      if (q.isNotEmpty) {
-        final userMatch = alarm.userName.toLowerCase().contains(q) || alarm.userId.toLowerCase().contains(q);
-        final contentMatch = alarm.content.toLowerCase().contains(q);
-        final reasonMatch = alarm.reason.toLowerCase().contains(q);
+      if (cleanQ.isNotEmpty) {
+        final userMatch = DealSearchEngine.normalizeText(alarm.userName).contains(normQ) ||
+            alarm.userId.toLowerCase().contains(lowerQ);
+        final contentMatch = DealSearchEngine.normalizeText(alarm.content).contains(normQ);
+        final reasonMatch = DealSearchEngine.normalizeText(alarm.reason).contains(normQ);
         return userMatch || contentMatch || reasonMatch;
       }
       return true;
