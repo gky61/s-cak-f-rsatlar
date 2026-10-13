@@ -16,6 +16,8 @@ import 'auth_service.dart';
 import 'system_log_service.dart';
 
 import '../main.dart'; // navigatorKey için
+import '../models/deal.dart';
+import 'deal_sync_service.dart';
 import '../screens/deal_detail_screen.dart';
 import '../screens/admin_notifications_screen.dart';
 import '../screens/admin_screen.dart';
@@ -436,10 +438,15 @@ class NotificationService {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      // P0-13 (R-SCL-01): FCM Konusuna abone ol (Sınırsız ölçeklenebilir 0 maliyetli dağıtım)
+      // P0-13 (R-SCL-01): FCM Konusuna abone ol (Yalnızca kullanıcı kategori bildirimlerini açık tutuyorsa)
       final cleanCat = categoryId.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
       try {
-        await _messaging.subscribeToTopic('cat_$cleanCat');
+        final prefs = await getNotificationPreferences();
+        if (prefs.pushMasterEnabled && prefs.categoryNotificationsEnabled) {
+          await _messaging.subscribeToTopic('cat_$cleanCat');
+        } else {
+          _log('ℹ️ Kategori bildirimi tercihlerde kapalı olduğu için topic aboneliği açılmadı: $cleanCat');
+        }
       } catch (topicErr) {
         _log('⚠️ Kategori topic abonelik uyarısı: $topicErr');
       }
@@ -488,10 +495,15 @@ class NotificationService {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      // P0-13 (R-SCL-01): FCM Alt Kategori konusuna abone ol
+      // P0-13 (R-SCL-01): FCM Alt Kategori konusuna abone ol (Yalnızca kullanıcı kategori bildirimlerini açık tutuyorsa)
       final cleanSub = key.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
       try {
-        await _messaging.subscribeToTopic('cat_$cleanSub');
+        final prefs = await getNotificationPreferences();
+        if (prefs.pushMasterEnabled && prefs.categoryNotificationsEnabled) {
+          await _messaging.subscribeToTopic('cat_$cleanSub');
+        } else {
+          _log('ℹ️ Alt kategori bildirimi tercihlerde kapalı olduğu için topic aboneliği açılmadı: $cleanSub');
+        }
       } catch (topicErr) {
         _log('⚠️ Alt kategori topic abonelik uyarısı: $topicErr');
       }
@@ -1686,6 +1698,33 @@ class NotificationService {
       } catch (kwErr) {
         _log('⚠️ Keyword topics resubscribe error: $kwErr');
       }
+
+      // 5. Kategori FCM Konuları (cat_<kategori>) - Yalnızca kategori bildirimleri açık ise bağlanır
+      try {
+        final shouldSubscribeCategories = prefs.pushMasterEnabled && prefs.categoryNotificationsEnabled;
+        final followedCats = await getFollowedCategories();
+        final followedSubs = await getFollowedSubCategories();
+
+        for (final catId in followedCats) {
+          final cleanCat = catId.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+          if (shouldSubscribeCategories) {
+            await _messaging.subscribeToTopic('cat_$cleanCat').catchError((_) {});
+          } else {
+            await _messaging.unsubscribeFromTopic('cat_$cleanCat').catchError((_) {});
+          }
+        }
+
+        for (final subKey in followedSubs) {
+          final cleanSub = subKey.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+          if (shouldSubscribeCategories) {
+            await _messaging.subscribeToTopic('cat_$cleanSub').catchError((_) {});
+          } else {
+            await _messaging.unsubscribeFromTopic('cat_$cleanSub').catchError((_) {});
+          }
+        }
+      } catch (catSyncErr) {
+        _log('⚠️ Category topics resubscribe error: $catSyncErr');
+      }
     } catch (e) {
       _log('❌ resubscribeToTopics hatası: $e');
     }
@@ -2266,7 +2305,11 @@ class NotificationService {
             scrollToCommentId: commentId,
           ),
         ),
-      );
+      ).then((result) {
+        if (result is Deal) {
+          DealSyncService.instance.notifyDealUpdated(result);
+        }
+      });
     } else {
       _log('⚠️ Navigator henüz hazır değil, deal yönlendirmesi sıraya alınıyor: $dealId');
       _startPendingNotificationCheck({

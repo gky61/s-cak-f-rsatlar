@@ -71,7 +71,7 @@ graph TD
 ```
 
 ### Temel Mimari Prensipler:
-1. **Tek Sorumluluk Prensibi (Single Responsibility):** Fırsat, yorum ve admin mesajı tetikleyicileri doğrudan push atmaz; sadece `users/{userId}/notifications` altına standart bir bildirim dokümanı yazar. Push gönderimi, filtreleme ve limit kontrolleri tek bir merkezi motor (`onNotificationCreated`) tarafından yönetilir. **İstisnalar:** `onUserMessageCreated` (doğrudan data-only push), `onDealCreated` (`admin_deals` topic), `onCouponCreated` (`community_coupons` topic) ve `sendManualNotification` (`all` → `sicak_firsatlar_general_v2` veya `firsatkolik_marketing_v1` topic, `token`/`topic` hedefleri) motoru atlar; bu yollarda `systemConfig/notifications.enabled` şalteri ve sessiz saatler uygulanmaz.
+1. **Tek Sorumluluk Prensibi (Single Responsibility) & Fail-Safe Şalter:** Fırsat, yorum ve admin mesajı tetikleyicileri doğrudan tekil push atmaz; sadece `users/{userId}/notifications` altına standart bir bildirim dokümanı yazar. Push gönderimi, filtreleme ve limit kontrolleri tek bir merkezi motor (`onNotificationCreated`) tarafından yönetilir. **Topic ve Manuel Push Güvenliği:** FCM Topic üzerinden dağıtılan yayınlar (`cat_*`, `kw_*`, `community_coupons` ve `sendManualNotification`), `onNotificationCreated` motorunun dışında kalsalar dahi, **çift kalkanlı acil durum şalterine (`systemConfig/notifications.enabled` ve `settings/app.notificationsEnabled`)** bağlanmıştır; şalter kapandığında Topic yayınları da anında durur. Ayrıca `sendManualNotification` kitlesel yayınları (`all`) gece 23:00 - 08:00 saatlerinde `ignoreQuietHours` onayı olmadan fırlatılamaz.
 2. **Kalıcı Bildirim Merkezi (Inbox Preservation) & Dual-Layer Feed:** Push sessiz saatler veya hız limitleri sebebiyle atılmasa bile, eşleşen kullanıcı için bildirim dokümanı oluşturulur. Genel duyurularda ise 100.000 kullanıcıya tek tek yazmak yerine tek bir `globalAnnouncements` dokümanı yazılır ve istemci `getUserNotificationsStream` üzerinden kişisel ve genel akışları yerel okundu/silindi takibiyle birleştirir.
 3. **Data-Only Birebir Mesajlaşma:** Sohbet mesajları Android OS tarafından otomatik bildirim basılmasını engellemek için `data-only` payload ile iletilir; Flutter ön plan dinleyicisi kullanıcının o an sohbette olup olmadığını kontrol ederek bildirimi akıllıca bastırır.
 4. **Çoklu Cihaz Tekilleştirmesi:** Aynı kullanıcının eski cihaz kayıtları veya mükerrer FCM token'ları otomatik olarak pasife çekilir (`active: false`).
@@ -123,7 +123,7 @@ Kullanıcıların FCM token'larını ve cihaz durumlarını takip eder.
 {
   "pushMasterEnabled": true,
   "dealNotificationsEnabled": true,
-  "categoryNotificationsEnabled": true,
+  "categoryNotificationsEnabled": false,
   "keywordNotificationsEnabled": true,
   "communityNotificationsEnabled": true,
   "submissionStatusNotificationsEnabled": true,
@@ -136,7 +136,7 @@ Kullanıcıların FCM token'larını ve cihaz durumlarını takip eder.
   "schemaVersion": 1,
   "lastStates": {
     "dealNotificationsEnabled": true,
-    "categoryNotificationsEnabled": true,
+    "categoryNotificationsEnabled": false,
     "keywordNotificationsEnabled": true,
     "communityNotificationsEnabled": true,
     "submissionStatusNotificationsEnabled": true,
@@ -145,6 +145,8 @@ Kullanıcıların FCM token'larını ve cihaz durumlarını takip eder.
   }
 }
 ```
+> 💡 **Kategori Bildirimleri Varsayılanı (Opt-In):** "Favori Kategorilerim" (`CategoryPreferencesScreen`) ekranında kullanıcı kategori seçerken zaten bilgilendirme/uyarı metni (*"Tercihleriniz kaydedildi ancak telefonunuza bildirim gelebilmesi için Bildirim Ayarlarından kategori bildirimlerini açmanız gerekir"*) ve doğrudan Bildirim Ayarlarına yönlendirme (`NotificationSettingsScreen`) butonu yer almaktadır. Kullanıcı bu durumun bilincinde olduğu için istenmeyen bildirim yükünü önlemek amacıyla `categoryNotificationsEnabled` sıfır kullanıcı için varsayılan olarak **kapalı (`false`)** tutulur. Kullanıcı bildirim ayarlarını açtığı anda `resubscribeToTopics()` ile FCM topic abonelikleri (`cat_*`) anında senkronize edilir.
+
 
 ### 3.3 Bildirim Abonelikleri (`notificationSubscriptions/{uid}_{type}_{sanitizedKey}`)
 * **Tipler (`type`):** `'keyword'`, `'category'`, `'author'`.
@@ -304,11 +306,11 @@ Tüm fonksiyonlar [functions/index.js](file:///d:/firsatkolik/functions/index.js
 | **`onAdminMessageCreated`**| Firestore `adminToUserMessages/{messageId}` (onCreate) | Admin panelinden kullanıcıya mesaj atıldığında `users/{uid}/notifications/admin_msg_{messageId}` belgesini yazar. Push gönderimini `onNotificationCreated` motoruna bırakır. |
 | **`onUserMessageCreated`** | Firestore `messages/{messageId}` (onCreate) | Birebir sohbette yeni mesaj geldiğinde alıcının cihazlarına **data-only payload** iletir. |
 | **`onCouponCreated`** & **`onCouponUpdated`** | Firestore `kuponlar/{kuponId}` (onCreate & onUpdate) | `onCouponCreated`: Topluluk üyesi kupon paylaştığında kupon `durum: 'beklemede'` olarak kaydedilir ve küfür filtresinden geçirilir (Genel push gönderilmez). Yöneticilerin `admin_deals` FCM konusuna `type: 'admin_coupon'` (mor rozet `#8E24AA`) anlık onay bildirimi fırlatılır (NOTIF-16). `onCouponUpdated`: Kupon admin tarafından onaylandığında (`beklemede -> aktif`) şalter ve gece sessiz saat kontrolünün ardından `community_coupons` topic push'u fırlatır (P0-14 ham kod gizliliği: `hasCode: true/false`), tekil `globalAnnouncements/coupon_{kuponId}` çift katmanlı dokümanı oluşturarak tüm kullanıcıların Bildirim Merkezinde (AdminNotificationsScreen) anında listelenmesini sağlar, yazara onay (`submission_status`) yazar ve **+10 puan** ile `couponCount` ödülü verir, ilgili mağaza/yazar abonelerine azami 300 tavanlı bildirim dokümanı oluşturur (`isTopicDelivered: true`, `announcementId: coupon_{kuponId}`). Kupon reddedildiğinde (`beklemede -> reddedildi`) yazara `moderationReason` gerekçesiyle red bildirimi yazar ve varsa küresel duyurusunu pasife çeker. Çöp kuponları temizler. |
-| **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | **Merkezi Push Motoru:** Tüm bildirim dokümanlarını dinler; sistem şalteri, sessiz saatler, kategori limitleri, kullanıcı tercihleri ve cihaz kontrollerini yapar. Yazar fırsatlarını `follow_channel` kanalına yönlendirir. Başarılı gönderimde (`successCount > 0`) günlük `notificationStats` sayacını anında artırır. |
+| **`onNotificationCreated`** | Firestore `users/{uid}/notifications/{id}` (onCreate) | **Merkezi Push Motoru:** Tüm bildirim dokümanlarını dinler; çift kalkanlı sistem genel şalteri (`systemConfig/notifications.enabled` ve `settings/app.notificationsEnabled`), gece sessiz saatler (23:00 - 08:00), akıllı hız limitleri (kategori, yazar, kelime, burst), kullanıcı tercihleri (`notificationPreferences`) ve aktif cihaz kontrollerini yapar. Yazar fırsatlarını `follow_channel` kanalına yönlendirir. Başarılı gönderimde (`successCount > 0`) günlük `notificationStats` sayacını anında artırır. |
 | **`purgeOldDeals`** | PubSub Schedule (`0 4 * * 0` - Her Pazar 04:00) | **30 Günlük Derin Temizlik:** 30 günden eski fırsatları (çalıştırma başına ≤1.000), yorumları, oyları ve **tüm kullanıcılardaki (`collectionGroup('notifications')`) 30 günü geçmiş bildirimleri** (≤10.000) kalıcı olarak siler. Favoriler taranmaz; istemcide lazy self-healing ile temizlenir. |
 | **`purgeOldDealsManual`** | HTTPS Callable (`onCall`) | Admin panelinden 30+ günlük eski fırsatları ve ilişkili eski bildirimleri manuel olarak kalıcı siler. |
 | **`purgeOldNotificationsManual`** | HTTPS Callable (`onCall`) | Admin yetkisiyle yalnızca 30 günü geçmiş bildirim dokümanlarını (`collectionGroup`) toplu siler. |
-| **`sendManualNotification`**| HTTPS Callable (`onCall`) | Admin panelinden `all`, `uid`, `token` veya `topic` hedefine bildirim gönderir. `all` hedefinde akıllı Dual-Topic (`marketing` için `firsatkolik_marketing_v1`, `admin_message` için `sicak_firsatlar_general_v2`) üzerinden 100k cihaza anında push yayını yapar. Bildirim merkezi için tekil `globalAnnouncements` dokümanı (+15 gün TTL) yazar; geriye dönük 300 kullanıcılık fallback batch'ine `isTopicDelivered: true` vererek çift push'ı engeller. `notificationLogs` ve `notificationStats` günceller. |
+| **`sendManualNotification`**| HTTPS Callable (`onCall`) | Admin panelinden `all`, `uid`, `token` veya `topic` hedefine bildirim gönderir. `all` hedefinde akıllı Dual-Topic (`marketing` için `firsatkolik_marketing_v1`, `admin_message` için `sicak_firsatlar_general_v2`) üzerinden 100k cihaza anında push yayını yapar. **Güvenlik Kalkanı (R-AUTH-11):** Sistem genel bildirim şalteri kapalıysa gönderim reddedilir; gece 23:00 - 08:00 aralığında `ignoreQuietHours: true` verilmedikçe kitlesel push engellenir. Bildirim merkezi için tekil `globalAnnouncements` dokümanı (+15 gün TTL) yazar; geriye dönük 300 kullanıcılık fallback batch'ine `isTopicDelivered: true` vererek çift push'ı engeller. `notificationLogs` ve `notificationStats` günceller. |
 | **`cleanupInvalidTokens`** | HTTPS Callable (`onCall`) | `userDevices` içerisindeki aktif FCM token'ları dryRun ile test ederek geçersiz olanları `active: false` yapar. |
 | **`onUserDeleted`** | Auth `user().onDelete` | Kullanıcı silindiğinde `userDevices`, `notificationSubscriptions`, `notifications` ve `notificationPreferences` verilerini temizler. |
 
@@ -443,7 +445,7 @@ Kullanıcılar arası mesajlaşmada bildirim deneyimini kusursuz kılmak ve spam
 
 | Senaryo ID | Bildirim Türü (`type`) | Tetikleyici Olay | Kanal ID & Renk | Başlık (`title`) / İçerik (`body`) Şablonu | Koşul, Öncelik & Davranış |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **NOTIF-01** | `deal` (Kategori) | Abone olunan bir kategoriye ait yeni fırsatın yayınlanması | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **🎯 [Kategori] Kategorisinde Fırsat!**<br>[Mağaza] [Fırsat Başlığı] • 💰 [Fiyat] TL | Kategori aboneliği açık olmalı. En düşük önceliklidir (3. seviye). Saatlik/günlük kategori hız limitlerine ve sessiz saatlere tabidir. BigPicture ürün görseliyle zenginleştirilir. |
+| **NOTIF-01** | `deal` (Kategori) | Abone olunan bir kategoriye ait yeni fırsatın yayınlanması | `sicak_firsatlar_general_v2`<br>(#FF6B35) | **🎯 [Kategori] Kategorisinde Fırsat!**<br>[Mağaza] [Fırsat Başlığı] • 💰 [Fiyat] TL | Kategori aboneliği ve `categoryNotificationsEnabled` açık olmalı (sıfır müşteride varsayılan kapalıdır / Opt-In). En düşük önceliklidir (3. seviye). Saatlik/günlük kategori hız limitlerine ve sessiz saatlere tabidir. BigPicture ürün görseliyle zenginleştirilir. |
 | **NOTIF-02** | `deal` (Yazar) | Bildirim zili açılan bir avcının paylaştığı fırsatın onaylanması | `follow_channel`<br>(#4CAF50) | **👤 [Yazar Adı] yeni bir fırsat paylaştı!**<br>[Mağaza] [Fırsat Başlığı] • 💰 [Fiyat] TL | Yazar takibi açık olmalı. Orta önceliklidir (2. seviye). Kategori hız limitlerine tabi değildir; sessiz saatlere tabidir. |
 | **NOTIF-03** | `deal` (Anahtar Kelime)| Abone olunan anahtar kelimeyi içeren fırsatın onaylanması | `keyword_alerts_channel`<br>(#FF9800) | **🎯 "[Kelime]" İçeren Sıcak Fırsat!**<br>[Fırsat Başlığı] • 💰 [Fiyat] TL | Kelime aboneliği açık olmalı. En yüksek önceliklidir (Deduplication). Eğer kelime bildirimleri kapalıysa otomatik kategoriye dinamik dönüşüm yapılır. |
 | **NOTIF-04** | `comment_reply` / `comment` | Bir yoruma cevap yazılması veya fırsat sahibinin fırsatına ana yorum yapılması | `comment_replies_channel`<br>(#2196F3) | **[Kullanıcı Adı] yorumunuza cevap verdi** / **fırsatınıza yorum yaptı**<br>[Fırsat Başlığı]: [Yorum Metni] | Kendine yazılan yorumlar hariç tutulur. **Sessiz saatlerden muaftır** (24 saat anlık iletilir). `communityNotificationsEnabled` anahtarına bağlıdır. `dealTitle` ve `imageUrl` içerir. |

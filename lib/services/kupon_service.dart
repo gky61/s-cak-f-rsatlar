@@ -160,6 +160,81 @@ class KuponService {
     }
   }
 
+  // Admin: Toplu Kupon Onaylama (Maks 400 parçalama korumalı WriteBatch)
+  Future<bool> approveKuponlarBatch({
+    required List<String> kuponIds,
+    required String adminId,
+  }) async {
+    if (kuponIds.isEmpty) return true;
+    try {
+      for (var i = 0; i < kuponIds.length; i += 400) {
+        final end = (i + 400 > kuponIds.length) ? kuponIds.length : i + 400;
+        final chunk = kuponIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.update(_firestore.collection('kuponlar').doc(id), {
+            'durum': 'aktif',
+            'approvedAt': FieldValue.serverTimestamp(),
+            'approvedBy': adminId,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Admin: Toplu Kupon Reddetme (Maks 400 parçalama korumalı WriteBatch)
+  Future<bool> rejectKuponlarBatch({
+    required List<String> kuponIds,
+    required String adminId,
+    required String reason,
+  }) async {
+    if (kuponIds.isEmpty) return true;
+    try {
+      for (var i = 0; i < kuponIds.length; i += 400) {
+        final end = (i + 400 > kuponIds.length) ? kuponIds.length : i + 400;
+        final chunk = kuponIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.update(_firestore.collection('kuponlar').doc(id), {
+            'durum': 'reddedildi',
+            'redNedeni': reason,
+            'rejectedAt': FieldValue.serverTimestamp(),
+            'rejectedBy': adminId,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Admin: Toplu Kupon Silme (Maks 400 parçalama korumalı WriteBatch)
+  Future<bool> deleteKuponlarBatch(List<String> kuponIds) async {
+    if (kuponIds.isEmpty) return true;
+    try {
+      for (var i = 0; i < kuponIds.length; i += 400) {
+        final end = (i + 400 > kuponIds.length) ? kuponIds.length : i + 400;
+        final chunk = kuponIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.delete(_firestore.collection('kuponlar').doc(id));
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Kupon güncelleme
   Future<void> updateKupon({
     required String kuponId,

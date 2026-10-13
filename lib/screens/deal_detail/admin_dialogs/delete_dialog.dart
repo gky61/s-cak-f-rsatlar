@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/deal.dart';
 import '../../../services/firestore_service.dart';
+import '../../../services/deal_sync_service.dart';
 
 /// Silme onay dialog'u.
 Future<void> showDeleteDialog({
@@ -34,6 +35,9 @@ Future<void> showDeleteDialog({
   final success = await firestoreService.deleteDeal(deal.id);
   if (context.mounted) {
     if (success) {
+      // FS-09 Kalkanı: Silinen fırsatı tüm ekranlardan (Anasayfa, Popüler vb.) anında kaldır
+      DealSyncService.instance.notifyDealDeleted(deal.id);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Fırsat silindi 🗑️'),

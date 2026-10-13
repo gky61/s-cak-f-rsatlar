@@ -4,7 +4,6 @@ import '../../models/deal.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/asset_path_migration.dart';
 import '../../screens/profile_screen.dart';
-import '../../screens/botkolik_profile_screen.dart';
 import '../store_price_badge.dart';
 import 'deal_card_helpers.dart';
 import 'deal_card_thermometer_pill.dart';
@@ -121,6 +120,15 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                 spreadRadius: _isHovered ? 2 : 1,
                 offset: Offset.zero,
               ),
+              if (deal.isEditorPick)
+                BoxShadow(
+                  color: AppTheme.primary.withValues(
+                    alpha: isDark ? 0.20 : 0.14,
+                  ),
+                  blurRadius: _isHovered ? 14 : 8,
+                  spreadRadius: 0.5,
+                  offset: const Offset(0, 2),
+                ),
             ],
             border: Border.all(
               color: deal.isRejected
@@ -128,7 +136,7 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                   : (deal.isApproved == false
                       ? const Color(0xFFF59E0B)
                       : (deal.isEditorPick 
-                          ? Colors.orange[600]! // Editör seçimi için turuncu çerçeve
+                          ? AppTheme.primary // Editör seçimi için marka turuncusu çerçeve
                           : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1)))),
               width: (deal.isRejected || deal.isApproved == false || deal.isEditorPick) ? 2.0 : 1.5,
             ),
@@ -270,6 +278,14 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                             ),
                           ),
 
+                        // ─── EDİTÖRÜN SEÇİMİ ROZETİ (Sağ Üst) ─────────────────
+                        if (deal.isEditorPick)
+                          Positioned(
+                            top: 7,
+                            right: 7,
+                            child: buildEditorChoiceStarBadge(isDark: isDark),
+                          ),
+
                         // Resim ile alt gövde arasındaki ince sınır
                         Positioned(
                           bottom: 0,
@@ -325,9 +341,11 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
-                                  // Paylaşan Avatar veya Botkolik
-                                  _buildAuthorAvatar(deal, primaryColor),
+                                  // Paylaşan Kullanıcı Avatarı (Botkolik paylaşımlarında gösterilmez)
+                                  if (!deal.isBotkolik && deal.isUserSubmitted && deal.postedBy.isNotEmpty) ...[
+                                    const SizedBox(width: 4),
+                                    _buildAuthorAvatar(deal, primaryColor),
+                                  ],
                                 ],
                               ),
                               const SizedBox(height: 4.0),
@@ -556,42 +574,8 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
 
   Widget _buildAuthorAvatar(Deal deal, Color primaryColor) {
     if (deal.isBotkolik) {
-      return InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const BotkolikProfileScreen(),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 17,
-          height: 17,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFF00F0FF).withValues(alpha: 0.8),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-          child: ClipOval(
-            child: Image.asset(
-              'assets/botkolik.webp',
-              width: 17,
-              height: 17,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-      );
+      // Botkolik paylaşımlarında anasayfa feed kartlarında avatar gösterilmez
+      return const SizedBox.shrink();
     } else if (deal.isUserSubmitted && deal.postedBy.isNotEmpty) {
       return InkWell(
         key: ValueKey('user_avatar_widget_${deal.postedBy}'),

@@ -194,11 +194,18 @@ class DefaultFirebaseOptions {
   static String get rewardedAdUnitId {
     final isDev = kDebugMode || !isProductionFlavor;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      const iosProdId = String.fromEnvironment('ADMOB_REWARDED_IOS');
-      if (iosProdId.isNotEmpty && !isDev) return iosProdId;
-      return 'ca-app-pub-3940256099942544/1712485313'; // Google iOS Test Rewarded ID
+      const iosProdId = String.fromEnvironment(
+        'ADMOB_REWARDED_IOS',
+        defaultValue: 'ca-app-pub-6853997017739651/2723583797', // FırsatKolik Prod iOS Rewarded ID
+      );
+      return isDev
+          ? 'ca-app-pub-3940256099942544/1712485313' // Google iOS Test Rewarded ID
+          : iosProdId;
     }
-    const androidProdId = String.fromEnvironment('ADMOB_REWARDED_ANDROID', defaultValue: 'ca-app-pub-6853997017739651/5224354917');
+    const androidProdId = String.fromEnvironment(
+      'ADMOB_REWARDED_ANDROID',
+      defaultValue: 'ca-app-pub-6853997017739651/9218593979', // FırsatKolik Prod Android Rewarded ID
+    );
     return isDev
         ? 'ca-app-pub-3940256099942544/5224354917' // Google Android Test Rewarded ID
         : androidProdId;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
@@ -11,6 +12,7 @@ import '../widgets/deal_card_skeleton.dart';
 import '../widgets/scroll_to_top_button.dart';
 import '../widgets/ad_deal_card.dart';
 import '../services/ad_manager_service.dart';
+import '../services/deal_sync_service.dart';
 import 'deal_detail_screen.dart';
 
 class PopularDealsScreen extends StatefulWidget {
@@ -42,6 +44,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   bool _hasMore = true;
   String? _errorMessage;
   bool _isRefreshing = false;
+  StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
 
   @override
   void initState() {
@@ -49,16 +52,49 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     _viewMode = _themeService.viewMode;
     _themeService.addListener(_onThemeChanged);
     _scrollController = ScrollController()..addListener(_scrollListener);
+    _listenToDealSync();
     _loadFirstPage();
   }
 
   @override
   void dispose() {
+    _dealSyncSubscription?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _categoryScrollController.dispose();
     super.dispose();
+  }
+
+  /// FS-18 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
+  void _listenToDealSync() {
+    _dealSyncSubscription?.cancel();
+    _dealSyncSubscription = DealSyncService.instance.stream.listen((event) {
+      if (!mounted) return;
+      final index = _dealsList.indexWhere((d) => d.id == event.dealId);
+      if (index != -1) {
+        setState(() {
+          if (event.action == DealSyncAction.dealDeleted) {
+            _dealsList.removeAt(index);
+          } else {
+            _dealsList[index] = event.applyTo(_dealsList[index]);
+          }
+        });
+      }
+    });
+  }
+
+  /// Fırsat detayına gidiş ve güvenli çift katmanlı senkronizasyon köprüsü
+  Future<void> _openDealDetail(BuildContext context, Deal deal) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DealDetailScreen(dealId: deal.id),
+      ),
+    );
+    if (result is Deal && mounted) {
+      DealSyncService.instance.notifyDealUpdated(result);
+    }
   }
 
   /// SWR + Cache-First ilk yükleme
@@ -251,14 +287,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                     key: ValueKey('pop_deal_${deal.id}_v'),
                     deal: deal,
                     viewMode: CardViewMode.vertical,
-                    onTap: () {
-                      Navigator.push(
-                        ctx,
-                        MaterialPageRoute(
-                          builder: (_) => DealDetailScreen(dealId: deal.id),
-                        ),
-                      );
-                    },
+                    onTap: () => _openDealDetail(ctx, deal),
                   ),
                 );
               },
@@ -689,14 +718,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                               key: ValueKey('pop_deal_${deal.id}_v'),
                               deal: deal,
                               viewMode: CardViewMode.vertical,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => DealDetailScreen(dealId: deal.id),
-                                  ),
-                                );
-                              },
+                              onTap: () => _openDealDetail(context, deal),
                             ),
                           );
                         },
@@ -802,14 +824,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                       key: ValueKey('pop_deal_${deal.id}_h'),
                       deal: deal,
                       viewMode: CardViewMode.horizontal,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DealDetailScreen(dealId: deal.id),
-                          ),
-                        );
-                      },
+                      onTap: () => _openDealDetail(context, deal),
                     ),
                   ),
                 );

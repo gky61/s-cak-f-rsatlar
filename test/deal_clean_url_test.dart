@@ -117,4 +117,45 @@ void main() {
       expect(deal.displayUrl, 'https://www.teknosa.com/urun-p-123');
     });
   });
+
+  group('Deal.buildCanonicalCleanUrl Tests', () {
+    test('Should fallback to cleanProductUrl when canonicalUrl is null or empty', () {
+      const raw = 'https://www.hepsiburada.com/urun-p-123?magaza=Satici&utm_source=firsatkolik';
+      expect(
+        Deal.buildCanonicalCleanUrl(raw, null),
+        'https://www.hepsiburada.com/urun-p-123?magaza=Satici',
+      );
+      expect(
+        Deal.buildCanonicalCleanUrl(raw, ''),
+        'https://www.hepsiburada.com/urun-p-123?magaza=Satici',
+      );
+    });
+
+    test('Should transfer Hepsiburada magaza parameter to canonical URL', () {
+      const rawVariant = 'https://www.hepsiburada.com/defacto-mont-p-HBCV00009ZM96N?magaza=DeFacto&utm_source=firsatkolik';
+      const canonical = 'https://www.hepsiburada.com/defacto-mont-pm-HBC00009Z5HVU';
+      expect(
+        Deal.buildCanonicalCleanUrl(rawVariant, canonical),
+        'https://www.hepsiburada.com/defacto-mont-pm-HBC00009Z5HVU?magaza=DeFacto',
+      );
+    });
+
+    test('Should transfer Teknosa shopId parameter to canonical URL', () {
+      const rawVariant = 'https://www.teknosa.com/telefon-p-123?shopId=999&utm_source=affiliate';
+      const canonical = 'https://www.teknosa.com/telefon-p-123';
+      expect(
+        Deal.buildCanonicalCleanUrl(rawVariant, canonical),
+        'https://www.teknosa.com/telefon-p-123?shopId=999',
+      );
+    });
+
+    test('Should reject mismatched host in canonical URL for security', () {
+      const raw = 'https://www.hepsiburada.com/urun-p-123?magaza=DeFacto';
+      const maliciousCanonical = 'https://www.phishing-site.com/fake-product';
+      expect(
+        Deal.buildCanonicalCleanUrl(raw, maliciousCanonical),
+        'https://www.hepsiburada.com/urun-p-123?magaza=DeFacto',
+      );
+    });
+  });
 }

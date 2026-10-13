@@ -12,6 +12,7 @@ import '../services/app_version_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/theme_service.dart';
 import '../services/deal_search_engine.dart';
+import '../services/deal_sync_service.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import '../widgets/offline_banner.dart';
@@ -160,6 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _adminMessageCountSubscription;
   StreamSubscription? _unreadNotificationsSubscription;
   StreamSubscription? _authSub;
+  StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
 
   @override
   void initState() {
@@ -176,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // FS-09: SWR + Cache-First İlk Yükleme ve Hafif Dinleyici (limit: 1)
     _fetchInitialDeals();
     _listenToLatestDeal();
+    _listenToDealSync();
     _viewMode = _themeService.viewMode;
     _checkAdminStatus();
     _checkBlockedStatus();
@@ -297,6 +300,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     _initialLoadingTimeoutTimer?.cancel();
     _latestDealSubscription?.cancel();
+    _dealSyncSubscription?.cancel();
     _authSub?.cancel();
     _blockedUserListener?.cancel();
     _messageCountSubscription?.cancel();
@@ -310,6 +314,58 @@ class _HomeScreenState extends State<HomeScreen> {
     _userSearchDebounceTimer?.cancel();
     _dealSearchDebounceTimer?.cancel();
     super.dispose();
+  }
+
+  /// FS-09 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
+  ///
+  /// Kullanıcının detay sayfasında veya alt sayfalarda yaptığı oylama, yorum, stok bitti
+  /// veya düzenleme aksiyonlarını, sunucuya yeni bir Firestore sorgusu atmadan (0 TL maliyet)
+  /// doğrudan yerel listede (_dealsList ve _serverSearchResults) anında günceller.
+  void _listenToDealSync() {
+    _dealSyncSubscription?.cancel();
+    _dealSyncSubscription = DealSyncService.instance.stream.listen((event) {
+      if (!mounted) return;
+      bool needsSetState = false;
+
+      // 1. Genel akış listesinde (_dealsList) güncelleme
+      final index = _dealsList.indexWhere((d) => d.id == event.dealId);
+      if (index != -1) {
+        if (event.action == DealSyncAction.dealDeleted) {
+          _dealsList.removeAt(index);
+        } else {
+          _dealsList[index] = event.applyTo(_dealsList[index]);
+        }
+        needsSetState = true;
+      }
+
+      // 2. Sunucu arama sonuçları listesinde (_serverSearchResults) güncelleme
+      final searchIndex = _serverSearchResults.indexWhere((d) => d.id == event.dealId);
+      if (searchIndex != -1) {
+        if (event.action == DealSyncAction.dealDeleted) {
+          _serverSearchResults.removeAt(searchIndex);
+        } else {
+          _serverSearchResults[searchIndex] = event.applyTo(_serverSearchResults[searchIndex]);
+        }
+        needsSetState = true;
+      }
+
+      if (needsSetState && mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  /// Fırsat detayına gidiş ve güvenli çift katmanlı senkronizasyon köprüsü
+  Future<void> _openDealDetail(BuildContext context, Deal deal) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DealDetailScreen(dealId: deal.id),
+      ),
+    );
+    if (result is Deal && mounted) {
+      DealSyncService.instance.notifyDealUpdated(result);
+    }
   }
 
   void _initShareIntentListener() {
@@ -2245,12 +2301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       final cardWidget = DealCard(
                         deal: deal,
                         viewMode: CardViewMode.horizontal,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DealDetailScreen(dealId: deal.id),
-                          ),
-                        ),
+                        onTap: () => _openDealDetail(context, deal),
                       );
 
                       return RepaintBoundary(
@@ -2309,12 +2360,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final cardWidget = DealCard(
                   deal: deal,
                   viewMode: CardViewMode.vertical,
-                  onTap: () => Navigator.push(
-                    ctx,
-                    MaterialPageRoute(
-                      builder: (_) => DealDetailScreen(dealId: deal.id),
-                    ),
-                  ),
+                  onTap: () => _openDealDetail(ctx, deal),
                 );
 
                 return RepaintBoundary(

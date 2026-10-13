@@ -466,8 +466,14 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   try {
     let notificationsEnabled = true;
     try {
-      const appConfigDoc = await admin.firestore().collection('settings').doc('app').get();
+      const [appConfigDoc, sysConfigDoc] = await Promise.all([
+        admin.firestore().collection('settings').doc('app').get(),
+        admin.firestore().collection('systemConfig').doc('notifications').get()
+      ]);
       if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
+        notificationsEnabled = false;
+      }
+      if (sysConfigDoc.exists && sysConfigDoc.data().enabled === false) {
         notificationsEnabled = false;
       }
     } catch (cfgErr) {
@@ -1830,8 +1836,14 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
     try {
       let notificationsEnabled = true;
       try {
-        const appConfigDoc = await admin.firestore().collection('settings').doc('app').get();
+        const [appConfigDoc, sysConfigDoc] = await Promise.all([
+          admin.firestore().collection('settings').doc('app').get(),
+          admin.firestore().collection('systemConfig').doc('notifications').get()
+        ]);
         if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
+          notificationsEnabled = false;
+        }
+        if (sysConfigDoc.exists && sysConfigDoc.data().enabled === false) {
           notificationsEnabled = false;
         }
       } catch (cfgErr) {
@@ -2286,21 +2298,26 @@ exports.onNotificationCreated = functions.firestore
       return null;
     }
 
-    // 0. Check global Master Switch for push notifications
+    // 0. Check global Master Switch for push notifications (P0-08 / R-AUTH-11 Çift Şalter)
     let sysConfig = {};
     try {
-      const sysConfigDoc = await admin.firestore().collection('systemConfig').doc('notifications').get();
+      const [sysConfigDoc, appConfigDoc] = await Promise.all([
+        admin.firestore().collection('systemConfig').doc('notifications').get(),
+        admin.firestore().collection('settings').doc('app').get()
+      ]);
       if (sysConfigDoc.exists) {
         sysConfig = sysConfigDoc.data() || {};
-        if (sysConfig.enabled === false) {
-          functions.logger.info(`🚫 Global master notification switch is disabled. Skipping push for ${notificationId}`);
-          await snap.ref.set({
-            pushEligible: false,
-            pushStatus: 'disabled_by_system_master_switch',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
-          return null;
-        }
+      }
+      const isSysDisabled = sysConfigDoc.exists && sysConfig.enabled === false;
+      const isAppDisabled = appConfigDoc.exists && appConfigDoc.data() && appConfigDoc.data().notificationsEnabled === false;
+      if (isSysDisabled || isAppDisabled) {
+        functions.logger.info(`🚫 Global master notification switch is disabled (sys: ${!isSysDisabled}, app: ${!isAppDisabled}). Skipping push for ${notificationId}`);
+        await snap.ref.set({
+          pushEligible: false,
+          pushStatus: 'disabled_by_system_master_switch',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        return null;
       }
     } catch (sysErr) {
       functions.logger.error('⚠️ System config load error, continuing:', sysErr);
@@ -2310,6 +2327,8 @@ exports.onNotificationCreated = functions.firestore
     let prefs = {
       pushMasterEnabled: true,
       dealNotificationsEnabled: true,
+      categoryNotificationsEnabled: false,
+      keywordNotificationsEnabled: true,
       communityNotificationsEnabled: true,
       submissionStatusNotificationsEnabled: true,
       marketingNotificationsEnabled: false,
@@ -2643,10 +2662,10 @@ exports.onNotificationCreated = functions.firestore
 
     const isKeywordPrefEnabled = prefs.keywordNotificationsEnabled !== false;
     const isDealPrefEnabled = prefs.dealNotificationsEnabled !== false;
-    const isCategoryPrefEnabled = prefs.categoryNotificationsEnabled !== false;
+    const isCategoryPrefEnabled = prefs.categoryNotificationsEnabled === true;
     const isCommunityPrefEnabled = prefs.communityNotificationsEnabled !== false;
     const isSubmissionStatusPrefEnabled = prefs.submissionStatusNotificationsEnabled !== false;
-    const isMarketingPrefEnabled = prefs.marketingNotificationsEnabled !== false;
+    const isMarketingPrefEnabled = prefs.marketingNotificationsEnabled === true;
 
     if (hasReasons) {
       // Hangi sebebin aktif olarak kullanılacağını belirleyelim.
@@ -3500,6 +3519,42 @@ exports.sendManualNotification = functions
     let responseId = 'written_to_notifications';
 
     if (targetType === 'all') {
+      // 0. GÜVENLİK & SESSİZ SAAT KALKANI (R-AUTH-11):
+      // A. Global Bildirim Şalteri Kontrolü:
+      let isGloballyEnabled = true;
+      try {
+        const [sysDoc, appDoc] = await Promise.all([
+          admin.firestore().collection('systemConfig').doc('notifications').get(),
+          admin.firestore().collection('settings').doc('app').get()
+        ]);
+        if (sysDoc.exists && sysDoc.data().enabled === false) isGloballyEnabled = false;
+        if (appDoc.exists && appDoc.data().notificationsEnabled === false) isGloballyEnabled = false;
+      } catch (chkErr) {
+        functions.logger.warn('⚠️ Global bildirim şalteri kontrol uyarısı:', chkErr.message);
+      }
+
+      const safeData = data || {};
+      if (!isGloballyEnabled && !safeData.forceSendWhenDisabled) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Sistem genel bildirim şalteri kapalıdır. Bildirim göndermek için önce Web Admin panelinden sistem bildirimlerini açmalısınız.'
+        );
+      }
+
+      // B. Gece Sessiz Saat Koruması (23:00 - 08:00 Europe/Istanbul):
+      // Admin açıkça ignoreQuietHours: true göndermediği sürece gece vakti tüm ülkeye kitlesel push atılması engellenir
+      if (!safeData.ignoreQuietHours && !safeData.forceSendDuringQuietHours) {
+        const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
+        const currentHm = turkeyTime.substring(0, 5);
+        if (currentHm >= '23:00' || currentHm < '08:00') {
+          functions.logger.warn(`🛑 Gece sessiz saatlerde (${currentHm}) kitlesel push engellendi. ignoreQuietHours gerekli.`);
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            `Gece sessiz saatlerdeyiz (${currentHm}). Tüm kullanıcılara anlık bildirim göndermek için 'Gece Sessiz Saatleri Yoksay' onayını vermelisiniz.`
+          );
+        }
+      }
+
       // 1. ANLIK GLOBAL FCM PUSH: Tüm cihazlara tek seferde anında ilet
       // FS-02: Pazarlama duyuruları için 'firsatkolik_marketing_v1', yönetici duyuruları için 'sicak_firsatlar_general_v2'
       const broadcastTopic = (rawCat === 'marketing') ? 'firsatkolik_marketing_v1' : 'sicak_firsatlar_general_v2';

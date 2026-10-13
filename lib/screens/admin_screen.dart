@@ -17,6 +17,7 @@ import '../services/message_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
 import '../services/auth_service.dart';
+import '../services/deal_sync_service.dart';
 import '../utils/badge_helper.dart';
 import '../utils/asset_path_migration.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +31,8 @@ import '../widgets/admin_expired_deals_view.dart';
 import 'notification_debug_screen.dart';
 import '../services/affiliate/affiliate_service.dart';
 import '../widgets/app_snack_bar.dart';
+import 'package:url_launcher/url_launcher_string.dart';
+import '../services/deal_search_engine.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -82,9 +85,35 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   StreamSubscription? _reportsSubscription;
   StreamSubscription? _autoModSubscription;
   
-  // Kullanıcı arama
+  // Kullanıcı arama, akıllı hibrit arama ve durum filtreleri
   String _userSearchQuery = '';
   final TextEditingController _userSearchController = TextEditingController();
+  String _userRoleFilter = 'all'; // 'all', 'admins', 'blocked'
+  List<DocumentSnapshot> _directUserSearchResults = [];
+  bool _isSearchingUsersDirectly = false;
+  Timer? _userSearchDebounce;
+
+  // Fırsat Arama (Bot & Kullanıcı Sekmeleri)
+  String _pendingSearchQuery = '';
+  final TextEditingController _pendingSearchController = TextEditingController();
+  String _userSubmittedSearchQuery = '';
+  final TextEditingController _userSubmittedSearchController = TextEditingController();
+
+  // Kupon Arama & Çoklu Seçim
+  String _kuponSearchQuery = '';
+  final TextEditingController _kuponSearchController = TextEditingController();
+  final Set<String> _selectedKuponIds = <String>{};
+  bool _isKuponSelectionMode = false;
+
+  // Çoklu Seçim Modu (Multi-Select - Fırsatlar)
+  final Set<String> _selectedPendingDealIds = <String>{};
+  final Set<String> _selectedUserSubmittedDealIds = <String>{};
+  bool _isPendingSelectionMode = false;
+  bool _isUserSubmittedSelectionMode = false;
+
+  // Ultra Hızlı Toplu İşlem Kilidi & Yükleniyor Durumu
+  bool _isBatchProcessing = false;
+  String _batchProcessingMessage = '';
 
   // Tab'a bildirim badge'i ile widget oluştur
   Widget _buildTabWithBadge(String label, int count) {
@@ -222,7 +251,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     _reportsSubscription?.cancel();
     _autoModSubscription?.cancel();
     _tabController.dispose();
+    _userSearchDebounce?.cancel();
     _userSearchController.dispose();
+    _pendingSearchController.dispose();
+    _userSubmittedSearchController.dispose();
+    _kuponSearchController.dispose();
     super.dispose();
   }
 
@@ -339,8 +372,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           ),
           labelPadding: const EdgeInsets.symmetric(horizontal: 16),
           tabs: [
-            _buildTabWithBadge('Onay Bekleyen', _pendingCount),
-            _buildTabWithBadge('Paylaşılanlar', _userSubmittedCount),
+            _buildTabWithBadge('🤖 Bot Onay', _pendingCount),
+            _buildTabWithBadge('👤 Kullanıcı Onay', _userSubmittedCount),
             _buildTabWithBadge('🎟️ Kupon Onay', _pendingCouponsCount),
             _buildTabWithBadge('Süresi Biten', _expiredCount),
             _buildTabWithBadge('Kullanıcılar', _usersCount),
@@ -348,15 +381,50 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildDealList(_AdminListType.pending),
-          _buildDealList(_AdminListType.userSubmitted),
-          _buildPendingCouponsList(),
-          const AdminExpiredDealsView(),
-          _buildUsersList(),
-          const AdminReportsList(),
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildDealList(_AdminListType.pending),
+              _buildDealList(_AdminListType.userSubmitted),
+              _buildPendingCouponsList(),
+              const AdminExpiredDealsView(),
+              _buildUsersList(),
+              const AdminReportsList(),
+            ],
+          ),
+          if (_isBatchProcessing)
+            Container(
+              color: Colors.black.withValues(alpha: 0.65),
+              child: Center(
+                child: Card(
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 18),
+                        Text(
+                          _batchProcessingMessage.isNotEmpty ? _batchProcessingMessage : 'İşlem yapılıyor...',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Firestore batch işlemi yürütülüyor, lütfen bekleyin...',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -399,7 +467,20 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   Widget _buildDealList(_AdminListType type) {
     final bool isPending = type == _AdminListType.pending;
     final bool isUserSubmitted = type == _AdminListType.userSubmitted;
-    final bool isPublished = type == _AdminListType.published;
+
+    final String searchQuery = isPending
+        ? _pendingSearchQuery
+        : (isUserSubmitted ? _userSubmittedSearchQuery : '');
+    final TextEditingController searchController = isPending
+        ? _pendingSearchController
+        : (isUserSubmitted ? _userSubmittedSearchController : _pendingSearchController);
+
+    final bool isSelectionMode = isPending
+        ? _isPendingSelectionMode
+        : (isUserSubmitted ? _isUserSubmittedSelectionMode : false);
+    final Set<String> selectedSet = isPending
+        ? _selectedPendingDealIds
+        : _selectedUserSubmittedDealIds;
 
     return StreamBuilder<List<Deal>>(
       stream: switch (type) {
@@ -446,123 +527,365 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
         final deals = snapshot.data ?? [];
 
-        if (deals.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isPending 
-                      ? Icons.check_circle_outline 
-                      : isUserSubmitted
-                          ? Icons.people_outline
-                          : isPublished
-                              ? Icons.published_with_changes
-                              : Icons.hourglass_disabled_outlined,
-                  size: 64,
-                  color: Colors.grey[300],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  isPending 
-                      ? 'Onay bekleyen yok' 
-                      : isUserSubmitted
-                          ? 'Paylaşım bekleyen yok'
-                          : isPublished
-                              ? 'Yayında fırsat yok'
-                              : 'Süresi biten ilan yok',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          );
+        // Canlı Arama Filtresi (Akıllı Türkçe Karakter ve Çoklu Token Koruması)
+        final filteredDeals = deals.where((d) {
+          if (searchQuery.isEmpty) return true;
+          final normQ = DealSearchEngine.normalizeText(searchQuery);
+          final normTitle = DealSearchEngine.normalizeText(d.title);
+          final normStore = DealSearchEngine.normalizeText(d.store);
+          final normBrand = DealSearchEngine.normalizeText(d.brand ?? '');
+          final lowerId = d.id.toLowerCase();
+          final lowerQ = searchQuery.toLowerCase().trim();
+
+          if (lowerId.contains(lowerQ) ||
+              normTitle.contains(normQ) ||
+              normStore.contains(normQ) ||
+              normBrand.contains(normQ)) {
+            return true;
+          }
+
+          final tokens = DealSearchEngine.tokenize(searchQuery);
+          if (tokens.length > 1) {
+            final combined = '$normTitle $normStore $normBrand';
+            return tokens.every((token) => combined.contains(token));
+          }
+
+          return false;
+        }).toList();
+
+        // Eşzamanlılık Kalkanı: Canlı listeden çıkan eski/onaylanmış fırsat ID'lerini seçimden arındır
+        if (selectedSet.isNotEmpty) {
+          final liveIds = deals.map((d) => d.id).toSet();
+          selectedSet.removeWhere((id) => !liveIds.contains(id));
         }
 
-        return Column(
-          children: [
-            // Deal Paylaşım Durdur/Devam Et butonu (sadece Paylaşılanlar tab'ı için)
-            if (isUserSubmitted)
-              StreamBuilder<bool>(
-                stream: _firestoreService.dealSharingEnabledStream(),
-                builder: (context, snapshot) {
-                  final isEnabled = snapshot.data ?? true;
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _toggleDealSharing(!isEnabled),
-                        icon: Icon(isEnabled ? Icons.stop_circle : Icons.play_circle, size: 20),
-                        label: Text(isEnabled ? 'Paylaşımı Durdur' : 'Paylaşıma Devam Et'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isEnabled ? Colors.orange : Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            setState(() {});
+            await Future.delayed(const Duration(milliseconds: 300));
+          },
+          child: Column(
+            children: [
+              // 🔍 Arama ve Çoklu Seçim Üst Kontrol Paneli (Sadece Pending ve UserSubmitted için)
+              if (isPending || isUserSubmitted)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Arama Kutusu
+                      TextField(
+                        controller: searchController,
+                        onChanged: (val) {
+                          setState(() {
+                            if (isPending) {
+                              _pendingSearchQuery = val.trim().toLowerCase();
+                            } else {
+                              _userSubmittedSearchQuery = val.trim().toLowerCase();
+                            }
+                          });
+                        },
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: isPending ? 'Bot fırsatlarında ara (başlık, mağaza)...' : 'Kullanıcı fırsatlarında ara...',
+                          hintStyle: TextStyle(color: Colors.grey[500], fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    searchController.clear();
+                                    setState(() {
+                                      if (isPending) {
+                                        _pendingSearchQuery = '';
+                                      } else {
+                                        _userSubmittedSearchQuery = '';
+                                      }
+                                    });
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          filled: true,
+                          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            // Tümünü Reddet butonu (sadece onay bekleyenler için - bot fırsatları)
-            if (isPending && deals.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _rejectAllPendingDeals(deals),
-                    icon: const Icon(Icons.close, size: 20),
-                    label: Text('Tümünü Reddet (${deals.length})'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 8),
+                      // Durum ve Çoklu Seçim Düğmesi Satırı
+                      Row(
+                        children: [
+                          Text(
+                            searchQuery.isNotEmpty
+                                ? '${filteredDeals.length} / ${deals.length} fırsat'
+                                : '${deals.length} onay bekleyen fırsat',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (deals.isNotEmpty)
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isPending) {
+                                    _isPendingSelectionMode = !_isPendingSelectionMode;
+                                    if (!_isPendingSelectionMode) _selectedPendingDealIds.clear();
+                                  } else {
+                                    _isUserSubmittedSelectionMode = !_isUserSubmittedSelectionMode;
+                                    if (!_isUserSubmittedSelectionMode) _selectedUserSubmittedDealIds.clear();
+                                  }
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isSelectionMode
+                                      ? Colors.blue.withValues(alpha: 0.15)
+                                      : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isSelectionMode ? Icons.close : Icons.checklist_rounded,
+                                      size: 15,
+                                      color: isSelectionMode ? Colors.blue : (isDark ? Colors.white : Colors.black87),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isSelectionMode ? 'Seçimi Bitir' : 'Çoklu Seçim',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelectionMode ? Colors.blue : (isDark ? Colors.white : Colors.black87),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              ),
-            // Tümünü Reddet butonu (kullanıcı paylaşımları için)
-            if (isUserSubmitted && deals.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _rejectAllPendingDeals(deals),
-                    icon: const Icon(Icons.close, size: 20),
-                    label: Text('Tümünü Reddet (${deals.length})'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
 
-            Expanded(
-              child: ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: deals.length,
-          itemBuilder: (context, index) {
-            return _buildAdminCard(
-              deals[index],
-              type,
-            );
-          },
+              // 🛑 Deal Paylaşım Durdur/Devam Et butonu (sadece Kullanıcı sekmesi için)
+              if (isUserSubmitted)
+                StreamBuilder<bool>(
+                  stream: _firestoreService.dealSharingEnabledStream(),
+                  builder: (context, snapshot) {
+                    final isEnabled = snapshot.data ?? true;
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _toggleDealSharing(!isEnabled),
+                          icon: Icon(isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 18),
+                          label: Text(
+                            isEnabled ? 'Kullanıcı Fırsat Paylaşımını Durdur' : 'Kullanıcı Fırsat Paylaşımını Devam Ettir',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isEnabled ? Colors.orange[800] : Colors.green[800],
+                            side: BorderSide(color: isEnabled ? Colors.orange : Colors.green),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+              // ⚡ ÇOKLU SEÇİM AKSİYON ÇUBUĞU (Aktifse)
+              if (isSelectionMode)
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      // Tümünü Seç / Kaldır
+                      Checkbox(
+                        value: filteredDeals.isNotEmpty && selectedSet.length == filteredDeals.length,
+                        tristate: selectedSet.isNotEmpty && selectedSet.length < filteredDeals.length,
+                        onChanged: (checked) {
+                          setState(() {
+                            if (checked == true) {
+                              selectedSet.addAll(filteredDeals.map((d) => d.id));
+                            } else {
+                              selectedSet.clear();
+                            }
+                          });
+                        },
+                      ),
+                      Text(
+                        '${selectedSet.length} seçildi',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      // Seçilenleri Reddet
+                      ElevatedButton.icon(
+                        onPressed: selectedSet.isEmpty ? null : () => _batchRejectSelectedDeals(type),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: Text('Reddet (${selectedSet.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Seçilenleri Onayla
+                      ElevatedButton.icon(
+                        onPressed: selectedSet.isEmpty ? null : () => _batchApproveSelectedDeals(type),
+                        icon: const Icon(Icons.check, size: 16),
+                        label: Text('Onayla (${selectedSet.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              // 🚀 SEÇİM MODU KAPALIYKEN: HIZLI TÜMÜNÜ ONAYLA & TÜMÜNÜ REDDET BUTONLARI
+              else if ((isPending || isUserSubmitted) && filteredDeals.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _rejectAllPendingDeals(filteredDeals),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: Text(
+                            'Tümünü Reddet (${filteredDeals.length})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _approveAllPendingDeals(filteredDeals),
+                          icon: const Icon(Icons.done_all_rounded, size: 18),
+                          label: Text(
+                            'Tümünü Onayla (${filteredDeals.length})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 📋 Fırsatlar Listesi
+              Expanded(
+                child: filteredDeals.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.4,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.check_circle_outline,
+                                  size: 56,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  searchQuery.isNotEmpty
+                                      ? '"$searchQuery" ile eşleşen fırsat bulunamadı'
+                                      : (isPending ? 'Onay bekleyen bot fırsatı yok 🎉' : 'Kullanıcı paylaşımı bekleyen yok 🎉'),
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                        itemCount: filteredDeals.length,
+                        itemBuilder: (context, index) {
+                          final deal = filteredDeals[index];
+                          final isSelected = selectedSet.contains(deal.id);
+                          return _buildAdminCard(
+                            deal,
+                            type,
+                            isSelected: isSelected,
+                            isSelectionMode: isSelectionMode,
+                            onToggleSelect: () {
+                              setState(() {
+                                if (isSelected) {
+                                  selectedSet.remove(deal.id);
+                                } else {
+                                  selectedSet.add(deal.id);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -586,7 +909,44 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
-  Widget _buildAdminCard(Deal deal, _AdminListType type) {
+  /// Güvenli harici URL açıcı (Crash korumalı)
+  Future<void> _safeOpenUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bu fırsatın geçerli bir mağaza linki bulunmuyor ⚠️'), duration: Duration(seconds: 2)),
+        );
+      }
+      return;
+    }
+    try {
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        await launchUrlString(trimmed, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Geçersiz web adresi formatı ⚠️'), duration: Duration(seconds: 2)),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bağlantı açılamadı: $e ⚠️'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
+  Widget _buildAdminCard(
+    Deal deal,
+    _AdminListType type, {
+    bool isSelected = false,
+    bool isSelectionMode = false,
+    VoidCallback? onToggleSelect,
+  }) {
     final bool isPending = type == _AdminListType.pending;
     final bool isUserSubmitted = type == _AdminListType.userSubmitted;
     final bool isPublished = type == _AdminListType.published;
@@ -596,126 +956,210 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
     final String timeAgoStr = _formatDealTimeAgo(deal.createdAt);
     final String fullDateStr = DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(deal.createdAt);
+    final String dealTargetUrl = deal.link.isNotEmpty ? deal.link : deal.displayUrl;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
+      elevation: isSelected ? 3 : 1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          width: 1,
+          color: isSelected
+              ? Colors.blue
+              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          width: isSelected ? 2 : 1,
         ),
       ),
-      child: Column(
-        children: [
-          // 🕒 Üst Bilgi Çubuğu: Kaynak (Bot/Sayfa/Kullanıcı) & Gönderilme Zamanı
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                  width: 0.8,
-                ),
+      child: InkWell(
+        onLongPress: onToggleSelect,
+        onTap: () {
+          if (isSelectionMode) {
+            onToggleSelect?.call();
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DealDetailScreen(dealId: deal.id),
               ),
-            ),
-            child: Row(
-              children: [
-                // Kaynak Rozeti (Bot Kazıma Sayfası / Kanalı veya Kullanıcı)
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: (isBot ? const Color(0xFF3B82F6) : const Color(0xFFA855F7)).withValues(alpha: isDark ? 0.20 : 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isBot ? Icons.smart_toy_rounded : Icons.person_rounded,
-                          size: 13,
-                          color: isBot
-                              ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
-                              : (isDark ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            sourceName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isBot
-                                  ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
-                                  : (isDark ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+            );
+          }
+        },
+        child: Column(
+          children: [
+            // 🕒 Üst Bilgi Çubuğu: Kaynak (Bot/Sayfa/Kullanıcı) & Gönderilme Zamanı & Çoklu Seçim
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isDark ? Colors.blue.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.08))
+                    : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC)),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    width: 0.8,
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Gönderilme Zamanı (X dk önce • dd.MM.yyyy HH:mm)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      size: 13,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      timeAgoStr,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+              ),
+              child: Row(
+                children: [
+                  // Çoklu seçim checkbox'ı
+                  if (isSelectionMode) ...[
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: (_) => onToggleSelect?.call(),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '($fullDateStr)',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      ),
-                    ),
+                    const SizedBox(width: 8),
                   ],
-                ),
-                const Spacer(),
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, size: 18, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _deleteSingleDeal(deal);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'delete',
+
+                  // Kaynak Rozeti (Bot Kazıma Sayfası / Kanalı veya Kullanıcı)
+                  Flexible(
+                    flex: 3,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: (isBot ? const Color(0xFF3B82F6) : const Color(0xFFA855F7)).withValues(alpha: isDark ? 0.20 : 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                          SizedBox(width: 8),
-                          Text('Fırsatı Kalıcı Sil', style: TextStyle(color: Colors.red, fontSize: 13)),
+                          Icon(
+                            isBot ? Icons.smart_toy_rounded : Icons.person_rounded,
+                            size: 13,
+                            color: isBot
+                                ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
+                                : (isDark ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              sourceName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isBot
+                                    ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
+                                    : (isDark ? const Color(0xFFC084FC) : const Color(0xFF9333EA)),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Gönderilme Zamanı (X dk önce • Tooltip ile tam tarih)
+                  Flexible(
+                    flex: 4,
+                    child: Tooltip(
+                      message: fullDateStr,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.schedule_rounded,
+                            size: 12,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            timeAgoStr,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+
+                  // İşlem Menüsü (3 Nokta)
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, size: 18, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onSelected: (value) async {
+                      if (value == 'open_link') {
+                        await _safeOpenUrl(dealTargetUrl);
+                      } else if (value == 'copy_link') {
+                        if (dealTargetUrl.isNotEmpty) {
+                          await Clipboard.setData(ClipboardData(text: dealTargetUrl));
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Link panoya kopyalandı 📋'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        }
+                      } else if (value == 'detail') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => DealDetailScreen(dealId: deal.id)),
+                        );
+                      } else if (value == 'delete') {
+                        _deleteSingleDeal(deal);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (dealTargetUrl.isNotEmpty)
+                        const PopupMenuItem(
+                          value: 'open_link',
+                          child: Row(
+                            children: [
+                              Icon(Icons.open_in_browser_rounded, color: Colors.blue, size: 18),
+                              SizedBox(width: 8),
+                              Text('Mağaza Linkini Aç', style: TextStyle(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      if (dealTargetUrl.isNotEmpty)
+                        const PopupMenuItem(
+                          value: 'copy_link',
+                          child: Row(
+                            children: [
+                              Icon(Icons.copy_rounded, color: Colors.grey, size: 18),
+                              SizedBox(width: 8),
+                              Text('Linki Kopyala', style: TextStyle(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      const PopupMenuItem(
+                        value: 'detail',
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility_outlined, color: Colors.grey, size: 18),
+                            SizedBox(width: 8),
+                            Text('Detay Sayfasına Git', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                            SizedBox(width: 8),
+                            Text('Fırsatı Kalıcı Sil', style: TextStyle(color: Colors.red, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
           ListTile(
             contentPadding: const EdgeInsets.all(12),
             leading: ClipRRect(
@@ -951,37 +1395,87 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               },
             ),
             const Divider(height: 1),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _rejectDeal(deal.id),
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    label: const Text('Reddet', style: TextStyle(color: Colors.red)),
-                  ),
-                ),
-                Container(width: 1, height: 30, color: Colors.grey[200]),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => showAdminEditSheet(
-                      context: context,
-                      deal: deal,
-                      firestoreService: _firestoreService,
-                      onDealUpdated: () => setState(() {}),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                children: [
+                  // 1. Mağazada Gör / Doğrula Butonu
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () => _safeOpenUrl(dealTargetUrl),
+                      icon: const Icon(Icons.open_in_browser_rounded, size: 16, color: Colors.purple),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Mağaza', style: TextStyle(color: Colors.purple, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                     ),
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    label: const Text('Düzenle', style: TextStyle(color: Colors.blue)),
                   ),
-                ),
-                Container(width: 1, height: 30, color: Colors.grey[200]),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _showApproveOptions(deal.id),
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    label: const Text('Onayla', style: TextStyle(color: Colors.green)),
+                  Container(width: 1, height: 22, color: isDark ? Colors.grey[800] : Colors.grey[200]),
+
+                  // 2. Düzenle Butonu
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () => showAdminEditSheet(
+                        context: context,
+                        deal: deal,
+                        firestoreService: _firestoreService,
+                        onDealUpdated: () => setState(() {}),
+                      ),
+                      icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.blue),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Düzenle', style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  Container(width: 1, height: 22, color: isDark ? Colors.grey[800] : Colors.grey[200]),
+
+                  // 3. Reddet Butonu
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () => _rejectDeal(deal.id),
+                      icon: const Icon(Icons.close_rounded, size: 16, color: Colors.red),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Reddet', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, height: 22, color: isDark ? Colors.grey[800] : Colors.grey[200]),
+
+                  // 4. Onayla Butonu
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () => _showApproveOptions(deal.id),
+                      icon: const Icon(Icons.check_circle_rounded, size: 16, color: Colors.green),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Onayla', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           if (isPublished) ...[
@@ -1047,8 +1541,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
           ],
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _showApproveOptions(String id) async {
     final option = await showDialog<String>(
@@ -1232,6 +1727,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       'status': 'rejected',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    DealSyncService.instance.notifyDealDeleted(id);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fırsat Reddedildi ❌'), backgroundColor: Colors.red),
@@ -1239,16 +1735,53 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
-  // Deal paylaşımını durdur/devam ettir
+  // Deal paylaşımını durdur/devam ettir (Onay diyalogu korumalı)
   Future<void> _toggleDealSharing(bool enabled) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              enabled ? Icons.play_circle_fill_rounded : Icons.stop_circle_rounded,
+              color: enabled ? Colors.green : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Text(enabled ? 'Paylaşımı Başlat' : 'Paylaşımı Durdur'),
+          ],
+        ),
+        content: Text(
+          enabled
+              ? 'Kullanıcıların mobil uygulama üzerinden fırsat paylaşımı yapmasına izin verilsin mi?'
+              : 'DİKKAT: Kullanıcıların yeni fırsat paylaşması geçici olarak durdurulacak! Devam edilsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: enabled ? Colors.green : Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(enabled ? 'Evet, Başlat' : 'Evet, Durdur'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
     final success = await _firestoreService.setDealSharingEnabled(enabled);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             success 
-                ? (enabled ? 'Paylaşım devam ediyor ✅' : 'Paylaşım durduruldu ⏸️')
-                : 'Bir hata oluştu',
+                ? (enabled ? 'Kullanıcı paylaşımı aktif edildi ✅' : 'Kullanıcı paylaşımı durduruldu ⏸️')
+                : 'Ayar güncellenirken bir hata oluştu',
           ),
           backgroundColor: success ? Colors.green : Colors.red,
           duration: const Duration(seconds: 2),
@@ -1257,68 +1790,245 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
-  Future<void> _rejectAllPendingDeals(List<Deal> deals) async {
+  // ⚡ ULTRA HIZLI: Tümünü Onayla (Firestore Batch Commit)
+  Future<void> _approveAllPendingDeals(List<Deal> deals) async {
+    if (deals.isEmpty) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Tümünü Reddet'),
+        title: const Row(
+          children: [
+            Icon(Icons.verified_rounded, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Tümünü Onayla'),
+          ],
+        ),
         content: Text(
-          'Onay bekleyen ${deals.length} fırsatın tümünü reddetmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+          'Onay bekleyen ${deals.length} fırsatın tümü topluca onaylanarak anında yayına alınacak.\n\nOnaylıyor musunuz?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('İptal'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Evet, Tümünü Reddet'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Evet, Tümünü (${deals.length}) Onayla'),
           ),
         ],
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
 
-    // Tüm bekleyen fırsatları reddet
-    int successCount = 0;
-    int failCount = 0;
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '${deals.length} fırsat topluca onaylanıyor...';
+    });
 
-    for (final deal in deals) {
-      try {
-        await _firestoreService.updateDeal(deal.id, {
-          'isRejected': true,
-          'isApproved': false,
-          'isExpired': true,
-          'status': 'rejected',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        successCount++;
-      } catch (e) {
-        _log('Fırsat reddetme hatası (${deal.id}): $e');
-        failCount++;
-      }
-    }
+    final ids = deals.map((d) => d.id).toList();
+    final success = await _firestoreService.approveDealsBatch(ids);
 
     if (mounted) {
-      if (failCount == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$successCount fırsat reddedildi ❌'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        _selectedPendingDealIds.clear();
+        _selectedUserSubmittedDealIds.clear();
+        _isPendingSelectionMode = false;
+        _isUserSubmittedSelectionMode = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? '🎉 ${deals.length} fırsat anında onaylandı ve yayına alındı!'
+                : '⚠️ Toplu onaylama sırasında bir hata oluştu.',
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$successCount fırsat reddedildi, $failCount fırsat için hata oluştu ⚠️'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
+          backgroundColor: success ? Colors.green[800] : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // ⚡ ULTRA HIZLI: Tümünü Reddet (Firestore Batch Commit - Saniyeler içinde tamamlanır!)
+  Future<void> _rejectAllPendingDeals(List<Deal> deals) async {
+    if (deals.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Tümünü Reddet'),
+          ],
+        ),
+        content: Text(
+          'Onay bekleyen ${deals.length} fırsatın tümü tek seferde reddedilecek.\n\nBu işlem geri alınamaz. Devam edilsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
           ),
-        );
-      }
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Evet, Tümünü (${deals.length}) Reddet'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '${deals.length} fırsat topluca reddediliyor...';
+    });
+
+    final ids = deals.map((d) => d.id).toList();
+    final success = await _firestoreService.rejectDealsBatch(ids);
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        _selectedPendingDealIds.clear();
+        _selectedUserSubmittedDealIds.clear();
+        _isPendingSelectionMode = false;
+        _isUserSubmittedSelectionMode = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? '❌ ${deals.length} fırsat başarıyla reddedildi!'
+                : '⚠️ Toplu reddetme sırasında bir hata oluştu.',
+          ),
+          backgroundColor: success ? Colors.red[800] : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // ⚡ Çoklu Seçilenleri Onayla (Batch Approve)
+  Future<void> _batchApproveSelectedDeals(_AdminListType type) async {
+    final selectedSet = type == _AdminListType.pending ? _selectedPendingDealIds : _selectedUserSubmittedDealIds;
+    if (selectedSet.isEmpty) return;
+    final count = selectedSet.length;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Seçilenleri Onayla'),
+        content: Text('Seçtiğiniz $count fırsat onaylanıp yayına alınacak. Devam edilsin mi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: Text('Onayla ($count)'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '$count fırsat onaylanıyor...';
+    });
+
+    final ids = selectedSet.toList();
+    final success = await _firestoreService.approveDealsBatch(ids);
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        selectedSet.clear();
+        if (type == _AdminListType.pending) {
+          _isPendingSelectionMode = false;
+        } else {
+          _isUserSubmittedSelectionMode = false;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '✅ $count fırsat başarıyla onaylandı!' : '⚠️ Toplu işlem hatası oluştu'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  // ⚡ Çoklu Seçilenleri Reddet (Batch Reject)
+  Future<void> _batchRejectSelectedDeals(_AdminListType type) async {
+    final selectedSet = type == _AdminListType.pending ? _selectedPendingDealIds : _selectedUserSubmittedDealIds;
+    if (selectedSet.isEmpty) return;
+    final count = selectedSet.length;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Seçilenleri Reddet'),
+        content: Text('Seçtiğiniz $count fırsat reddedilecek. Bu işlem geri alınamaz. Devam edilsin mi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: Text('Reddet ($count)'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '$count fırsat reddediliyor...';
+    });
+
+    final ids = selectedSet.toList();
+    final success = await _firestoreService.rejectDealsBatch(ids);
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        selectedSet.clear();
+        if (type == _AdminListType.pending) {
+          _isPendingSelectionMode = false;
+        } else {
+          _isUserSubmittedSelectionMode = false;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '❌ $count fırsat başarıyla reddedildi!' : '⚠️ Toplu işlem hatası oluştu'),
+          backgroundColor: success ? Colors.red : Colors.orange,
+        ),
+      );
     }
   }
 
@@ -1349,6 +2059,11 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       'status': 'expired',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    DealSyncService.instance.notifyExpiredVoteChanged(
+      dealId: id,
+      expiredVotes: 15,
+      isExpired: true,
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1397,53 +2112,246 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     }
   }
 
+  /// 100k kullanıcı ölçeğinde ilk 200'de çıkmayan kullanıcıları doğrudan Firestore'dan çekme
+  Future<void> _performDirectUserSearch(String rawQuery) async {
+    final q = rawQuery.trim();
+    if (q.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _directUserSearchResults = [];
+          _isSearchingUsersDirectly = false;
+        });
+      }
+      return;
+    }
+
+    final cleanQ = q.startsWith('@') ? q.substring(1).trim() : q;
+
+    setState(() {
+      _isSearchingUsersDirectly = true;
+    });
+
+    try {
+      final List<DocumentSnapshot> foundDocs = [];
+      final Set<String> foundIds = {};
+
+      // 1. Doğrudan Belge ID (UID) Araması
+      try {
+        final docSnap = await FirebaseFirestore.instance.collection('users').doc(cleanQ).get();
+        if (docSnap.exists) {
+          foundDocs.add(docSnap);
+          foundIds.add(docSnap.id);
+        }
+      } catch (_) {}
+
+      // 2. Doğrudan E-posta Araması (Tam Eşleşme veya Küçük Harf)
+      try {
+        final emailSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: cleanQ.toLowerCase())
+            .limit(10)
+            .get();
+        for (final doc in emailSnap.docs) {
+          if (!foundIds.contains(doc.id)) {
+            foundDocs.add(doc);
+            foundIds.add(doc.id);
+          }
+        }
+      } catch (_) {}
+
+      // 3. Doğrudan Kullanıcı Adı (Username) Araması
+      try {
+        final usernameSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('username', isEqualTo: cleanQ)
+            .limit(10)
+            .get();
+        for (final doc in usernameSnap.docs) {
+          if (!foundIds.contains(doc.id)) {
+            foundDocs.add(doc);
+            foundIds.add(doc.id);
+          }
+        }
+      } catch (_) {}
+
+      // 4. Nickname Araması
+      try {
+        final nicknameSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('nickname', isEqualTo: cleanQ)
+            .limit(10)
+            .get();
+        for (final doc in nicknameSnap.docs) {
+          if (!foundIds.contains(doc.id)) {
+            foundDocs.add(doc);
+            foundIds.add(doc.id);
+          }
+        }
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _directUserSearchResults = foundDocs;
+          _isSearchingUsersDirectly = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) print('⚠️ Doğrudan kullanıcı arama hatası: $e');
+      if (mounted) {
+        setState(() {
+          _isSearchingUsersDirectly = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildUserFilterChip(String key, String label, bool isDark) {
+    final isSelected = _userRoleFilter == key;
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          if (selected) {
+            HapticFeedback.lightImpact();
+            setState(() {
+              _userRoleFilter = key;
+            });
+          }
+        },
+        labelStyle: TextStyle(
+          fontSize: 11.5,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          color: isSelected ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.grey[400] : Colors.grey[700]),
+        ),
+        backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+        selectedColor: primary.withValues(alpha: isDark ? 0.25 : 0.15),
+        checkmarkColor: primary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: isSelected ? primary : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+
   Widget _buildUsersList() {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    Query usersQuery;
+    if (_userRoleFilter == 'admins') {
+      usersQuery = FirebaseFirestore.instance.collection('users').where('isAdmin', isEqualTo: true);
+    } else if (_userRoleFilter == 'blocked') {
+      usersQuery = FirebaseFirestore.instance.collection('users').where('isBlocked', isEqualTo: true);
+    } else {
+      usersQuery = FirebaseFirestore.instance.collection('users').orderBy('points', descending: true).limit(200);
+    }
+
     return Column(
       children: [
-        // Arama kutusu
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
-            controller: _userSearchController,
-            decoration: InputDecoration(
-              hintText: 'Kullanıcı ara...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _userSearchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _userSearchController.clear();
-                        setState(() {
-                          _userSearchQuery = '';
-                        });
-                      },
-                    )
-                  : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+        // Arama ve Filtreleme Başlığı
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+            border: Border(
+              bottom: BorderSide(
+                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                width: 0.8,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              filled: true,
-              fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
             ),
-            onChanged: (value) {
-              setState(() {
-                _userSearchQuery = value.toLowerCase().trim();
-              });
-            },
+          ),
+          child: Column(
+            children: [
+              // Arama kutusu
+              TextField(
+                controller: _userSearchController,
+                decoration: InputDecoration(
+                  hintText: 'Kullanıcı ara (ad, @kullanıcıAdı, e-posta, UID)...',
+                  hintStyle: TextStyle(fontSize: 12.5, color: isDark ? Colors.grey[500] : Colors.grey[500]),
+                  prefixIcon: _isSearchingUsersDirectly
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : const Icon(Icons.search, size: 20),
+                  suffixIcon: _userSearchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _userSearchController.clear();
+                            setState(() {
+                              _userSearchQuery = '';
+                              _directUserSearchResults = [];
+                            });
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                ),
+                style: const TextStyle(fontSize: 13),
+                onChanged: (value) {
+                  final val = value.toLowerCase().trim();
+                  setState(() {
+                    _userSearchQuery = val;
+                  });
+                  _userSearchDebounce?.cancel();
+                  if (val.length >= 3) {
+                    _userSearchDebounce = Timer(const Duration(milliseconds: 500), () {
+                      _performDirectUserSearch(val);
+                    });
+                  } else {
+                    setState(() {
+                      _directUserSearchResults = [];
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+
+              // Durum Filtre Çipleri
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    _buildUserFilterChip('all', '🏆 Puan Sıralaması', isDark),
+                    _buildUserFilterChip('admins', '👮 Yöneticiler', isDark),
+                    _buildUserFilterChip('blocked', '🚫 Engellenenler', isDark),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
+
         // Kullanıcı listesi
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .orderBy('points', descending: true)
-                .limit(200)
-                .snapshots(),
+            stream: usersQuery.snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const UserListSkeleton(itemCount: 6, padding: EdgeInsets.all(16));
@@ -1466,75 +2374,90 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 );
               }
 
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.people_outline,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Kullanıcı bulunamadı',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                );
-              }
+              final allDocs = snapshot.data?.docs ?? [];
 
-              final allDocs = snapshot.data!.docs;
-              
-              // Arama filtreleme
+              // Yerel Filtreleme
               List<DocumentSnapshot> filteredDocs;
               if (_userSearchQuery.isEmpty) {
                 filteredDocs = allDocs;
               } else {
+                final cleanUserQuery = _userSearchQuery.startsWith('@')
+                    ? _userSearchQuery.substring(1).trim()
+                    : _userSearchQuery;
+                final normCleanQuery = DealSearchEngine.normalizeText(cleanUserQuery);
                 filteredDocs = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>?;
                   if (data == null) return false;
-                  
-                  final username = (data['username'] ?? '').toString().toLowerCase();
-                  final nickname = (data['nickname'] ?? '').toString().toLowerCase();
+
+                  final username = (data['username'] ?? '').toString();
+                  final nickname = (data['nickname'] ?? '').toString();
                   final email = (data['email'] ?? '').toString().toLowerCase();
                   final uid = doc.id.toLowerCase();
-                  
-                  return username.contains(_userSearchQuery) ||
-                         nickname.contains(_userSearchQuery) ||
-                         email.contains(_userSearchQuery) ||
-                         uid.contains(_userSearchQuery);
+
+                  final normUsername = DealSearchEngine.normalizeText(username);
+                  final normNickname = DealSearchEngine.normalizeText(nickname);
+
+                  return normUsername.contains(normCleanQuery) ||
+                      normNickname.contains(normCleanQuery) ||
+                      email.contains(_userSearchQuery) ||
+                      uid.contains(_userSearchQuery);
                 }).toList();
               }
 
-              if (filteredDocs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.search_off,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '"$_userSearchQuery" ile eşleşen kullanıcı yok',
-                        style: TextStyle(color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                );
-              }
+              // 🎯 Akıllı Hibrit Birleştirme (Smart Direct Search merge)
+              final Set<String> filteredDocIds = filteredDocs.map((d) => d.id).toSet();
+              final List<DocumentSnapshot> mergedDocs = [
+                ..._directUserSearchResults.where((d) => !filteredDocIds.contains(d.id)),
+                ...filteredDocs,
+              ];
 
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                itemCount: filteredDocs.length,
-                itemBuilder: (context, index) {
-                  final userDoc = filteredDocs[index];
+              return RefreshIndicator(
+                onRefresh: () async {
+                  setState(() {});
+                  await Future.delayed(const Duration(milliseconds: 300));
+                },
+                child: mergedDocs.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.45,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _userSearchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.people_outline_rounded,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _userSearchQuery.isNotEmpty
+                                      ? '"$_userSearchQuery" kriteriyle kullanıcı bulunamadı'
+                                      : 'Gösterilecek kullanıcı bulunmuyor',
+                                  style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold, fontSize: 14),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (_userSearchQuery.isNotEmpty && !_isSearchingUsersDirectly) ...[
+                                  const SizedBox(height: 12),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _performDirectUserSearch(_userSearchQuery),
+                                    icon: const Icon(Icons.travel_explore_rounded, size: 16),
+                                    label: const Text('Tüm Veritabanında Doğrudan Ara'),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        itemCount: mergedDocs.length,
+                  itemBuilder: (context, index) {
+                    final userDoc = mergedDocs[index];
                   final userData = userDoc.data() as Map<String, dynamic>?;
                   
                   if (userData == null) {
@@ -1781,8 +2704,9 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                     ),
                   );
                 },
-              );
-            },
+              ),
+            );
+          },
           ),
         ),
       ],
@@ -2695,6 +3619,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
   Widget _buildPendingCouponsList() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return StreamBuilder<List<Kupon>>(
       stream: _kuponService.getPendingKuponlarStream(),
       builder: (context, snapshot) {
@@ -2704,50 +3629,353 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
 
         final kuponlar = snapshot.data ?? [];
 
-        if (kuponlar.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.confirmation_number_outlined,
-                  size: 64,
-                  color: isDark ? Colors.grey[700] : Colors.grey[300],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Onay bekleyen kupon yok',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Kullanıcılar tarafından paylaşılan kuponlar burada listelenir.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.grey[500] : Colors.grey[400],
-                  ),
-                ),
-              ],
-            ),
-          );
+        // Eşzamanlılık Kalkanı: Canlı listeden çıkan kupon ID'lerini temizle
+        if (_selectedKuponIds.isNotEmpty) {
+          final liveIds = kuponlar.map((k) => k.id).toSet();
+          _selectedKuponIds.removeWhere((id) => !liveIds.contains(id));
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: kuponlar.length,
-          itemBuilder: (context, index) {
-            return _buildKuponAdminCard(kuponlar[index]);
+        // Canlı Arama Filtresi (Akıllı Türkçe ve Çoklu Token Koruması)
+        final filteredKuponlar = kuponlar.where((k) {
+          if (_kuponSearchQuery.isEmpty) return true;
+          final normQ = DealSearchEngine.normalizeText(_kuponSearchQuery);
+          final normMagaza = DealSearchEngine.normalizeText(k.magazaAdi);
+          final normBaslik = DealSearchEngine.normalizeText(k.baslik);
+          final normKod = DealSearchEngine.normalizeText(k.kuponKodu);
+          final normAciklama = DealSearchEngine.normalizeText(k.aciklama);
+          final lowerId = k.id.toLowerCase();
+          final lowerQ = _kuponSearchQuery.trim().toLowerCase();
+
+          bool matches = lowerId.contains(lowerQ) ||
+              normMagaza.contains(normQ) ||
+              normBaslik.contains(normQ) ||
+              normKod.contains(normQ) ||
+              normAciklama.contains(normQ);
+
+          if (!matches) {
+            final tokens = DealSearchEngine.tokenize(_kuponSearchQuery);
+            if (tokens.length > 1) {
+              final combined = '$normMagaza $normBaslik $normKod $normAciklama';
+              matches = tokens.every((t) => combined.contains(t));
+            }
+          }
+          return matches;
+        }).toList();
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            setState(() {});
+            await Future.delayed(const Duration(milliseconds: 300));
           },
+          child: Column(
+            children: [
+              // 🔍 Arama ve Çoklu Seçim Kontrol Çubuğu
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    // Arama Kutusu
+                    TextField(
+                      controller: _kuponSearchController,
+                      onChanged: (val) {
+                        setState(() {
+                          _kuponSearchQuery = val.trim().toLowerCase();
+                        });
+                      },
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Kuponlarda ara (mağaza, başlık, kod)...',
+                        hintStyle: TextStyle(color: Colors.grey[500], fontSize: 13),
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _kuponSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _kuponSearchController.clear();
+                                  setState(() {
+                                    _kuponSearchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Durum ve Çoklu Seçim Düğmesi Satırı
+                    Row(
+                      children: [
+                        Text(
+                          _kuponSearchQuery.isNotEmpty
+                              ? '${filteredKuponlar.length} / ${kuponlar.length} kupon'
+                              : '${kuponlar.length} onay bekleyen kupon',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                        ),
+                        const Spacer(),
+                        if (kuponlar.isNotEmpty)
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _isKuponSelectionMode = !_isKuponSelectionMode;
+                                if (!_isKuponSelectionMode) _selectedKuponIds.clear();
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _isKuponSelectionMode
+                                    ? Colors.blue.withValues(alpha: 0.15)
+                                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isKuponSelectionMode ? Icons.close : Icons.checklist_rounded,
+                                    size: 15,
+                                    color: _isKuponSelectionMode ? Colors.blue : (isDark ? Colors.white : Colors.black87),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isKuponSelectionMode ? 'Seçimi Bitir' : 'Çoklu Seçim',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: _isKuponSelectionMode ? Colors.blue : (isDark ? Colors.white : Colors.black87),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 🛑 Kupon Paylaşımı Durdur/Devam Et Acil Şalteri
+              StreamBuilder<bool>(
+                stream: _firestoreService.couponsEnabledStream(),
+                builder: (context, snapshot) {
+                  final isEnabled = snapshot.data ?? true;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _toggleCouponSharing(!isEnabled),
+                        icon: Icon(isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 18),
+                        label: Text(
+                          isEnabled ? 'Kullanıcı Kupon Paylaşımını Durdur' : 'Kullanıcı Kupon Paylaşımını Devam Ettir',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: isEnabled ? Colors.orange[800] : Colors.green[800],
+                          side: BorderSide(color: isEnabled ? Colors.orange : Colors.green),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // ⚡ ÇOKLU SEÇİM AKSİYON ÇUBUĞU (Aktifse)
+              if (_isKuponSelectionMode)
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      // Tümünü Seç / Kaldır
+                      Checkbox(
+                        value: filteredKuponlar.isNotEmpty && _selectedKuponIds.length == filteredKuponlar.length,
+                        tristate: _selectedKuponIds.isNotEmpty && _selectedKuponIds.length < filteredKuponlar.length,
+                        onChanged: (checked) {
+                          setState(() {
+                            if (checked == true) {
+                              _selectedKuponIds.addAll(filteredKuponlar.map((k) => k.id));
+                            } else {
+                              _selectedKuponIds.clear();
+                            }
+                          });
+                        },
+                      ),
+                      Text(
+                        '${_selectedKuponIds.length} seçildi',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      // Seçilenleri Reddet
+                      ElevatedButton.icon(
+                        onPressed: _selectedKuponIds.isEmpty ? null : () => _batchRejectSelectedKuponlar(),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: Text('Reddet (${_selectedKuponIds.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Seçilenleri Onayla
+                      ElevatedButton.icon(
+                        onPressed: _selectedKuponIds.isEmpty ? null : () => _batchApproveSelectedKuponlar(),
+                        icon: const Icon(Icons.check, size: 16),
+                        label: Text('Onayla (${_selectedKuponIds.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              // 🚀 SEÇİM MODU KAPALIYKEN: HIZLI TÜMÜNÜ ONAYLA & TÜMÜNÜ REDDET BUTONLARI
+              else if (filteredKuponlar.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _rejectAllPendingKuponlar(filteredKuponlar),
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          label: Text(
+                            'Tümünü Reddet (${filteredKuponlar.length})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _approveAllPendingKuponlar(filteredKuponlar),
+                          icon: const Icon(Icons.done_all_rounded, size: 18),
+                          label: Text(
+                            'Tümünü Onayla (${filteredKuponlar.length})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            elevation: 1,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 📋 Kupon Listesi
+              Expanded(
+                child: filteredKuponlar.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.4,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _kuponSearchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.confirmation_number_outlined,
+                                  size: 56,
+                                  color: isDark ? Colors.grey[700] : Colors.grey[400],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _kuponSearchQuery.isNotEmpty
+                                      ? '"$_kuponSearchQuery" ile eşleşen kupon bulunamadı'
+                                      : 'Onay bekleyen kupon yok 🎉',
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                        itemCount: filteredKuponlar.length,
+                        itemBuilder: (context, index) {
+                          final kupon = filteredKuponlar[index];
+                          final isSelected = _selectedKuponIds.contains(kupon.id);
+                          return _buildKuponAdminCard(
+                            kupon,
+                            isSelected: isSelected,
+                            isSelectionMode: _isKuponSelectionMode,
+                            onToggleSelect: () {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedKuponIds.remove(kupon.id);
+                                } else {
+                                  _selectedKuponIds.add(kupon.id);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildKuponAdminCard(Kupon kupon) {
+  Widget _buildKuponAdminCard(
+    Kupon kupon, {
+    bool isSelected = false,
+    bool isSelectionMode = false,
+    VoidCallback? onToggleSelect,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeAgo = _formatDealTimeAgo(kupon.olusturulmaTarihi);
     final fullDate = DateFormat('dd.MM.yyyy HH:mm', 'tr_TR').format(kupon.olusturulmaTarihi);
@@ -2758,30 +3986,55 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
+      elevation: isSelected ? 3 : 1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          width: 1,
+          color: isSelected
+              ? Colors.blue
+              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          width: isSelected ? 2 : 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Üst Bilgi Çubuğu: Paylaşan & Tarih & Silme
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                  width: 0.8,
+      child: InkWell(
+        onLongPress: onToggleSelect,
+        onTap: () {
+          if (isSelectionMode) {
+            onToggleSelect?.call();
+          }
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Üst Bilgi Çubuğu: Paylaşan & Tarih & Silme
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isDark ? Colors.blue.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.08))
+                    : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC)),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    width: 0.8,
+                  ),
                 ),
               ),
-            ),
-            child: Row(
-              children: [
+              child: Row(
+                children: [
+                  // Çoklu seçim checkbox'ı
+                  if (isSelectionMode) ...[
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: (_) => onToggleSelect?.call(),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                   decoration: BoxDecoration(
@@ -2980,31 +4233,362 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               Expanded(
                 child: TextButton.icon(
                   onPressed: () => _showRejectKuponDialog(kupon),
-                  icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                  label: const Text('Reddet', style: TextStyle(color: Colors.red)),
+                  icon: const Icon(Icons.close, color: Colors.red, size: 16),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Reddet', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
-              Container(width: 1, height: 30, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
+              Container(width: 1, height: 24, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
               Expanded(
                 child: TextButton.icon(
                   onPressed: () => _showEditKuponDialog(kupon),
-                  icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
-                  label: const Text('Düzenle', style: TextStyle(color: Colors.blue)),
+                  icon: const Icon(Icons.edit, color: Colors.blue, size: 16),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Düzenle', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
-              Container(width: 1, height: 30, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
+              Container(width: 1, height: 24, color: isDark ? const Color(0xFF334155) : Colors.grey[200]),
               Expanded(
                 child: TextButton.icon(
                   onPressed: () => _showApproveKuponDialog(kupon),
-                  icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
-                  label: const Text('Onayla & Push', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Onayla & Push', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
             ],
           ),
         ],
       ),
+    ),
+  );
+}
+
+  // 🛑 Kupon paylaşımını durdur/devam ettir (Onay diyalogu korumalı)
+  Future<void> _toggleCouponSharing(bool enabled) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              enabled ? Icons.play_circle_outline : Icons.pause_circle_outline,
+              color: enabled ? Colors.green : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Text(enabled ? 'Kupon Paylaşımını Aç' : 'Kupon Paylaşımını Durdur'),
+          ],
+        ),
+        content: Text(
+          enabled
+              ? 'Kullanıcıların yeni kupon paylaşmasına tekrar izin verilecek. Emin misiniz?'
+              : 'Tüm kullanıcıların kupon paylaşımı geçici olarak durdurulacak. Emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: enabled ? Colors.green : Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(enabled ? 'Evet, Aç' : 'Evet, Durdur'),
+          ),
+        ],
+      ),
     );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await _firestoreService.firestore.collection('settings').doc('app').set({
+        'couponsEnabled': enabled,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              enabled
+                  ? 'Kullanıcı kupon paylaşımı aktif edildi ✅'
+                  : 'Kullanıcı kupon paylaşımı geçici olarak durduruldu ⏸️',
+            ),
+            backgroundColor: enabled ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ayar güncellenemedi: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // ⚡ ULTRA HIZLI: Tüm Kuponları Onayla (Firestore Batch Commit)
+  Future<void> _approveAllPendingKuponlar(List<Kupon> kuponlar) async {
+    if (kuponlar.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.verified_rounded, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Tüm Kuponları Onayla'),
+          ],
+        ),
+        content: Text(
+          'Onay bekleyen ${kuponlar.length} kuponun tümü anında onaylanıp yayına alınacak.\n\nTopluluk bildirimleri gönderilecek. Devam edilsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Evet, Tümünü (${kuponlar.length}) Onayla'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '${kuponlar.length} kupon topluca onaylanıyor...';
+    });
+
+    final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+    final ids = kuponlar.map((k) => k.id).toList();
+    final success = await _kuponService.approveKuponlarBatch(kuponIds: ids, adminId: adminId);
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        _selectedKuponIds.clear();
+        _isKuponSelectionMode = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? '🎉 ${kuponlar.length} kupon başarıyla onaylandı ve yayına alındı!'
+                : '⚠️ Toplu kupon onaylama sırasında bir hata oluştu.',
+          ),
+          backgroundColor: success ? Colors.green[800] : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // ⚡ ULTRA HIZLI: Tüm Kuponları Reddet (Firestore Batch Commit)
+  Future<void> _rejectAllPendingKuponlar(List<Kupon> kuponlar) async {
+    if (kuponlar.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Tüm Kuponları Reddet'),
+          ],
+        ),
+        content: Text(
+          'Onay bekleyen ${kuponlar.length} kuponun tümü tek seferde reddedilecek.\n\nBu işlem geri alınamaz. Devam edilsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Evet, Tümünü (${kuponlar.length}) Reddet'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '${kuponlar.length} kupon topluca reddediliyor...';
+    });
+
+    final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+    final ids = kuponlar.map((k) => k.id).toList();
+    final success = await _kuponService.rejectKuponlarBatch(
+      kuponIds: ids,
+      adminId: adminId,
+      reason: 'Toplu moderasyon reddi',
+    );
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        _selectedKuponIds.clear();
+        _isKuponSelectionMode = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? '❌ ${kuponlar.length} kupon başarıyla reddedildi!'
+                : '⚠️ Toplu reddetme sırasında bir hata oluştu.',
+          ),
+          backgroundColor: success ? Colors.red[800] : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // ⚡ Çoklu Seçilen Kuponları Onayla
+  Future<void> _batchApproveSelectedKuponlar() async {
+    if (_selectedKuponIds.isEmpty) return;
+    final count = _selectedKuponIds.length;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Seçilen Kuponları Onayla'),
+        content: Text('Seçtiğiniz $count kupon onaylanıp yayına alınacak. Devam edilsin mi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: Text('Onayla ($count)'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '$count kupon onaylanıyor...';
+    });
+
+    final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+    final ids = _selectedKuponIds.toList();
+    final success = await _kuponService.approveKuponlarBatch(kuponIds: ids, adminId: adminId);
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        _selectedKuponIds.clear();
+        _isKuponSelectionMode = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '✅ $count kupon başarıyla onaylandı!' : '⚠️ Toplu işlem hatası oluştu'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  // ⚡ Çoklu Seçilen Kuponları Reddet
+  Future<void> _batchRejectSelectedKuponlar() async {
+    if (_selectedKuponIds.isEmpty) return;
+    final count = _selectedKuponIds.length;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Seçilen Kuponları Reddet'),
+        content: Text('Seçtiğiniz $count kupon reddedilecek. Bu işlem geri alınamaz. Devam edilsin mi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: Text('Reddet ($count)'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isBatchProcessing = true;
+      _batchProcessingMessage = '$count kupon reddediliyor...';
+    });
+
+    final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+    final ids = _selectedKuponIds.toList();
+    final success = await _kuponService.rejectKuponlarBatch(
+      kuponIds: ids,
+      adminId: adminId,
+      reason: 'Yönetici tarafından topluca reddedildi',
+    );
+
+    if (mounted) {
+      setState(() {
+        _isBatchProcessing = false;
+        _batchProcessingMessage = '';
+        _selectedKuponIds.clear();
+        _isKuponSelectionMode = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '❌ $count kupon başarıyla reddedildi!' : '⚠️ Toplu işlem hatası oluştu'),
+          backgroundColor: success ? Colors.red : Colors.orange,
+        ),
+      );
+    }
   }
 
   Future<void> _showApproveKuponDialog(Kupon kupon) async {

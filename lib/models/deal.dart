@@ -91,6 +91,87 @@ class Deal {
     this.searchKeywords,
   });
 
+  /// İmmutable yerel durum mutasyonları ve Optimistic UI güncellemeleri için copyWith
+  Deal copyWith({
+    String? id,
+    String? title,
+    String? description,
+    double? price,
+    double? originalPrice,
+    int? discountRate,
+    String? store,
+    String? category,
+    String? subCategory,
+    String? link,
+    String? imageUrl,
+    int? hotVotes,
+    int? coldVotes,
+    int? expiredVotes,
+    int? commentCount,
+    String? postedBy,
+    String? postedByName,
+    String? postedByAvatar,
+    DateTime? createdAt,
+    bool? isEditorPick,
+    bool? isApproved,
+    bool? isRejected,
+    bool? isExpired,
+    bool? isUserSubmitted,
+    bool? isTest,
+    String? cleanUrl,
+    String? priceLabel,
+    double? ratingValue,
+    int? ratingCount,
+    String? brand,
+    bool? isAmazonWarehouse,
+    bool? hidePrice,
+    String? couponCode,
+    String? telegramChatTitle,
+    String? telegramChatUsername,
+    String? botSource,
+    List<String>? searchKeywords,
+  }) {
+    return Deal(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      price: price ?? this.price,
+      originalPrice: originalPrice ?? this.originalPrice,
+      discountRate: discountRate ?? this.discountRate,
+      store: store ?? this.store,
+      category: category ?? this.category,
+      subCategory: subCategory ?? this.subCategory,
+      link: link ?? this.link,
+      imageUrl: imageUrl ?? this.imageUrl,
+      hotVotes: hotVotes ?? this.hotVotes,
+      coldVotes: coldVotes ?? this.coldVotes,
+      expiredVotes: expiredVotes ?? this.expiredVotes,
+      commentCount: commentCount ?? this.commentCount,
+      postedBy: postedBy ?? this.postedBy,
+      postedByName: postedByName ?? this.postedByName,
+      postedByAvatar: postedByAvatar ?? this.postedByAvatar,
+      createdAt: createdAt ?? this.createdAt,
+      isEditorPick: isEditorPick ?? this.isEditorPick,
+      isApproved: isApproved ?? this.isApproved,
+      isRejected: isRejected ?? this.isRejected,
+      isExpired: isExpired ?? this.isExpired,
+      isUserSubmitted: isUserSubmitted ?? this.isUserSubmitted,
+      isTest: isTest ?? this.isTest,
+      cleanUrl: cleanUrl ?? this.cleanUrl,
+      priceLabel: priceLabel ?? this.priceLabel,
+      ratingValue: ratingValue ?? this.ratingValue,
+      ratingCount: ratingCount ?? this.ratingCount,
+      brand: brand ?? this.brand,
+      isAmazonWarehouse: isAmazonWarehouse ?? this.isAmazonWarehouse,
+      hidePrice: hidePrice ?? this.hidePrice,
+      couponCode: couponCode ?? this.couponCode,
+      telegramChatTitle: telegramChatTitle ?? this.telegramChatTitle,
+      telegramChatUsername: telegramChatUsername ?? this.telegramChatUsername,
+      botSource: botSource ?? this.botSource,
+      searchKeywords: searchKeywords ?? this.searchKeywords,
+    );
+  }
+
   /// Bir fırsatın Botkolik (otonom bot) tarafından paylaşılıp paylaşılmadığını döner
   bool get isBotkolik =>
       !isUserSubmitted ||
@@ -196,6 +277,46 @@ class Deal {
     }
     final cleanedFromLink = cleanProductUrl(link);
     return cleanedFromLink.isNotEmpty ? cleanedFromLink : link;
+  }
+
+  /// Kanonik URL ve ham hedef URL'yi birleştirerek mükerrerlik kimliğini (cleanUrl) türetir.
+  /// Sayfada <link rel="canonical"> varsa satıcı parametrelerini (magaza, shopId) korur.
+  static String buildCanonicalCleanUrl(String rawTargetUrl, String? canonicalUrl) {
+    if (rawTargetUrl.isEmpty) return '';
+    if (canonicalUrl == null || canonicalUrl.trim().isEmpty) {
+      return cleanProductUrl(rawTargetUrl);
+    }
+    try {
+      final rawUri = Uri.parse(rawTargetUrl.trim());
+      final canonUri = Uri.parse(canonicalUrl.trim());
+
+      final rawHost = rawUri.host.replaceFirst(RegExp(r'^www\.'), '').toLowerCase();
+      final canonHost = canonUri.host.replaceFirst(RegExp(r'^www\.'), '').toLowerCase();
+      final isDomainMatch = rawHost == canonHost ||
+          rawHost.endsWith('.$canonHost') ||
+          canonHost.endsWith('.$rawHost');
+      if (!isDomainMatch) {
+        return cleanProductUrl(rawTargetUrl);
+      }
+
+      final queryParams = Map<String, String>.from(canonUri.queryParameters);
+      bool modified = false;
+      if (rawUri.queryParameters.containsKey('magaza') && !queryParams.containsKey('magaza')) {
+        queryParams['magaza'] = rawUri.queryParameters['magaza']!;
+        modified = true;
+      }
+      if (rawUri.queryParameters.containsKey('shopId') && !queryParams.containsKey('shopId')) {
+        queryParams['shopId'] = rawUri.queryParameters['shopId']!;
+        modified = true;
+      }
+
+      final targetCanonUrl = modified
+          ? canonUri.replace(queryParameters: queryParams).toString()
+          : canonicalUrl.trim();
+      return cleanProductUrl(targetCanonUrl);
+    } catch (_) {
+      return cleanProductUrl(rawTargetUrl);
+    }
   }
 
   // URL parametrelerini temizleyen statik fonksiyon

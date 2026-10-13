@@ -31,11 +31,14 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
 
   late TabController _segmentTabController;
 
-  // Tab 1 (Şikayetler) filtreleme durumları
+  // Tab 1 (Şikayetler) filtreleme ve çoklu seçim durumları
   String _complaintsSearchQuery = '';
   String _complaintsStatusFilter = 'all'; // 'all', 'pending', 'action_taken', 'dismissed'
   String _complaintsTypeFilter = 'all';   // 'all', 'deal', 'comment', 'user', 'message'
   final TextEditingController _complaintsSearchController = TextEditingController();
+  final Set<String> _selectedComplaintIds = {};
+  bool _isComplaintsSelectionMode = false;
+  bool _isReportsBatchProcessing = false;
 
   // Tab 2 (Otomatik Alarmlar) filtreleme durumları
   String _autoModSearchQuery = '';
@@ -144,7 +147,27 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
           return const NotificationListSkeleton();
         }
 
+        if (_isReportsBatchProcessing) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Toplu şikayet işlemi yürütülüyor...', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+          );
+        }
+
         final allReports = snapshot.data ?? [];
+
+        // Eşzamanlılık Kalkanı: Canlı listeden düşen seçili şikayetleri temizle
+        if (_selectedComplaintIds.isNotEmpty) {
+          final liveIds = allReports.map((r) => r.id).toSet();
+          _selectedComplaintIds.removeWhere((id) => !liveIds.contains(id));
+        }
+
         final totalCount = allReports.length;
         final pendingCount = allReports.where((r) => r.status == 'pending').length;
         final actionCount = allReports.where((r) => r.status == 'action_taken').length;
@@ -170,6 +193,104 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                 dismissed: dismissedCount,
               ),
               const SizedBox(height: 12),
+
+              // ⚡ Çoklu Seçim veya Hızlı Toplu Moderasyon Barı
+              if (_isComplaintsSelectionMode)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: filteredReports.isNotEmpty && _selectedComplaintIds.length == filteredReports.length,
+                        tristate: _selectedComplaintIds.isNotEmpty && _selectedComplaintIds.length < filteredReports.length,
+                        onChanged: (checked) {
+                          setState(() {
+                            if (checked == true) {
+                              _selectedComplaintIds.addAll(filteredReports.map((r) => r.id));
+                            } else {
+                              _selectedComplaintIds.clear();
+                            }
+                          });
+                        },
+                      ),
+                      Text(
+                        '${_selectedComplaintIds.length} seçildi',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: _selectedComplaintIds.isEmpty ? null : _batchDismissSelectedComplaints,
+                        icon: const Icon(Icons.check_circle_outline, size: 16),
+                        label: Text('Yoksay (${_selectedComplaintIds.length})'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: 'Seçimden Çık',
+                        onPressed: () {
+                          setState(() {
+                            _isComplaintsSelectionMode = false;
+                            _selectedComplaintIds.clear();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                )
+              else if (pendingCount > 0)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.pending_actions_rounded, size: 18, color: Colors.amber[800]),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$pendingCount bekleyen şikayet',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isComplaintsSelectionMode = true;
+                            _selectedComplaintIds.clear();
+                          });
+                        },
+                        icon: const Icon(Icons.checklist_rounded, size: 16),
+                        label: const Text('Çoklu Seç', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 6),
+                      OutlinedButton.icon(
+                        onPressed: () => _confirmDismissAllPending(allReports.where((r) => r.status == 'pending').toList()),
+                        icon: const Icon(Icons.done_all_rounded, size: 16, color: Colors.blue),
+                        label: const Text('Tümünü Kapat', style: TextStyle(fontSize: 11.5, color: Colors.blue, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.blue.withValues(alpha: 0.3)),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // 2. Arama ve Filtre Kontrolleri
               _buildComplaintsFilterBar(),
@@ -402,31 +523,57 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
       );
     }
 
+    final isSelected = _selectedComplaintIds.contains(report.id);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Başlık Çubuğu
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: typeColor.withValues(alpha: 0.08),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isSelected ? const BorderSide(color: Colors.blue, width: 2) : BorderSide.none,
+      ),
+      child: InkWell(
+        onTap: _isComplaintsSelectionMode
+            ? () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedComplaintIds.remove(report.id);
+                  } else {
+                    _selectedComplaintIds.add(report.id);
+                  }
+                });
+              }
+            : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Başlık Çubuğu
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: typeColor.withValues(alpha: 0.08),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              ),
+              child: Row(
+                children: [
+                  if (_isComplaintsSelectionMode) ...[
+                    Icon(
+                      isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                      size: 18,
+                      color: isSelected ? Colors.blue : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Icon(typeIcon, size: 16, color: typeColor),
+                  const SizedBox(width: 8),
+                  Text(typeLabel, style: TextStyle(color: typeColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Spacer(),
+                  statusBadge,
+                  const SizedBox(width: 8),
+                  Text(dateFormat.format(report.createdAt), style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(typeIcon, size: 16, color: typeColor),
-                const SizedBox(width: 8),
-                Text(typeLabel, style: TextStyle(color: typeColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                const Spacer(),
-                statusBadge,
-                const SizedBox(width: 8),
-                Text(dateFormat.format(report.createdAt), style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-              ],
-            ),
-          ),
 
           // İçerik Detayı
           Padding(
@@ -539,8 +686,9 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ============================================================================
   // 🚨 SEKME 2: OTOMATİK MODERASYON ALARMLARI (adminMessages)
@@ -606,12 +754,31 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
                       ),
                     ],
                   ),
-                  if (totalCount > 0)
-                    TextButton.icon(
-                      onPressed: _confirmDeleteAllAlarms,
-                      icon: const Icon(Icons.delete_sweep, size: 16, color: Colors.red),
-                      label: const Text('Tümünü Sil', style: TextStyle(color: Colors.red, fontSize: 12)),
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (unreadCount > 0) ...[
+                        TextButton.icon(
+                          onPressed: _confirmMarkAllAlarmsAsRead,
+                          icon: const Icon(Icons.done_all_rounded, size: 16, color: Colors.green),
+                          label: const Text('Okundu Yap', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      if (totalCount > 0)
+                        TextButton.icon(
+                          onPressed: _confirmDeleteAllAlarms,
+                          icon: const Icon(Icons.delete_sweep, size: 16, color: Colors.red),
+                          label: const Text('Tümünü Sil', style: TextStyle(color: Colors.red, fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1678,6 +1845,112 @@ class _AdminReportsListState extends State<AdminReportsList> with SingleTickerPr
       ),
     );
   }
+
+  /// Seçilen Şikayetleri Toplu Yoksay / Kapat
+  Future<void> _batchDismissSelectedComplaints() async {
+    if (_selectedComplaintIds.isEmpty) return;
+    final count = _selectedComplaintIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Toplu Şikayet Kapat'),
+        content: Text('Seçilen $count şikayeti kapatmak istediğinize emin misiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+            child: const Text('Evet, Kapat'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isReportsBatchProcessing = true);
+    final success = await _reportService.dismissReportsBatch(_selectedComplaintIds.toList());
+    if (mounted) {
+      setState(() {
+        _isReportsBatchProcessing = false;
+        _isComplaintsSelectionMode = false;
+        _selectedComplaintIds.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '$count şikayet başarıyla kapatıldı ✅' : 'Toplu kapatma sırasında hata oluştu ❌'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Tüm Bekleyen Şikayetleri Toplu Yoksay / Kapat
+  Future<void> _confirmDismissAllPending(List<Report> pendingReports) async {
+    if (pendingReports.isEmpty) return;
+    final count = pendingReports.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bekleyen Şikayetleri Kapat'),
+        content: Text('Bekleyen $count şikayetin tümünü yoksayıp kapatmak istediğinize emin misiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+            child: const Text('Evet, Tümünü Kapat'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isReportsBatchProcessing = true);
+    final ids = pendingReports.map((r) => r.id).toList();
+    final success = await _reportService.dismissReportsBatch(ids);
+    if (mounted) {
+      setState(() => _isReportsBatchProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '$count şikayet başarıyla kapatıldı ✅' : 'İşlem başarısız ❌'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Tüm Otomatik Moderasyon Alarmlarını Okundu Olarak İşaretle
+  Future<void> _confirmMarkAllAlarmsAsRead() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tümünü Okundu İşaretle'),
+        content: const Text('Tüm okunmamış moderasyon alarmlarını okundu olarak işaretlemek istediğinize emin misiniz?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: const Text('Evet, Okundu Yap'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final success = await _reportService.markAllAutoModAlarmsAsRead();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Tüm alarmlar okundu olarak işaretlendi ✅' : 'İşlem başarısız ❌'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
 }
 
 class _ActionOption {
@@ -1706,17 +1979,18 @@ extension _ReportFilterExt on List<Report> {
     required String statusFilter,
     required String typeFilter,
   }) {
+    final q = searchQuery.toLowerCase().trim();
     return where((report) {
       if (statusFilter != 'all' && report.status != statusFilter) return false;
       if (typeFilter != 'all' && report.type != typeFilter) return false;
-      if (searchQuery.isNotEmpty) {
-        final idMatch = report.id.toLowerCase().contains(searchQuery);
-        final repIdMatch = report.reportedId.toLowerCase().contains(searchQuery);
-        final reporterMatch = report.reportedBy.toLowerCase().contains(searchQuery);
-        final reasonMatch = report.reason.toLowerCase().contains(searchQuery);
-        final descMatch = (report.description ?? '').toLowerCase().contains(searchQuery);
-        final contentMatch = (report.targetContent ?? '').toLowerCase().contains(searchQuery);
-        final authorMatch = (report.targetAuthor ?? '').toLowerCase().contains(searchQuery);
+      if (q.isNotEmpty) {
+        final idMatch = report.id.toLowerCase().contains(q);
+        final repIdMatch = report.reportedId.toLowerCase().contains(q);
+        final reporterMatch = report.reportedBy.toLowerCase().contains(q);
+        final reasonMatch = report.reason.toLowerCase().contains(q);
+        final descMatch = (report.description ?? '').toLowerCase().contains(q);
+        final contentMatch = (report.targetContent ?? '').toLowerCase().contains(q);
+        final authorMatch = (report.targetAuthor ?? '').toLowerCase().contains(q);
         return idMatch || repIdMatch || reporterMatch || reasonMatch || descMatch || contentMatch || authorMatch;
       }
       return true;
@@ -1729,14 +2003,15 @@ extension _AlarmFilterExt on List<AdminModerationAlarm> {
     required String searchQuery,
     required String filter,
   }) {
+    final q = searchQuery.toLowerCase().trim();
     return where((alarm) {
       if (filter == 'unread' && alarm.isRead) return false;
       if (filter == 'deals' && alarm.type != 'deal') return false;
       if (filter == 'comments' && alarm.type != 'comment') return false;
-      if (searchQuery.isNotEmpty) {
-        final userMatch = alarm.userName.toLowerCase().contains(searchQuery) || alarm.userId.toLowerCase().contains(searchQuery);
-        final contentMatch = alarm.content.toLowerCase().contains(searchQuery);
-        final reasonMatch = alarm.reason.toLowerCase().contains(searchQuery);
+      if (q.isNotEmpty) {
+        final userMatch = alarm.userName.toLowerCase().contains(q) || alarm.userId.toLowerCase().contains(q);
+        final contentMatch = alarm.content.toLowerCase().contains(q);
+        final reasonMatch = alarm.reason.toLowerCase().contains(q);
         return userMatch || contentMatch || reasonMatch;
       }
       return true;

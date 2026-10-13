@@ -40,12 +40,12 @@ $$\text{tROAS} = \frac{\text{AdMob onPaidEvent Geliri}}{\text{Google Ads Kullan�
 
 Tüm platform ve ortamlarda kullanılan resmi AdMob kimlikleri tek bir merkezi matriste sabitlenmiştir:
 
-| Platform & Ortam | Durum | AdMob App ID (Uygulama Kimliği) | Native Ad Unit ID (Faz 3.3 Akış) | Banner Ad Unit ID (Eski/Arşiv) | Tanımlandığı Yer |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Android DEV** | Test | `ca-app-pub-3940256099942544~3347511713` | `ca-app-pub-3940256099942544/2247696110` | `ca-app-pub-3940256099942544/6300978111` | `build.gradle` (`dev` flavor) & `firebase_options.dart` |
-| **Android PROD** | **Canlı (Gerçek)** | `ca-app-pub-6853997017739651~8861215767` | `ca-app-pub-6853997017739651/4004866134` | `ca-app-pub-6853997017739651/8758625050` *(Arşiv)* | `build.gradle` (`prod` flavor) & `firebase_options.dart` |
-| **iOS DEV** | Test | `ca-app-pub-3940256099942544~1458002511` | `ca-app-pub-3940256099942544/3986624511` | `ca-app-pub-3940256099942544/2934735716` | `firebase_options.dart` (Dev Fallback) |
-| **iOS PROD** | **Canlı (Gerçek)** | `ca-app-pub-6853997017739651~7339420575` | `ca-app-pub-6853997017739651/9437070495` | `ca-app-pub-6853997017739651/2039078155` *(Arşiv)* | `ios/Runner/Info.plist` & `firebase_options.dart` |
+| Platform & Ortam | Durum | AdMob App ID (Uygulama Kimliği) | Native Ad Unit ID (Faz 3.3 Akış) | Rewarded Ad Unit ID (Ödüllü Kupon) | Banner Ad Unit ID (Eski/Arşiv) | Tanımlandığı Yer |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Android DEV** | Test | `ca-app-pub-3940256099942544~3347511713` | `ca-app-pub-3940256099942544/2247696110` | `ca-app-pub-3940256099942544/5224354917` | `ca-app-pub-3940256099942544/6300978111` | `build.gradle` (`dev` flavor) & `firebase_options.dart` |
+| **Android PROD** | **Canlı (Gerçek)** | `ca-app-pub-6853997017739651~8861215767` | `ca-app-pub-6853997017739651/4004866134` | `ca-app-pub-6853997017739651/9218593979` | `ca-app-pub-6853997017739651/8758625050` *(Arşiv)* | `build.gradle` (`prod` flavor) & `firebase_options.dart` |
+| **iOS DEV** | Test | `ca-app-pub-3940256099942544~1458002511` | `ca-app-pub-3940256099942544/3986624511` | `ca-app-pub-3940256099942544/1712485313` | `ca-app-pub-3940256099942544/2934735716` | `firebase_options.dart` (Dev Fallback) |
+| **iOS PROD** | **Canlı (Gerçek)** | `ca-app-pub-6853997017739651~7339420575` | `ca-app-pub-6853997017739651/9437070495` | `ca-app-pub-6853997017739651/2723583797` | `ca-app-pub-6853997017739651/2039078155` *(Arşiv)* | `ios/Runner/Info.plist` & `firebase_options.dart` |
 
 ### Format Bazlı Resmi Yedek & Test Birimleri:
 * **Android Test Native:** `ca-app-pub-3940256099942544/2247696110`

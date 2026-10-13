@@ -120,7 +120,7 @@
             adUnits: [
                 // ANDROID PROD (Canlı Gerçek Birimler)
                 { platform: 'ANDROID', env: 'PROD', format: 'Native (Faz 3.3 Akış)', id: 'ca-app-pub-6853997017739651/4004866134', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
-                { platform: 'ANDROID', env: 'PROD', format: 'Rewarded (Kupon +2)', id: 'ca-app-pub-6853997017739651/5224354917', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
+                { platform: 'ANDROID', env: 'PROD', format: 'Rewarded (Kupon +2)', id: 'ca-app-pub-6853997017739651/9218593979', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
                 { platform: 'ANDROID', env: 'PROD', format: 'Banner (Arşiv / Emekli)', id: 'ca-app-pub-6853997017739651/8758625050', appId: 'ca-app-pub-6853997017739651~8861215767', isTest: false },
 
                 // ANDROID DEV (Google Resmi Test Birimleri)
@@ -130,7 +130,7 @@
 
                 // IOS PROD (Canlı Gerçek Birimler)
                 { platform: 'IOS', env: 'PROD', format: 'Native (Faz 3.3 Akış)', id: 'ca-app-pub-6853997017739651/9437070495', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
-                { platform: 'IOS', env: 'PROD', format: 'Rewarded (Kupon +2)', id: 'ca-app-pub-6853997017739651/1712485313', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
+                { platform: 'IOS', env: 'PROD', format: 'Rewarded (Kupon +2)', id: 'ca-app-pub-6853997017739651/2723583797', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
                 { platform: 'IOS', env: 'PROD', format: 'Banner (Arşiv / Emekli)', id: 'ca-app-pub-6853997017739651/2039078155', appId: 'ca-app-pub-6853997017739651~7339420575', isTest: false },
 
                 // IOS DEV (Google Resmi Test Birimleri)

@@ -333,32 +333,48 @@ class DealDetailHelpers {
     );
   }
 
-  /// Editör seçimi rozeti.
+  /// Editör seçimi rozeti (Modern, minimalist, canlı ve FırsatKolik marka turuncusu konseptli gösterim).
   static Widget buildEditorTag(BuildContext context) {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withValues(alpha: 0.92),
+        color: isDark 
+            ? AppTheme.primary.withValues(alpha: 0.16) 
+            : AppTheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark 
+              ? AppTheme.primary.withValues(alpha: 0.45) 
+              : AppTheme.primary.withValues(alpha: 0.35),
+          width: 1.0,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 18,
-            offset: const Offset(0, 12),
+            color: AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.09),
+            blurRadius: 6,
+            offset: const Offset(0, 1.5),
           ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.star_rounded, color: primaryColor, size: 20),
-          const SizedBox(width: 6),
-          const Text(
+          Icon(
+            Icons.star_rounded,
+            size: 15,
+            color: isDark ? const Color(0xFFFF8555) : AppTheme.primary,
+          ),
+          const SizedBox(width: 5),
+          Text(
             'Editörün Seçimi',
             style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: AppTheme.accent,
+              color: isDark ? const Color(0xFFFF8555) : AppTheme.primary,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.2,
             ),
           ),
         ],

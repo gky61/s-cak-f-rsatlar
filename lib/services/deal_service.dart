@@ -10,6 +10,7 @@ import 'affiliate/affiliate_service.dart';
 import '../utils/asset_path_migration.dart';
 import 'system_log_service.dart';
 import 'deal_search_engine.dart';
+import 'deal_sync_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -469,13 +470,14 @@ class DealService {
     }
   }
 
-  // Onay bekleyen deal'leri dinleme (Maksimum 100 kayıt)
+  // Onay bekleyen deal'leri dinleme (Maksimum 100 en güncel kayıt)
   Stream<List<Deal>> getPendingDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: false)
         .where('isUserSubmitted', isEqualTo: false)
         .where('isExpired', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
         .limit(100)
         .snapshots()
         .map((snapshot) {
@@ -489,13 +491,14 @@ class DealService {
     });
   }
 
-  // Kullanıcıların paylaştığı onay bekleyen deal'leri dinleme (Maksimum 100 kayıt)
+  // Kullanıcıların paylaştığı onay bekleyen deal'leri dinleme (Maksimum 100 en güncel kayıt)
   Stream<List<Deal>> getUserSubmittedPendingDealsStream() {
     return _firestore
         .collection('deals')
         .where('isApproved', isEqualTo: false)
         .where('isExpired', isEqualTo: false)
         .where('isUserSubmitted', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
         .limit(100)
         .snapshots()
         .map((snapshot) {
@@ -589,6 +592,7 @@ class DealService {
     double? ratingValue,
     int? ratingCount,
     String? brand,
+    String? canonicalUrl,
     bool isAmazonWarehouse = false,
     bool hidePrice = false,
   }) async {
@@ -634,7 +638,7 @@ class DealService {
         _log('⚠️ [AFFILIATE-TEST] Yönlendirme çözülemedi: $e');
       }
 
-      final cleanUrl = Deal.cleanProductUrl(resolvedUrl);
+      final cleanUrl = Deal.buildCanonicalCleanUrl(resolvedUrl, canonicalUrl);
       _log('🧹 [AFFILIATE-TEST] Clean URL (Mükerrerlik için): $cleanUrl');
       if (cleanUrl.isNotEmpty) {
         final querySnapshot = await _firestore
@@ -642,9 +646,25 @@ class DealService {
             .where('cleanUrl', isEqualTo: cleanUrl)
             .get();
         
-        if (querySnapshot.docs.isNotEmpty) {
+        final existingDocs = querySnapshot.docs.toList();
+
+        // Geriye dönük uyumluluk: Eğer varyant cleanUrl farklıysa onu da sorgula
+        final rawCleanUrl = Deal.cleanProductUrl(resolvedUrl);
+        if (rawCleanUrl.isNotEmpty && rawCleanUrl != cleanUrl) {
+          final rawSnapshot = await _firestore
+              .collection('deals')
+              .where('cleanUrl', isEqualTo: rawCleanUrl)
+              .get();
+          for (var doc in rawSnapshot.docs) {
+            if (!existingDocs.any((d) => d.id == doc.id)) {
+              existingDocs.add(doc);
+            }
+          }
+        }
+
+        if (existingDocs.isNotEmpty) {
           final now = DateTime.now();
-          for (var doc in querySnapshot.docs) {
+          for (var doc in existingDocs) {
             final dealData = doc.data();
             
             // 1. Reddedilmiş fırsat kontrolü (Reddedilenler yeni paylaşımı engellemez)
@@ -875,6 +895,7 @@ class DealService {
   Future<bool> deleteDeal(String dealId) async {
     try {
       await _firestore.collection('deals').doc(dealId).delete();
+      DealSyncService.instance.notifyDealDeleted(dealId);
       return true;
     } catch (e) {
       _log('Deal silme hatası: $e');
@@ -1107,11 +1128,21 @@ class DealService {
   }
 
   // Fırsatı bitir/başlat
-  Future<bool> markDealAsExpired(String dealId) async => updateDeal(dealId, {
-        'isExpired': true,
-        'status': 'expired',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+  Future<bool> markDealAsExpired(String dealId) async {
+    final success = await updateDeal(dealId, {
+      'isExpired': true,
+      'status': 'expired',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    if (success) {
+      DealSyncService.instance.notifyExpiredVoteChanged(
+        dealId: dealId,
+        expiredVotes: 15,
+        isExpired: true,
+      );
+    }
+    return success;
+  }
 
   Future<bool> unexpireDeal(
     String dealId, {
@@ -1138,7 +1169,15 @@ class DealService {
     if (isEditorPick) {
       updates['isEditorPick'] = true;
     }
-    return updateDeal(dealId, updates);
+    final success = await updateDeal(dealId, updates);
+    if (success) {
+      DealSyncService.instance.notifyExpiredVoteChanged(
+        dealId: dealId,
+        expiredVotes: 0,
+        isExpired: false,
+      );
+    }
+    return success;
   }
 
   // Toplu süresi bitenleri yayına alma (Batch Unexpire - 400 dokümanlık parçalama korumalı)
@@ -1169,6 +1208,13 @@ class DealService {
           batch.update(_firestore.collection('deals').doc(id), updates);
         }
         await batch.commit();
+      }
+      for (final id in dealIds) {
+        DealSyncService.instance.notifyExpiredVoteChanged(
+          dealId: id,
+          expiredVotes: 0,
+          isExpired: false,
+        );
       }
       return true;
     } catch (e) {
@@ -1217,6 +1263,79 @@ class DealService {
     });
   }
 
+  // Toplu fırsat onaylama (Batch Approve - Maks 400 dokümanlık parçalama korumalı)
+  Future<bool> approveDealsBatch(List<String> dealIds) async {
+    try {
+      if (dealIds.isEmpty) return true;
+      for (var i = 0; i < dealIds.length; i += 400) {
+        final end = (i + 400 > dealIds.length) ? dealIds.length : i + 400;
+        final chunk = dealIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.update(_firestore.collection('deals').doc(id), {
+            'isApproved': true,
+            'isActive': true,
+            'isRejected': false,
+            'isExpired': false,
+            'status': 'active',
+            'approvedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (e, stack) {
+      _log('Batch onaylama hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'mobile',
+        subCategory: 'admin_actions',
+        errorType: 'ApproveDealsBatchError',
+        message: 'Toplu onaylama hatası: $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+      );
+      return false;
+    }
+  }
+
+  // Toplu fırsat reddetme (Batch Reject - Maks 400 dokümanlık parçalama korumalı)
+  Future<bool> rejectDealsBatch(List<String> dealIds) async {
+    try {
+      if (dealIds.isEmpty) return true;
+      for (var i = 0; i < dealIds.length; i += 400) {
+        final end = (i + 400 > dealIds.length) ? dealIds.length : i + 400;
+        final chunk = dealIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.update(_firestore.collection('deals').doc(id), {
+            'isRejected': true,
+            'isApproved': false,
+            'isExpired': true,
+            'status': 'rejected',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+      for (final id in dealIds) {
+        DealSyncService.instance.notifyDealDeleted(id);
+      }
+      return true;
+    } catch (e, stack) {
+      _log('Batch reddetme hatası: $e');
+      SystemLogService.instance.logError(
+        category: 'mobile',
+        subCategory: 'admin_actions',
+        errorType: 'RejectDealsBatchError',
+        message: 'Toplu reddetme hatası: $e',
+        stack: stack,
+        severity: SystemErrorSeverity.error,
+      );
+      return false;
+    }
+  }
+
   // Toplu deal silme (Maks 400 dokümanlık parçalar ile batch commit taşma koruması)
   Future<bool> deleteDealsBatch(List<String> dealIds) async {
     try {
@@ -1229,6 +1348,9 @@ class DealService {
           batch.delete(_firestore.collection('deals').doc(id));
         }
         await batch.commit();
+      }
+      for (final id in dealIds) {
+        DealSyncService.instance.notifyDealDeleted(id);
       }
       return true;
     } catch (e) {

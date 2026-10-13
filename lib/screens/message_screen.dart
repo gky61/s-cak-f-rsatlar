@@ -22,6 +22,7 @@ import '../widgets/reaction_picker_sheet.dart';
 import 'profile_screen.dart';
 import 'deal_detail_screen.dart';
 import 'botkolik_profile_screen.dart';
+import '../services/deal_sync_service.dart';
 
 class AttachedDealInfo {
   final String id;
@@ -1217,14 +1218,17 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          onTap: () {
+          onTap: () async {
             HapticFeedback.lightImpact();
-            Navigator.push(
+            final result = await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => DealDetailScreen(dealId: dealId),
               ),
             );
+            if (result is Deal && mounted) {
+              DealSyncService.instance.notifyDealUpdated(result);
+            }
           },
           borderRadius: BorderRadius.circular(12),
           child: Padding(

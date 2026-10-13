@@ -57,6 +57,45 @@ function cleanProductUrl(urlStr) {
   return affiliateManager.cleanProductUrl(urlStr);
 }
 
+/**
+ * Kanonik URL ve ham hedef URL'yi birleştirerek mükerrerlik kimliğini (cleanUrl) türetir.
+ * Eğer sayfada <link rel="canonical"> varsa, pazar yeri satıcı parametrelerini (magaza, shopId)
+ * koruyarak standart katalog kimliğine dönüştürür.
+ */
+function buildCanonicalCleanUrl(rawTargetUrl, canonicalUrl) {
+  if (!rawTargetUrl) return '';
+  if (!canonicalUrl || typeof canonicalUrl !== 'string' || !canonicalUrl.trim()) {
+    return cleanProductUrl(rawTargetUrl);
+  }
+
+  try {
+    const rawObj = new URL(rawTargetUrl.trim());
+    const canonObj = new URL(canonicalUrl.trim());
+
+    // Domain doğrulaması: Kanonik URL aynı kök etki alanına ait olmalı
+    const rawHost = rawObj.hostname.replace(/^www\./, '').toLowerCase();
+    const canonHost = canonObj.hostname.replace(/^www\./, '').toLowerCase();
+    const isDomainMatch = rawHost === canonHost ||
+      rawHost.endsWith('.' + canonHost) ||
+      canonHost.endsWith('.' + rawHost);
+    if (!isDomainMatch) {
+      return cleanProductUrl(rawTargetUrl);
+    }
+
+    // Pazaryeri satıcı parametrelerini (magaza / shopId) canonical URL'ye aktar
+    if (rawObj.searchParams.has('magaza') && !canonObj.searchParams.has('magaza')) {
+      canonObj.searchParams.set('magaza', rawObj.searchParams.get('magaza'));
+    }
+    if (rawObj.searchParams.has('shopId') && !canonObj.searchParams.has('shopId')) {
+      canonObj.searchParams.set('shopId', rawObj.searchParams.get('shopId'));
+    }
+
+    return cleanProductUrl(canonObj.toString());
+  } catch (_) {
+    return cleanProductUrl(rawTargetUrl);
+  }
+}
+
 // Güvenli fiyat ayrıştırma fonksiyonu (Sayı veya "819 TL" gibi metinleri hatasız sayıya dönüştürür)
 function parseDealPrice(val) {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
@@ -1062,7 +1101,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     }
 
     const rawTargetUrl = scrapeResult.url || mainLink;
-    const finalCleanUrl = affiliateManager.cleanProductUrl(rawTargetUrl);
+    const finalCleanUrl = buildCanonicalCleanUrl(rawTargetUrl, scrapeResult.canonicalUrl);
 
     // 🎯 Gelir Ortaklığı (Affiliate) Dönüştürme:
     // Amazon, Hepsiburada, Teknosa, İncehesap vb. linkleri doğrudan yetkili admin takip kodumuzla dönüştür
@@ -1178,13 +1217,34 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     // Kazıma bittikten sonra Firestore'daki mevcut fırsatla karşılaştır:
     if (finalCleanUrl) {
       try {
+        let postScrapeDocs = [];
         const postScrapeSnapshot = await db.collection('deals')
           .where('cleanUrl', '==', finalCleanUrl)
           .get();
 
         if (!postScrapeSnapshot.empty) {
+          postScrapeDocs = postScrapeSnapshot.docs.slice();
+        }
+
+        // İkincil Güvenlik Ağı (Geriye Dönük Uyumluluk):
+        // Eğer canonical URL varyant URL'sinden farklıysa, eski varyant cleanUrl kayıtlarını da sorgula
+        const rawCleanUrl = cleanProductUrl(rawTargetUrl);
+        if (rawCleanUrl && rawCleanUrl !== finalCleanUrl) {
+          const rawSnapshot = await db.collection('deals')
+            .where('cleanUrl', '==', rawCleanUrl)
+            .get();
+          if (!rawSnapshot.empty) {
+            for (const doc of rawSnapshot.docs) {
+              if (!postScrapeDocs.some(d => d.id === doc.id)) {
+                postScrapeDocs.push(doc);
+              }
+            }
+          }
+        }
+
+        if (postScrapeDocs.length > 0) {
           const now = new Date();
-          for (const doc of postScrapeSnapshot.docs) {
+          for (const doc of postScrapeDocs) {
             if (doc.id === uniqueDocId) continue;
 
             const existingDeal = doc.data();
@@ -1204,6 +1264,13 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
 
             const isExpired = existingDeal.isExpired === true || existingDeal.status === 'expired';
             if (isExpired || (existingDeal.expiredVotes || 0) >= 15) continue;
+
+            // Soğuk oylama kontrolü (Topluluk tarafından reddedilenler yeni paylaşımı engellemez)
+            const hotVotes = existingDeal.hotVotes || 0;
+            const coldVotes = existingDeal.coldVotes || 0;
+            const totalVotes = hotVotes + coldVotes;
+            if (totalVotes >= 5 && (hotVotes / totalVotes * 100) < 20) continue;
+            if (hotVotes - coldVotes <= -5) continue;
 
             // A) Eğer mevcut ürün zaten Admin Onayında bekliyorsa (isApproved === false veya beklemede):
             // Kesinlikle ikinci bir onay kartı oluşturulamaz!

@@ -6,6 +6,7 @@ import 'content_moderation_service.dart';
 import 'message_service.dart';
 import '../utils/asset_path_migration.dart';
 import 'system_log_service.dart';
+import 'deal_sync_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -81,6 +82,9 @@ class CommentService {
 
       await batch.commit();
 
+      // FS-09 Kalkanı: İstemci içi reaktif senkronizasyon ile tüm ekranlarda yorum sayısını anında artır
+      DealSyncService.instance.notifyCommentCountDelta(dealId: dealId, delta: 1);
+
       // Not: Yorum yanıt bildirimleri Cloud Function (onCommentCreated) tarafından 
       // Firestore ve FCM üzerinden sunucu tarafında otonom ve yetkili şekilde gönderilmektedir.
 
@@ -131,12 +135,15 @@ class CommentService {
         });
 
         await batch.commit();
+        // FS-09 Kalkanı: İstemci içi reaktif senkronizasyon ile tüm ekranlarda yorum sayısını anında düşür
+        DealSyncService.instance.notifyCommentCountDelta(dealId: dealId, delta: -1);
         return true;
       } catch (batchErr) {
         // Savunmacı Fallback: Fırsat sayacı kısıtlaması veya desenkronize sayaç durumunda
         // kullanıcının kendi yorumunu silme işlemi asla engellenmemelidir.
         try {
           await commentRef.delete();
+          DealSyncService.instance.notifyCommentCountDelta(dealId: dealId, delta: -1);
           return true;
         } catch (_) {}
         rethrow;

@@ -165,6 +165,79 @@ async function runTests() {
   assert.strictEqual(postCheck3.canSave, true, 'Gerçek fiyat düşüşü onaylanıp kaydedilmeli');
   console.log('✅ Test 3 Başarılı: Gerçek fiyat düşüşü kaçırılmadı, başarıyla onaylandı!');
 
+  // TEST 4: Hepsiburada Varyant vs Ana Model Vakası (DeFacto Mont Canlı Vakası)
+  console.log('\n--- Test 4: Hepsiburada Varyant vs Ana Model Vakası (DeFacto Mont) ---');
+  const affiliateManager = require('../affiliate_manager');
+  
+  function buildCanonicalCleanUrl(rawTargetUrl, canonicalUrl) {
+    if (!rawTargetUrl) return '';
+    if (!canonicalUrl || typeof canonicalUrl !== 'string' || !canonicalUrl.trim()) {
+      return affiliateManager.cleanProductUrl(rawTargetUrl);
+    }
+    try {
+      const rawObj = new URL(rawTargetUrl.trim());
+      const canonObj = new URL(canonicalUrl.trim());
+      const rawHost = rawObj.hostname.replace(/^www\./, '').toLowerCase();
+      const canonHost = canonObj.hostname.replace(/^www\./, '').toLowerCase();
+      if (!rawHost.endsWith(canonHost) && !canonHost.endsWith(rawHost)) {
+        return affiliateManager.cleanProductUrl(rawTargetUrl);
+      }
+      if (rawObj.searchParams.has('magaza') && !canonObj.searchParams.has('magaza')) {
+        canonObj.searchParams.set('magaza', rawObj.searchParams.get('magaza'));
+      }
+      if (rawObj.searchParams.has('shopId') && !canonObj.searchParams.has('shopId')) {
+        canonObj.searchParams.set('shopId', rawObj.searchParams.get('shopId'));
+      }
+      return affiliateManager.cleanProductUrl(canonObj.toString());
+    } catch (_) {
+      return affiliateManager.cleanProductUrl(rawTargetUrl);
+    }
+  }
+
+  // 1. Canlıdaki aktif ana model fırsatı (650 TL)
+  const baseModelUrl = 'https://www.hepsiburada.com/defacto-su-itici-kapusonlu-fermuarli-sisme-mont-erkek-cocuk-a1875a825au-pm-HBC00009Z5HVU?magaza=DeFacto';
+  const canonicalCleanUrl = affiliateManager.cleanProductUrl(baseModelUrl);
+
+  const databaseWithActiveDeal = [
+    {
+      id: 'telegram_2242121712_6890',
+      cleanUrl: canonicalCleanUrl,
+      price: 650,
+      isApproved: true,
+      createdAt: new Date()
+    }
+  ];
+
+  // 2. Yeni gelen 11-12 Yaş varyant linki (800 TL)
+  const variantRawUrl1 = 'https://www.hepsiburada.com/defacto-su-itici-kapusonlu-fermuarli-sisme-mont-erkek-cocuk-a1875a825au-p-HBCV00009ZM96N?magaza=DeFacto';
+  // Sayfadan kazınan canonical URL
+  const htmlCanonicalUrl1 = 'https://www.hepsiburada.com/defacto-su-itici-kapusonlu-fermuarli-sisme-mont-erkek-cocuk-a1875a825au-pm-HBC00009Z5HVU';
+  
+  const derivedCleanUrl1 = buildCanonicalCleanUrl(variantRawUrl1, htmlCanonicalUrl1);
+  assert.strictEqual(derivedCleanUrl1, canonicalCleanUrl, 'Varyantın türetilen cleanUrl değeri ana modelle birebir aynı olmalı');
+
+  // Post-scrape dedup kontrolü: 800 TL vs 650 TL
+  const docsForVariant1 = databaseWithActiveDeal.filter(d => d.cleanUrl === derivedCleanUrl1);
+  const postCheckVariant1 = evaluatePostScrape(docsForVariant1, 800, 'telegram_1145318392_9490');
+  assert.strictEqual(postCheckVariant1.canSave, false, 'Fiyat düşmediği için varyant mükerrer olarak engellenmeli');
+  assert.strictEqual(postCheckVariant1.reason, 'fake_price_drop');
+  console.log('✅ Test 4a Başarılı: 11-12 Yaş varyantı (800 TL), 650 TL aktif ana model ile eşleştirildi ve engellendi!');
+
+  // 3. Yeni gelen 9-10 Yaş varyant linki (800 TL)
+  const variantRawUrl2 = 'https://www.hepsiburada.com/defacto-su-itici-kapusonlu-fermuarli-sisme-mont-erkek-cocuk-a1875a825au-p-HBCV00009ZMAII?magaza=DeFacto';
+  const derivedCleanUrl2 = buildCanonicalCleanUrl(variantRawUrl2, htmlCanonicalUrl1);
+  assert.strictEqual(derivedCleanUrl2, canonicalCleanUrl, 'İkinci varyantın da türetilen cleanUrl değeri ana modelle birebir aynı olmalı');
+
+  const docsForVariant2 = databaseWithActiveDeal.filter(d => d.cleanUrl === derivedCleanUrl2);
+  const postCheckVariant2 = evaluatePostScrape(docsForVariant2, 800, 'telegram_1457742945_89191');
+  assert.strictEqual(postCheckVariant2.canSave, false, 'İkinci varyant da mükerrer olarak engellenmeli');
+  console.log('✅ Test 4b Başarılı: 9-10 Yaş varyantı da başarıyla mükerrer olarak engellendi!');
+
+  // 4. Zero Deal Loss Testi: Eğer varyant 400 TL gibi gerçek bir indirimle gelseydi
+  const postCheckVariantCheap = evaluatePostScrape(docsForVariant1, 400, 'variant_cheap');
+  assert.strictEqual(postCheckVariantCheap.canSave, true, 'Gerçek indirimli varyant fırsatı kaçırılmamalı!');
+  console.log('✅ Test 4c Başarılı: Zero Deal Loss prensibi doğrulandı, gerçek indirimli varyant onaylandı!');
+
   console.log('\n🎉 TÜM TESTLER BAŞARIYLA GEÇTİ! Çift kademeli mükerrerlik mimarisi kusursuz.');
 }
 

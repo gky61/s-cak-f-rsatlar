@@ -51,7 +51,7 @@ REGISTRY = {
                 "units": {
                     "banner": "ca-app-pub-6853997017739651/8758625050 (Deprecated/Archived)",
                     "native": "ca-app-pub-6853997017739651/4004866134",
-                    "rewarded": "ca-app-pub-6853997017739651/5224354917"
+                    "rewarded": "ca-app-pub-6853997017739651/9218593979"
                 }
             }
         },
@@ -73,7 +73,7 @@ REGISTRY = {
                 "units": {
                     "banner": "ca-app-pub-6853997017739651/2039078155 (Deprecated/Archived)",
                     "native": "ca-app-pub-6853997017739651/9437070495",
-                    "rewarded": "ca-app-pub-6853997017739651/1712485313"
+                    "rewarded": "ca-app-pub-6853997017739651/2723583797"
                 }
             }
         }

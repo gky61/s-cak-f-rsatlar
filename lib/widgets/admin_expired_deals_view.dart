@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../services/firestore_service.dart';
@@ -10,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../screens/deal_detail_screen.dart';
 import '../screens/deal_detail/admin_dialogs/admin_edit_sheet.dart';
 import '../widgets/deal_card_skeleton.dart';
+import '../services/deal_search_engine.dart';
 
 class AdminExpiredDealsView extends StatefulWidget {
   const AdminExpiredDealsView({super.key});
@@ -49,6 +51,37 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
       return '${diff.inDays} gün önce';
     } else {
       return DateFormat('dd.MM.yyyy', 'tr_TR').format(dt);
+    }
+  }
+
+  /// Güvenli harici mağaza linki açıcı (Crash korumalı)
+  Future<void> _safeOpenUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bu fırsatın geçerli bir mağaza linki bulunmuyor ⚠️'), duration: Duration(seconds: 2)),
+        );
+      }
+      return;
+    }
+    try {
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+        await launchUrlString(trimmed, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Geçersiz web adresi formatı ⚠️'), duration: Duration(seconds: 2)),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bağlantı açılamadı: $e ⚠️'), duration: const Duration(seconds: 2)),
+        );
+      }
     }
   }
 
@@ -96,6 +129,12 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
 
         final allDeals = snapshot.data ?? [];
 
+        // Eşzamanlılık Kalkanı: Canlı listeden düşen seçili ID'leri temizle
+        if (_selectedDealIds.isNotEmpty) {
+          final liveIds = allDeals.map((d) => d.id).toSet();
+          _selectedDealIds.removeWhere((id) => !liveIds.contains(id));
+        }
+
         // Filtre sayıları hesaplama
         final int allCount = allDeals.length;
         final int communityCount = allDeals.where((d) => d.isUserSubmitted || !d.isBotkolik).length;
@@ -111,17 +150,29 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
           if (_activeFilter == 'approved' && deal.isApproved != true) return false;
           if (_activeFilter == 'unapproved' && deal.isApproved == true) return false;
 
-          // Arama Sorgusu
+          // Arama Sorgusu (Akıllı Türkçe ve Token Koruması)
           if (_searchQuery.trim().isNotEmpty) {
-            final query = _searchQuery.trim().toLowerCase();
-            final title = deal.title.toLowerCase();
-            final store = deal.store.toLowerCase();
-            final brand = (deal.brand ?? '').toLowerCase();
-            final category = (deal.category).toLowerCase();
-            final matches = title.contains(query) ||
-                store.contains(query) ||
-                brand.contains(query) ||
-                category.contains(query);
+            final normQ = DealSearchEngine.normalizeText(_searchQuery);
+            final normTitle = DealSearchEngine.normalizeText(deal.title);
+            final normStore = DealSearchEngine.normalizeText(deal.store);
+            final normBrand = DealSearchEngine.normalizeText(deal.brand ?? '');
+            final normCategory = DealSearchEngine.normalizeText(deal.category);
+            final lowerId = deal.id.toLowerCase();
+            final lowerQ = _searchQuery.trim().toLowerCase();
+
+            bool matches = lowerId.contains(lowerQ) ||
+                normTitle.contains(normQ) ||
+                normStore.contains(normQ) ||
+                normBrand.contains(normQ) ||
+                normCategory.contains(normQ);
+
+            if (!matches) {
+              final tokens = DealSearchEngine.tokenize(_searchQuery);
+              if (tokens.length > 1) {
+                final combined = '$normTitle $normStore $normBrand $normCategory';
+                matches = tokens.every((token) => combined.contains(token));
+              }
+            }
             if (!matches) return false;
           }
 
@@ -164,6 +215,7 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                   : filteredDeals.isEmpty
                       ? _buildEmptyState(isDark: isDark, hasQuery: _searchQuery.isNotEmpty || _activeFilter != 'all')
                       : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
                           itemCount: filteredDeals.length,
                           itemBuilder: (context, index) {
@@ -802,11 +854,33 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
               ),
             ),
 
-            // 🛠️ Ergonomik Aksiyon Butonları (RenderFlex Overflow Önleyici)
+            // 🛠️ Ergonomik Aksiyon Butonları (RenderFlex Overflow & Küçük Ekran Korumalı)
             Container(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Row(
                 children: [
+                  // 🌐 Mağaza Butonu (Stok/Fiyat Canlı Kontrolü)
+                  SizedBox(
+                    height: 34,
+                    width: 38,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        final targetUrl = deal.link.isNotEmpty ? deal.link : deal.displayUrl;
+                        _safeOpenUrl(targetUrl);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        side: BorderSide(color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Tooltip(
+                        message: 'Mağazayı Aç (Stok Kontrolü)',
+                        child: Icon(Icons.open_in_new_rounded, size: 15, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
                   // Sil Butonu
                   Expanded(
                     flex: 1,
@@ -814,17 +888,20 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                       height: 34,
                       child: OutlinedButton.icon(
                         onPressed: () => _confirmDeleteSingle(deal),
-                        icon: const Icon(Icons.delete_outline_rounded, size: 15, color: Colors.red),
-                        label: const Text('Sil', style: TextStyle(fontSize: 11.5, color: Colors.red, fontWeight: FontWeight.w700)),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 14, color: Colors.red),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Sil', style: TextStyle(fontSize: 11.5, color: Colors.red, fontWeight: FontWeight.w700)),
+                        ),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: Colors.red.withValues(alpha: 0.4)),
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
 
                   // Düzenle Butonu
                   Expanded(
@@ -838,24 +915,27 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                           firestoreService: _firestoreService,
                           onDealUpdated: () => setState(() {}),
                         ),
-                        icon: Icon(Icons.edit_outlined, size: 15, color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB)),
-                        label: Text(
-                          'Düzenle',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+                        icon: Icon(Icons.edit_outlined, size: 14, color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB)),
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Düzenle',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
+                            ),
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB)).withValues(alpha: 0.4)),
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
 
                   // Yayına Al Butonu (Seçenek Modalı Tetikler)
                   Expanded(
@@ -864,13 +944,16 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
                       height: 34,
                       child: ElevatedButton.icon(
                         onPressed: () => _showReactivateOptionsModal(deal),
-                        icon: const Icon(Icons.rocket_launch_rounded, size: 15),
-                        label: const Text('Yayına Al', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+                        icon: const Icon(Icons.rocket_launch_rounded, size: 14),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Yayına Al', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800)),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF16A34A),
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
@@ -961,62 +1044,66 @@ class _AdminExpiredDealsViewState extends State<AdminExpiredDealsView> {
 
   // Boş Durum Görünümü
   Widget _buildEmptyState({required bool isDark, required bool hasQuery}) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: (hasQuery ? Colors.blue : Colors.green).withValues(alpha: isDark ? 0.15 : 0.08),
-                shape: BoxShape.circle,
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(24),
+      children: [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.45,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: (hasQuery ? Colors.blue : Colors.green).withValues(alpha: isDark ? 0.15 : 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  hasQuery ? Icons.search_off_rounded : Icons.check_circle_outline_rounded,
+                  size: 38,
+                  color: hasQuery ? Colors.blue : Colors.green,
+                ),
               ),
-              child: Icon(
-                hasQuery ? Icons.search_off_rounded : Icons.check_circle_outline_rounded,
-                size: 38,
-                color: hasQuery ? Colors.blue : Colors.green,
+              const SizedBox(height: 16),
+              Text(
+                hasQuery ? 'Eşleşen Fırsat Bulunamadı' : 'Süresi Biten İlan Yok',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasQuery ? 'Eşleşen Fırsat Bulunamadı' : 'Süresi Biten İlan Yok',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              const SizedBox(height: 6),
+              Text(
+                hasQuery
+                    ? 'Arama kriterlerinize veya filtreye uygun süresi biten ilan bulunamadı.'
+                    : 'Süresi biten tüm ilanlar temizlenmiş veya tekrar yayına alınmış.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hasQuery
-                  ? 'Arama kriterlerinize veya filtreye uygun süresi biten ilan bulunamadı.'
-                  : 'Süresi biten tüm ilanlar temizlenmiş veya tekrar yayına alınmış.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              ),
-            ),
-            if (hasQuery) ...[
-              const SizedBox(height: 14),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() {
-                    _searchQuery = '';
-                    _activeFilter = 'all';
-                  });
-                },
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Filtreleri Temizle'),
-              ),
+              if (hasQuery) ...[
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                      _activeFilter = 'all';
+                    });
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Filtreleri Temizle'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 

@@ -14,6 +14,7 @@ import '../services/link_preview_service.dart';
 import '../services/affiliate/store_redirect_service.dart';
 import '../services/analytics_service.dart';
 import '../services/notification_service.dart';
+import '../services/deal_sync_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -72,6 +73,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   Timer? _voteDebounceTimer;
 
   StreamSubscription? _authSub;
+  StreamSubscription<DealSyncEvent>? _dealSyncSub;
 
   @override
   void initState() {
@@ -90,6 +92,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         setState(() {});
       }
     });
+    // Yorum ekleme/silme ve yerel olaylarda anında _currentDeal güncellemesi
+    _dealSyncSub = DealSyncService.instance.stream.listen((event) {
+      if (!mounted || event.dealId != widget.dealId) return;
+      if (_currentDeal != null) {
+        setState(() {
+          _currentDeal = event.applyTo(_currentDeal!);
+        });
+      }
+    });
   }
 
   @override
@@ -97,8 +108,15 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     if (NotificationService.activeDealId == widget.dealId) {
       NotificationService.activeDealId = null;
     }
-    _voteDebounceTimer?.cancel();
+    if (_voteDebounceTimer?.isActive ?? false) {
+      _voteDebounceTimer?.cancel();
+      final user = _authService.currentUser;
+      if (user != null) {
+        _commitVote(widget.dealId, user.uid);
+      }
+    }
     _authSub?.cancel();
+    _dealSyncSub?.cancel();
     super.dispose();
   }
 
@@ -170,10 +188,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       success = await _firestoreService.removeFromFavorites(user.uid, _currentDeal!.id);
     }
 
-    if (!success && mounted) {
+    if (success) {
+      DealSyncService.instance.notifyFavoriteToggled(
+        dealId: _currentDeal!.id,
+        isFavorite: _isFavorite,
+      );
+    } else if (mounted) {
       setState(() {
         _isFavorite = previousFavorite;
       });
+      DealSyncService.instance.notifyFavoriteToggled(
+        dealId: _currentDeal!.id,
+        isFavorite: previousFavorite,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_isFavorite ? 'Kaydedilemedi. Lütfen tekrar deneyin.' : 'Kayıt kaldırılamadı. Lütfen tekrar deneyin.'),
@@ -241,23 +268,43 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       }
     });
 
+    // FS-09 Kalkanı: İstemci içi reaktif senkronizasyon ile tüm açık ekranları (Anasayfa, Popüler vb.) anında güncelle
+    DealSyncService.instance.notifyVoteChanged(
+      dealId: widget.dealId,
+      hotVotes: _hotVotes,
+      coldVotes: _coldVotes,
+    );
+    if (_currentDeal != null) {
+      _currentDeal = _currentDeal!.copyWith(
+        hotVotes: _hotVotes,
+        coldVotes: _coldVotes,
+      );
+    }
+
     // Firestore ile Arka Plan Debounced Senkronizasyon (300ms)
     _voteDebounceTimer?.cancel();
-    _voteDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      if (!mounted || _currentDeal == null) return;
-      final targetVote = _hasVotedHot ? 'hot' : (_hasVotedCold ? 'cold' : null);
-      try {
-        if (targetVote == 'hot') {
-          await _firestoreService.addHotVote(_currentDeal!.id, user.uid);
-        } else if (targetVote == 'cold') {
-          await _firestoreService.addColdVote(_currentDeal!.id, user.uid);
-        } else {
-          await _firestoreService.removeVote(_currentDeal!.id, user.uid);
-        }
-      } catch (e) {
-        // Hata durumunda sessizce logla
-      }
+    final dealId = widget.dealId;
+    final userId = user.uid;
+    _voteDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _commitVote(dealId, userId);
     });
+  }
+
+  /// Bekleyen oylamayı doğrudan Firestore'a yazar (ekrandan erken çıkışta veri kaybını %0 yapar)
+  void _commitVote(String dealId, String? userId) {
+    if (dealId.isEmpty || userId == null || userId.isEmpty) return;
+    final targetVote = _hasVotedHot ? 'hot' : (_hasVotedCold ? 'cold' : null);
+    try {
+      if (targetVote == 'hot') {
+        _firestoreService.addHotVote(dealId, userId);
+      } else if (targetVote == 'cold') {
+        _firestoreService.addColdVote(dealId, userId);
+      } else {
+        _firestoreService.removeVote(dealId, userId);
+      }
+    } catch (e) {
+      debugPrint('⚠️ [DealDetailScreen] Vote commit hatası: $e');
+    }
   }
 
   Future<void> _handleExpiredVote() async {
@@ -304,6 +351,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       _expiredVotes += 1;
     });
 
+    final bool isExpiredNow = _expiredVotes >= 15 || (_currentDeal?.isExpired ?? false);
+    DealSyncService.instance.notifyExpiredVoteChanged(
+      dealId: widget.dealId,
+      expiredVotes: _expiredVotes,
+      isExpired: isExpiredNow,
+    );
+    if (_currentDeal != null) {
+      _currentDeal = _currentDeal!.copyWith(
+        expiredVotes: _expiredVotes,
+        isExpired: isExpiredNow,
+      );
+    }
+
     // Firestore'a kaydet
     final success = await _firestoreService.addExpiredVote(_currentDeal!.id, user.uid);
 
@@ -314,6 +374,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         _expiredVotes = previousExpiredVotes;
         _isExpiredVoting = false;
       });
+
+      final bool rollbackExpired = previousExpiredVotes >= 15 || (_currentDeal?.isExpired ?? false);
+      DealSyncService.instance.notifyExpiredVoteChanged(
+        dealId: widget.dealId,
+        expiredVotes: previousExpiredVotes,
+        isExpired: rollbackExpired,
+      );
+      if (_currentDeal != null) {
+        _currentDeal = _currentDeal!.copyWith(
+          expiredVotes: previousExpiredVotes,
+          isExpired: rollbackExpired,
+        );
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -358,6 +431,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
       _expiredVotes = _expiredVotes > 0 ? _expiredVotes - 1 : 0;
     });
 
+    final bool isExpiredNow = _expiredVotes >= 15 || (_currentDeal?.isExpired ?? false);
+    DealSyncService.instance.notifyExpiredVoteChanged(
+      dealId: widget.dealId,
+      expiredVotes: _expiredVotes,
+      isExpired: isExpiredNow,
+    );
+    if (_currentDeal != null) {
+      _currentDeal = _currentDeal!.copyWith(
+        expiredVotes: _expiredVotes,
+        isExpired: isExpiredNow,
+      );
+    }
+
     final success = await _firestoreService.removeExpiredVote(_currentDeal!.id, user.uid);
 
     if (!success && mounted) {
@@ -366,6 +452,19 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
         _expiredVotes = previousExpiredVotes;
         _isExpiredVoting = false;
       });
+
+      final bool rollbackExpired = previousExpiredVotes >= 15 || (_currentDeal?.isExpired ?? false);
+      DealSyncService.instance.notifyExpiredVoteChanged(
+        dealId: widget.dealId,
+        expiredVotes: previousExpiredVotes,
+        isExpired: rollbackExpired,
+      );
+      if (_currentDeal != null) {
+        _currentDeal = _currentDeal!.copyWith(
+          expiredVotes: previousExpiredVotes,
+          isExpired: rollbackExpired,
+        );
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -413,6 +512,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
           _coldVotes = deal.coldVotes;
           _expiredVotes = deal.expiredVotes;
         });
+
+        // FS-09 Kalkanı: Taze veriyi diğer tüm açık ekranlarla senkronize et
+        DealSyncService.instance.notifyDealUpdated(deal);
 
         // Observability: Fırsat detay görüntüleme
         AnalyticsService.instance.logDealView(
@@ -676,7 +778,9 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
-        if (didPop) return;
+        if (didPop && _currentDeal != null) {
+          DealSyncService.instance.notifyDealUpdated(_currentDeal!);
+        }
       },
       child: Scaffold(
           backgroundColor: isDark ? AppTheme.darkBackground : const Color(0xFFF8FAFC),
@@ -1080,38 +1184,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                               if (deal.isEditorPick)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4, bottom: 12),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.star_rounded, color: Colors.white, size: 16),
-                                        SizedBox(width: 6),
-                                        Text(
-                                          'Editörün Seçimi',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  child: DealDetailHelpers.buildEditorTag(context),
                                 ),
 
                               // Product Title
@@ -1656,7 +1729,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
                   _buildGlassCircleButton(
                     icon: Icons.arrow_back,
                     isDark: isDark,
-                    onTap: () => Navigator.of(context).pop(),
+                    onTap: () => Navigator.of(context).pop(_currentDeal),
                   ),
 
                   // Sağ Aksiyon Grubu (Share, Report, Admin)

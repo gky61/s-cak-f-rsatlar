@@ -174,6 +174,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   double? _scrapedRatingValue;
   int? _scrapedRatingCount;
   String? _scrapedBrand;
+  String? _scrapedCanonicalUrl;
   bool _isAmazonWarehouse = false;
   bool _showInfoBanner = true;
   bool _showManualImageInput = false;
@@ -399,6 +400,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _scrapedRatingValue = null;
         _scrapedRatingCount = null;
         _scrapedBrand = null;
+        _scrapedCanonicalUrl = null;
         _priceLabel = null;
         _detectedPriceLabel = null;
         _isSpecialBadgeEnabled = false;
@@ -443,6 +445,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _scrapedRatingValue = null;
         _scrapedRatingCount = null;
         _scrapedBrand = null;
+        _scrapedCanonicalUrl = null;
         _priceLabel = null;
         _detectedPriceLabel = null;
         _isSpecialBadgeEnabled = false;
@@ -472,6 +475,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _scrapedRatingValue = null;
       _scrapedRatingCount = null;
       _scrapedBrand = null;
+      _scrapedCanonicalUrl = null;
     });
 
     _urlDebounceTimer?.cancel();
@@ -632,12 +636,13 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             _log('🏷️ Scraper fiyat etiketi tespiti: $_priceLabel (Rozet switch: $isClubMembership)');
           }
 
-          if (cleanPreview.ratingValue != null || cleanPreview.ratingCount != null || cleanPreview.brand != null || cleanPreview.originalPrice != null) {
+          if (cleanPreview.ratingValue != null || cleanPreview.ratingCount != null || cleanPreview.brand != null || cleanPreview.originalPrice != null || cleanPreview.canonicalUrl != null) {
             setState(() {
               _scrapedRatingValue = cleanPreview.ratingValue;
               _scrapedRatingCount = cleanPreview.ratingCount;
               _scrapedBrand = cleanPreview.brand;
               _scrapedOriginalPrice = cleanPreview.originalPrice;
+              _scrapedCanonicalUrl = cleanPreview.canonicalUrl;
             });
           }
 
@@ -1058,6 +1063,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           ratingValue: _scrapedRatingValue,
           ratingCount: _scrapedRatingCount,
           brand: _scrapedBrand,
+          canonicalUrl: _scrapedCanonicalUrl,
           isAmazonWarehouse: _isAmazonWarehouse,
           hidePrice: _hidePrice,
         );

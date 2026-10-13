@@ -7,6 +7,8 @@ void main() {
       final prefs = NotificationPreferences.defaultPreferences();
       expect(prefs.pushMasterEnabled, isTrue);
       expect(prefs.dealNotificationsEnabled, isTrue);
+      expect(prefs.categoryNotificationsEnabled, isFalse); // Varsayılan kapalı olmalı (Favori kategorilerde uyarılır)
+      expect(prefs.keywordNotificationsEnabled, isTrue);
       expect(prefs.communityNotificationsEnabled, isTrue);
       expect(prefs.submissionStatusNotificationsEnabled, isTrue);
       expect(prefs.marketingNotificationsEnabled, isFalse); // Varsayılan kapalı olmalı

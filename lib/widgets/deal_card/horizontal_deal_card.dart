@@ -85,7 +85,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
         : (deal.isApproved == false
             ? const Color(0xFFF59E0B)
             : (deal.isEditorPick 
-                ? Colors.orange[600]! 
+                ? AppTheme.primary 
                 : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1))));
     final borderWidth = (deal.isRejected || deal.isApproved == false || deal.isEditorPick) ? 2.0 : 1.5;    final inceleButton = ElevatedButton(
       onPressed: () => openProductLink(context, deal.link, deal.store, deal),
@@ -156,6 +156,15 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
               spreadRadius: _isHovered ? 2 : 1,
               offset: Offset.zero,
             ),
+            if (deal.isEditorPick)
+              BoxShadow(
+                color: AppTheme.primary.withValues(
+                  alpha: isDark ? 0.20 : 0.14,
+                ),
+                blurRadius: _isHovered ? 14 : 8,
+                spreadRadius: 0.5,
+                offset: const Offset(0, 2),
+              ),
           ],
           border: Border.all(
             color: cardBorderColor,
@@ -301,6 +310,14 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                 child: Container(
                                   color: Colors.black.withValues(alpha: 0.28),
                                 ),
+                              ),
+
+                            // ─── EDİTÖRÜN SEÇİMİ ROZETİ (Sağ Üst) ─────────────────
+                            if (deal.isEditorPick)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: buildEditorChoiceStarBadge(isDark: isDark),
                               ),
                           ],
                         ),

@@ -99,6 +99,9 @@ class FirestoreService {
   
   Stream<List<Deal>> getApprovedDealsStream() => _dealService.getApprovedDealsStream();
   
+  Future<bool> approveDealsBatch(List<String> dealIds) => _dealService.approveDealsBatch(dealIds);
+  Future<bool> rejectDealsBatch(List<String> dealIds) => _dealService.rejectDealsBatch(dealIds);
+  
   Future<Deal?> getDeal(String dealId) => _dealService.getDeal(dealId);
   Future<bool> markDealAsExpired(String dealId) => _dealService.markDealAsExpired(dealId);
   
@@ -125,6 +128,7 @@ class FirestoreService {
     double? ratingValue,
     int? ratingCount,
     String? brand,
+    String? canonicalUrl,
     bool isAmazonWarehouse = false,
     bool hidePrice = false,
   }) => _dealService.createDeal(
@@ -144,6 +148,7 @@ class FirestoreService {
         ratingValue: ratingValue,
         ratingCount: ratingCount,
         brand: brand,
+        canonicalUrl: canonicalUrl,
         isAmazonWarehouse: isAmazonWarehouse,
         hidePrice: hidePrice,
       );

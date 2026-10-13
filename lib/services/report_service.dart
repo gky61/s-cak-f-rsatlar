@@ -176,6 +176,99 @@ class ReportService {
     }
   }
 
+  /// Seçilen şikayetleri toplu yoksay / kapat (400 dokümanlık WriteBatch mimarisi)
+  Future<bool> dismissReportsBatch(List<String> reportIds) async {
+    if (reportIds.isEmpty) return true;
+    try {
+      const chunkSize = 400;
+      for (var i = 0; i < reportIds.length; i += chunkSize) {
+        final end = (i + chunkSize > reportIds.length) ? reportIds.length : i + chunkSize;
+        final chunk = reportIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.update(_reportsCollection.doc(id), {
+            'status': 'dismissed',
+            'resolvedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Toplu rapor yoksayma hatası: $e');
+      return false;
+    }
+  }
+
+  /// Tüm okunmamış moderasyon alarmlarını okundu olarak işaretle (400'lük WriteBatch)
+  Future<bool> markAllAutoModAlarmsAsRead() async {
+    try {
+      final snapshot = await _adminMessagesCollection
+          .where('isRead', isEqualTo: false)
+          .limit(400)
+          .get();
+      if (snapshot.docs.isEmpty) return true;
+
+      const chunkSize = 400;
+      for (var i = 0; i < snapshot.docs.length; i += chunkSize) {
+        final end = (i + chunkSize > snapshot.docs.length) ? snapshot.docs.length : i + chunkSize;
+        final chunk = snapshot.docs.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final doc in chunk) {
+          batch.update(doc.reference, {'isRead': true});
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Tüm alarmları okundu işaretleme hatası: $e');
+      return false;
+    }
+  }
+
+  /// Seçilen alarmları toplu okundu olarak işaretle (400'lük WriteBatch)
+  Future<bool> markAutoModAlarmsBatchAsRead(List<String> alarmIds) async {
+    if (alarmIds.isEmpty) return true;
+    try {
+      const chunkSize = 400;
+      for (var i = 0; i < alarmIds.length; i += chunkSize) {
+        final end = (i + chunkSize > alarmIds.length) ? alarmIds.length : i + chunkSize;
+        final chunk = alarmIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.update(_adminMessagesCollection.doc(id), {'isRead': true});
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Toplu alarm okundu işaretleme hatası: $e');
+      return false;
+    }
+  }
+
+  /// Seçilen alarmları toplu sil (400'lük WriteBatch)
+  Future<bool> deleteAutoModAlarmsBatch(List<String> alarmIds) async {
+    if (alarmIds.isEmpty) return true;
+    try {
+      const chunkSize = 400;
+      for (var i = 0; i < alarmIds.length; i += chunkSize) {
+        final end = (i + chunkSize > alarmIds.length) ? alarmIds.length : i + chunkSize;
+        final chunk = alarmIds.sublist(i, end);
+        final batch = _firestore.batch();
+        for (final id in chunk) {
+          batch.delete(_adminMessagesCollection.doc(id));
+        }
+        await batch.commit();
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Toplu alarm silme hatası: $e');
+      return false;
+    }
+  }
+
   /// Tüm moderasyon alarmlarını temizle (Maks 400 doküman ve güvenli batch)
   Future<bool> deleteAllAutoModAlarms() async {
     try {
@@ -220,14 +313,15 @@ class ReportService {
         }
       }
 
-      // targetDealId yoksa collectionGroup ile ara
+      // targetDealId yoksa collectionGroup ile ara (OOM ve kota patlaması kalkanı: limit 100)
       final querySnap = await _firestore
           .collectionGroup('comments')
+          .limit(100)
           .get();
       for (final doc in querySnap.docs) {
         if (doc.id == commentId) {
           final data = doc.data();
-          final parentDealId = doc.reference.parent.parent?.id ?? '';
+          final parentDealId = (data['dealId'] as String?) ?? doc.reference.parent.parent?.id ?? '';
           return {
             'id': doc.id,
             'content': data['content'] ?? data['text'] ?? '',

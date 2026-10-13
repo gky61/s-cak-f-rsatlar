@@ -5,6 +5,7 @@ import '../models/deal.dart';
 import '../services/firestore_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
+import '../services/deal_sync_service.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
 import 'deal_detail_screen.dart';
@@ -34,7 +35,9 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
   String _filterStatus = 'all'; // 'all', 'active', 'pending'
   bool _dealApprovalRequired = true;
   StreamSubscription? _settingsSub;
+  StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
   bool _isRefreshing = false;
+  final Set<String> _locallyDeletedDealIds = {};
 
   Future<void> _refreshDeals() async {
     if (_isRefreshing || !mounted) return;
@@ -78,6 +81,30 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
         debugPrint('⚠️ [UserDealsScreen] settings/app dinleme hatası: $e');
       });
     }
+    _listenToDealSync();
+  }
+
+  void _listenToDealSync() {
+    _dealSyncSubscription?.cancel();
+    _dealSyncSubscription = DealSyncService.instance.stream.listen((event) {
+      if (!mounted) return;
+      if (event.action == DealSyncAction.dealDeleted) {
+        _locallyDeletedDealIds.add(event.dealId);
+        setState(() {});
+      }
+    });
+  }
+
+  Future<void> _openDealDetail(BuildContext context, Deal deal) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DealDetailScreen(dealId: deal.id),
+      ),
+    );
+    if (result is Deal && mounted) {
+      DealSyncService.instance.notifyDealUpdated(result);
+    }
   }
 
   void _onThemeChanged() {
@@ -88,6 +115,7 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
 
   @override
   void dispose() {
+    _dealSyncSubscription?.cancel();
     _settingsSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     super.dispose();
@@ -181,7 +209,8 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
                   );
                 }
 
-                final allDeals = snapshot.data ?? [];
+                final rawDeals = snapshot.data ?? [];
+                final allDeals = rawDeals.where((d) => !_locallyDeletedDealIds.contains(d.id)).toList();
 
                 if (allDeals.isEmpty) {
                   return RefreshIndicator(
@@ -278,14 +307,7 @@ class _UserDealsScreenState extends State<UserDealsScreen> {
                                   return DealCard(
                                     deal: deal,
                                     viewMode: CardViewMode.vertical,
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => DealDetailScreen(dealId: deal.id),
-                                        ),
-                                      );
-                                    },
+                                    onTap: () => _openDealDetail(context, deal),
                                   );
                                 },
                               ),

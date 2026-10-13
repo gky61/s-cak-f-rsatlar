@@ -487,3 +487,45 @@ void showExpiredBottomSheet(BuildContext context, Deal deal) {
     },
   );
 }
+
+/// Editörün Seçimi için fırsat kartı görseli üzerinde sağ üst köşeye yerleşen
+/// modern, minimalist ve FırsatKolik marka turuncusu tonlarında zarif yıldız rozeti.
+Widget buildEditorChoiceStarBadge({
+  required bool isDark,
+  double size = 24.0,
+}) {
+  return Tooltip(
+    message: 'Editörün Seçimi',
+    preferBelow: false,
+    child: Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF1E1E22).withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.96),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isDark
+              ? AppTheme.primary.withValues(alpha: 0.55)
+              : AppTheme.primary.withValues(alpha: 0.40),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withValues(alpha: isDark ? 0.25 : 0.18),
+            blurRadius: 5,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Icon(
+          Icons.star_rounded,
+          size: size * 0.62,
+          color: isDark ? const Color(0xFFFF8555) : AppTheme.primary,
+        ),
+      ),
+    ),
+  );
+}

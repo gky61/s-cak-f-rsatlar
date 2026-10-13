@@ -39,6 +39,34 @@ class BaseProductScraper {
   /** HTML'den ürün markasını çeker */
   scrapeBrand($) { return null; }
 
+  /** HTML'den kanonik URL'yi çeker (<link rel="canonical"> veya <meta property="og:url">) */
+  scrapeCanonicalUrl($, url) {
+    try {
+      if (!$) return null;
+      let canonical = $('link[rel="canonical"]').attr('href');
+      if (!canonical || !canonical.trim()) {
+        canonical = $('meta[property="og:url"]').attr('content');
+      }
+      if (!canonical || !canonical.trim()) return null;
+      canonical = canonical.trim();
+
+      const resolved = this.resolveImageUrl(canonical, url);
+      if (!resolved) return null;
+
+      const pageHost = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+      const canonHost = new URL(resolved).hostname.replace(/^www\./, '').toLowerCase();
+      const isDomainMatch = pageHost === canonHost ||
+        pageHost.endsWith('.' + canonHost) ||
+        canonHost.endsWith('.' + pageHost);
+      if (!isDomainMatch) {
+        return null;
+      }
+      return resolved;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ─── Yardımcı Metotlar ───
 
   /** Fiyat metnini temizleyip float değere dönüştürür */

@@ -46,6 +46,44 @@ abstract class BaseProductScraper {
   /// Belgeyi analiz ederek ürün markasını döndürür (ör. Apple)
   String? scrapeBrand(dom.Document document) => null;
 
+  /// Belgeyi analiz ederek kanonik ürün URL'sini döndürür (<link rel="canonical"> veya <meta property="og:url">)
+  String? scrapeCanonicalUrl(dom.Document document, String url) {
+    try {
+      String? canonical = document.querySelector('link[rel="canonical"]')?.attributes['href'];
+      if (canonical == null || canonical.trim().isEmpty) {
+        canonical = document.querySelector('meta[property="og:url"]')?.attributes['content'];
+      }
+      if (canonical == null || canonical.trim().isEmpty) return null;
+      canonical = canonical.trim();
+
+      String? resolved;
+      if (canonical.startsWith('http://') || canonical.startsWith('https://')) {
+        resolved = canonical;
+      } else if (canonical.startsWith('//')) {
+        resolved = 'https:$canonical';
+      } else {
+        try {
+          final base = Uri.parse(url);
+          resolved = base.resolve(canonical).toString();
+        } catch (_) {
+          return null;
+        }
+      }
+
+      final pageHost = Uri.parse(url).host.replaceFirst(RegExp(r'^www\.'), '').toLowerCase();
+      final canonHost = Uri.parse(resolved).host.replaceFirst(RegExp(r'^www\.'), '').toLowerCase();
+      final isDomainMatch = pageHost == canonHost ||
+          pageHost.endsWith('.$canonHost') ||
+          canonHost.endsWith('.$pageHost');
+      if (!isDomainMatch) {
+        return null;
+      }
+      return resolved;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Fiyat metnini temizleyip double değere dönüştüren yardımcı metot
   double? parsePriceText(String priceText) {
     String cleaned = priceText

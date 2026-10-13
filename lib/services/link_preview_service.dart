@@ -47,6 +47,7 @@ class LinkPreviewResult {
   final String? description;
   final String? imageUrl;
   final String? provider;
+  final String? canonicalUrl;
   final double? price;
   final double? originalPrice;
   final List<String>? breadcrumbs;
@@ -61,6 +62,7 @@ class LinkPreviewResult {
     String? description,
     String? imageUrl,
     String? provider,
+    this.canonicalUrl,
     this.price,
     this.originalPrice,
     this.breadcrumbs,
@@ -302,6 +304,7 @@ class LinkPreviewService {
               final ratingValue = await matchedScraper.scrapeRatingValue(document);
               final ratingCount = await matchedScraper.scrapeRatingCount(document);
               final brand = matchedScraper.scrapeBrand(document);
+              final canonicalUrl = matchedScraper.scrapeCanonicalUrl(document, targetUrl);
               
               final resolvedImage = _resolveImageUrl(imageUrl, targetUrl);
               final provider = _cleanHost(targetUrl);
@@ -316,6 +319,9 @@ class LinkPreviewService {
               }
               _log('   - Kırıntı (Breadcrumbs): $breadcrumbs');
               _log('   - Provider: $provider');
+              if (canonicalUrl != null && canonicalUrl.isNotEmpty) {
+                _log('   - Kanonik URL: $canonicalUrl');
+              }
               if (priceLabel != null && priceLabel.isNotEmpty) {
                 _log('   - Fiyat Etiketi/CRM Notu: $priceLabel');
               }
@@ -342,6 +348,7 @@ class LinkPreviewService {
                 description: description,
                 imageUrl: resolvedImage,
                 provider: provider,
+                canonicalUrl: canonicalUrl,
                 price: price,
                 originalPrice: originalPrice,
                 breadcrumbs: breadcrumbs,
@@ -422,6 +429,7 @@ class LinkPreviewService {
         description: metadata?.description,
         imageUrl: resolvedImage,
         provider: provider,
+        canonicalUrl: metadata?.url,
         isAmazonWarehouse: isAmazonWarehouseFallback,
       );
     } catch (e, stackTrace) {

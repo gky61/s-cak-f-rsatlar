@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
+import '../services/deal_sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
 import '../widgets/deal_card_skeleton.dart';
@@ -49,7 +50,9 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
   StreamSubscription<dynamic>? _authSub;
 
   Future<void>? _inFlightFollowLoad;
+  StreamSubscription<DealSyncEvent>? _dealSyncSub;
   late Stream<List<Deal>> _botkolikDealsStream;
+  final Set<String> _locallyDeletedDealIds = {};
 
   void _initBotkolikDealsStream() {
     _botkolikDealsStream = _firestoreService.getBotkolikDealsStream(
@@ -73,10 +76,37 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+    _listenToDealSync();
+  }
+
+  void _listenToDealSync() {
+    _dealSyncSub?.cancel();
+    _dealSyncSub = DealSyncService.instance.stream.listen((event) {
+      if (!mounted) return;
+      if (event.action == DealSyncAction.dealDeleted) {
+        _locallyDeletedDealIds.add(event.dealId);
+        setState(() {
+          _initBotkolikDealsStream();
+        });
+      }
+    });
+  }
+
+  Future<void> _openDealDetail(BuildContext context, Deal deal) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DealDetailScreen(dealId: deal.id),
+      ),
+    );
+    if (result is Deal && mounted) {
+      DealSyncService.instance.notifyDealUpdated(result);
+    }
   }
 
   @override
   void dispose() {
+    _dealSyncSub?.cancel();
     _authSub?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -1334,7 +1364,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
           );
         }
 
-        var deals = snapshot.data!;
+        var deals = (snapshot.data ?? []).where((d) => !_locallyDeletedDealIds.contains(d.id)).toList();
 
         // Arama filtresi uygula
         if (_searchQuery.isNotEmpty) {
@@ -1374,14 +1404,7 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
                   child: DealCard(
                     deal: deal,
                     viewMode: CardViewMode.horizontal,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DealDetailScreen(dealId: deal.id),
-                        ),
-                      );
-                    },
+                    onTap: () => _openDealDetail(context, deal),
                   ),
                 );
               },

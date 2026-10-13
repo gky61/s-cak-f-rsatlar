@@ -447,6 +447,22 @@ Google Cloud VM üzerinde Docker container olarak çalışan `telegram_bot.js` s
 - **Görsel Kurtarma & Storage Yükleme:** Scraper ürün görselini çekemezse, Telegram mesajının fotoğrafını veya link önizleme görselini indirerek `deals/{chatId}_{messageId}.jpg` yoluyla Firebase Storage'a yükler.
 - **Onay Durumu (Fail-Safe Admin Onayı):** `settings/app` altındaki `dealApprovalRequired` değerine bakar; doküman veya alan bulunamasa dahi varsayılan olarak `true` (admin onayı zorunlu) modunda güvenli çalışır.
 
+### 9.1. 🛡️ Çift Kademeli Mükerrerlik (Deduplication) ve Kanonik Etiket Sözleşmesi
+
+Telegram botu ve istemci tarafı, mükerrer fırsat paylaşımlarını engellerken **"Sıfır Fırsat Kaybı" (Zero Deal Loss)** ve **"Kullanıcı Eylem Linki Korunumu"** prensiplerini tavizsiz uygular:
+
+1. **Eylem Linki (`deal.link`) vs. Kimlik Linki (`deal.cleanUrl`) Ayrımı:**
+   - **`deal.link` (Action Target):** Kullanıcının tıkladığı "Mağazaya Git" butonudur. Orijinal indirimli beden/renk varyant SKU'su (`-p-HBCV...`, Amazon beden kodu vb.) ve yetkili gelir ortaklığı (affiliate) parametreleri eksiksiz korunur.
+   - **`deal.cleanUrl` (Deduplication Identity):** Tekilleştirme kimliğidir. Scraper tarafından sayfanın HTML'inden kazınan `<link rel="canonical">` veya `<meta property="og:url">` etiketinden türetilir (`buildCanonicalCleanUrl`).
+2. **Pazaryeri Satıcı Parametresi Korunumu:**
+   - Hepsiburada (`magaza=...`) ve Teknosa (`shopId=...`) gibi pazaryeri satıcı parametreleri kanonik linke aktarılır. Böylece farklı satıcıların aynı ürünü satması durumunda haksız engelleme önlenir.
+3. **Kural 1 — Onay Bekleyen (Pending Guard) Kalkanı:**
+   - Aynı kanonik `cleanUrl` değerine sahip bir ürün veritabanında zaten Admin Onayında bekliyorsa (`isApproved: false` veya `pending`), ikinci bir ikiz kart açılması kesinlikle engellenir (`cloud-run-bot/telegram_bot.js:1248`).
+4. **Kural 2 — Kazıma Sonrası (Post-Scrape) Gerçek Fiyat Doğrulama Kalkanı:**
+   - Onaylı ve aktif bir fırsat varken aynı ürün yeniden paylaşıldığında (örneğin sahte sepet kuponu metniyle), sayfa kazındıktan sonraki nihai fiyat (`finalPrice`) mevcut fiyattan en az **%5 daha ucuz** değilse kayıt iptal edilir. Gerçek bir fiyat düşüşü varsa güncel fırsat olarak sisteme kabul edilir.
+5. **İkili Sorgu & Geriye Dönük Uyumluluk (Dual Safety Net):**
+   - Post-scrape aşamasında hem `finalCleanUrl` (kanonik ana model) hem de `rawCleanUrl` (varyant linki) Firestore üzerinde sorgulanır. Böylece sistem geçmişte varyant linkiyle kaydedilmiş eski fırsatları da eksiksiz yakalar.
+
 ---
 
 ## 10. 🧠 Kategori Tespit Motoru ve Reklam Mevzuatı Uyumu

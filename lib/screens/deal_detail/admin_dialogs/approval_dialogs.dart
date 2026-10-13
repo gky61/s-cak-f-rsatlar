@@ -5,6 +5,7 @@ import '../../../models/deal.dart';
 import '../../../services/affiliate/affiliate_service.dart';
 import '../../../services/firestore_service.dart';
 import '../../../services/notification_service.dart';
+import '../../../services/deal_sync_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -277,6 +278,11 @@ Future<void> unpublishDeal({
     'status': 'expired',
     'updatedAt': FieldValue.serverTimestamp(),
   });
+  DealSyncService.instance.notifyExpiredVoteChanged(
+    dealId: dealId,
+    expiredVotes: 15,
+    isExpired: true,
+  );
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -372,6 +378,7 @@ Future<void> rejectDeal({
     'status': 'rejected',
     'updatedAt': FieldValue.serverTimestamp(),
   });
+  DealSyncService.instance.notifyDealDeleted(dealId);
   onDealUpdated();
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(

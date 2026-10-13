@@ -1441,7 +1441,7 @@ async function scrapeProductFromUrl(url) {
     const html = await fetchHtml(targetUrl);
     if (!html) {
       console.error(`[SCRAPE-SERVICE] ❌ HTML içeriği boş veya çekilemedi! Boş veri döndürülüyor.`);
-      return { url: targetUrl, title: null, price: null, imageUrl: null, breadcrumbs: [] };
+      return { url: targetUrl, canonicalUrl: null, title: null, price: null, imageUrl: null, breadcrumbs: [] };
     }
 
     const $ = cheerio.load(html);
@@ -1492,6 +1492,16 @@ async function scrapeProductFromUrl(url) {
       const brand = matchedScraper.scrapeBrand ? matchedScraper.scrapeBrand($) : null;
       console.log(`[SCRAPE-SERVICE] [RATING & BRAND] Rating: ${JSON.stringify(rating)}, Brand: "${brand || 'BULUNAMADI'}"`);
 
+      // 8. Kanonik URL Çekimi (Tekilleştirme ve Mükerrerlik Kalkanı İçin)
+      console.log(`[SCRAPE-SERVICE] [CANONICAL] Kanonik URL çekiliyor...`);
+      let canonicalUrl = null;
+      try {
+        canonicalUrl = matchedScraper.scrapeCanonicalUrl ? matchedScraper.scrapeCanonicalUrl($, targetUrl) : null;
+      } catch (canErr) {
+        console.warn(`[SCRAPE-SERVICE] [CANONICAL] Çekilirken hata oluştu: ${canErr.message}`);
+      }
+      console.log(`[SCRAPE-SERVICE] [CANONICAL] Sonuç: "${canonicalUrl || 'BULUNAMADI'}"`);
+
       const isAmazonWarehouse = checkIsAmazonWarehouse(url) || checkIsAmazonWarehouse(targetUrl);
       if (isAmazonWarehouse) {
         console.log(`[SCRAPE-SERVICE] 📦 Amazon Depo ürünü tespit edildi! (smid=A215JX4S9CANSO)`);
@@ -1504,6 +1514,7 @@ async function scrapeProductFromUrl(url) {
 
       return {
         url: targetUrl,
+        canonicalUrl: canonicalUrl || null,
         title: title || null,
         price: price || null,
         originalPrice: originalPrice || null,
@@ -1521,6 +1532,36 @@ async function scrapeProductFromUrl(url) {
 
       const title = $('meta[property="og:title"]').attr('content') || $('title').text();
       console.log(`[SCRAPE-SERVICE] [TITLE] (Fallback) Sonuç: "${title ? title.trim() : 'BULUNAMADI'}"`);
+
+      let fallbackCanonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content') || null;
+      if (fallbackCanonical && fallbackCanonical.trim()) {
+        fallbackCanonical = fallbackCanonical.trim();
+        if (fallbackCanonical.startsWith('//')) {
+          fallbackCanonical = 'https:' + fallbackCanonical;
+        } else if (!fallbackCanonical.startsWith('http://') && !fallbackCanonical.startsWith('https://')) {
+          try {
+            fallbackCanonical = new URL(fallbackCanonical, targetUrl).toString();
+          } catch (_) {
+            fallbackCanonical = null;
+          }
+        }
+        if (fallbackCanonical) {
+          try {
+            const pageHost = new URL(targetUrl).hostname.replace(/^www\./, '').toLowerCase();
+            const canonHost = new URL(fallbackCanonical).hostname.replace(/^www\./, '').toLowerCase();
+            const isDomainMatch = pageHost === canonHost ||
+              pageHost.endsWith('.' + canonHost) ||
+              canonHost.endsWith('.' + pageHost);
+            if (!isDomainMatch) {
+              fallbackCanonical = null;
+            }
+          } catch (_) {
+            fallbackCanonical = null;
+          }
+        }
+      } else {
+        fallbackCanonical = null;
+      }
 
       const rawImage = $('meta[property="og:image"]').attr('content') || $('link[rel="image_src"]').attr('href');
       console.log(`[SCRAPE-SERVICE] [IMAGE] (Fallback) Ham Görsel: "${rawImage || 'BULUNAMADI'}"`);
@@ -1561,6 +1602,7 @@ async function scrapeProductFromUrl(url) {
 
       return {
         url: targetUrl,
+        canonicalUrl: fallbackCanonical || null,
         title: title ? title.trim() : null,
         price: price,
         imageUrl: imageUrl,
@@ -1570,7 +1612,7 @@ async function scrapeProductFromUrl(url) {
     }
   } catch (err) {
     console.error(`[SCRAPE-SERVICE] ❌ Scrape işleminde beklenmeyen hata: ${err.message}`, err.stack);
-    return { url, title: null, price: null, imageUrl: null, breadcrumbs: [] };
+    return { url, canonicalUrl: null, title: null, price: null, imageUrl: null, breadcrumbs: [] };
   }
 }
 

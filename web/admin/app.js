@@ -11355,6 +11355,7 @@ function initNotificationEventListeners() {
             const notificationCategory = document.getElementById('notifCategoryType')?.value || 'admin_message';
             const targetType = document.getElementById('notifTargetType').value;
             const targetValue = notifTargetValue ? notifTargetValue.value.trim() : '';
+            const ignoreQuietHours = document.getElementById('notifIgnoreQuietHours')?.checked || false;
 
             const sendBtn = document.getElementById('sendNotifBtn');
             if (sendBtn) {
@@ -11364,7 +11365,7 @@ function initNotificationEventListeners() {
 
             try {
                 const sendFn = firebase.functions().httpsCallable('sendManualNotification');
-                await sendFn({ title, body, imageUrl, dealId, targetType, targetValue, notificationCategory });
+                await sendFn({ title, body, imageUrl, dealId, targetType, targetValue, notificationCategory, ignoreQuietHours });
                 showSuccess('✅ Bildirim başarıyla sıraya alındı ve gönderildi!');
                 manualNotifForm.reset();
                 if (notifTargetValueWrapper) notifTargetValueWrapper.classList.add('hidden');

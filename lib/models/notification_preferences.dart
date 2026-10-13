@@ -19,7 +19,7 @@ class NotificationPreferences {
   NotificationPreferences({
     this.pushMasterEnabled = true,
     this.dealNotificationsEnabled = true,
-    this.categoryNotificationsEnabled = true,
+    this.categoryNotificationsEnabled = false,
     this.keywordNotificationsEnabled = true,
     this.communityNotificationsEnabled = true,
     this.submissionStatusNotificationsEnabled = true,
@@ -50,7 +50,7 @@ class NotificationPreferences {
     return NotificationPreferences(
       pushMasterEnabled: data['pushMasterEnabled'] ?? true,
       dealNotificationsEnabled: data['dealNotificationsEnabled'] ?? true,
-      categoryNotificationsEnabled: data['categoryNotificationsEnabled'] ?? true,
+      categoryNotificationsEnabled: data['categoryNotificationsEnabled'] ?? false,
       keywordNotificationsEnabled: data['keywordNotificationsEnabled'] ?? true,
       communityNotificationsEnabled: data['communityNotificationsEnabled'] ?? true,
       submissionStatusNotificationsEnabled: data['submissionStatusNotificationsEnabled'] ?? true,
@@ -69,7 +69,7 @@ class NotificationPreferences {
     return NotificationPreferences(
       pushMasterEnabled: true,
       dealNotificationsEnabled: true,
-      categoryNotificationsEnabled: true,
+      categoryNotificationsEnabled: false,
       keywordNotificationsEnabled: true,
       communityNotificationsEnabled: true,
       submissionStatusNotificationsEnabled: true,
@@ -82,7 +82,7 @@ class NotificationPreferences {
       schemaVersion: 1,
       lastStates: const {
         'dealNotificationsEnabled': true,
-        'categoryNotificationsEnabled': true,
+        'categoryNotificationsEnabled': false,
         'keywordNotificationsEnabled': true,
         'communityNotificationsEnabled': true,
         'submissionStatusNotificationsEnabled': true,

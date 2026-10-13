@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../services/theme_service.dart';
+import '../services/deal_sync_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/badge_helper.dart';
 import '../utils/asset_path_migration.dart';
@@ -68,7 +69,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   StreamSubscription? _messageCountSubscription;
   StreamSubscription? _adminMessageCountSubscription;
   StreamSubscription? _userDataSubscription;
+  StreamSubscription<DealSyncEvent>? _dealSyncSub;
   Stream<List<Deal>>? _userDealsStream;
+  final Set<String> _locallyDeletedDealIds = {};
 
   @override
   void initState() {
@@ -95,6 +98,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // authStateChanges ilk karesi ile tek seferde güvenle tetiklenir.
 
     _setupAuthListener();
+    _listenToDealSync();
+  }
+
+  void _listenToDealSync() {
+    _dealSyncSub?.cancel();
+    _dealSyncSub = DealSyncService.instance.stream.listen((event) {
+      if (!mounted) return;
+      if (event.action == DealSyncAction.dealDeleted) {
+        _locallyDeletedDealIds.add(event.dealId);
+        final dealsUserId = widget.userId ?? _authService.currentUser?.uid;
+        if (dealsUserId != null) {
+          setState(() {
+            _userDealsStream = _firestoreService.getUserDealsStream(
+              dealsUserId,
+              limit: 5,
+              onlyApproved: !_isOwnProfile,
+            );
+          });
+        } else {
+          setState(() {});
+        }
+      }
+    });
+  }
+
+  Future<void> _openDealDetail(BuildContext context, Deal deal) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DealDetailScreen(dealId: deal.id),
+      ),
+    );
+    if (result is Deal && mounted) {
+      DealSyncService.instance.notifyDealUpdated(result);
+    }
   }
 
   void _setupAuthListener() {
@@ -143,6 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _dealSyncSub?.cancel();
     _authSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _messageCountSubscription?.cancel();
@@ -2185,7 +2224,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             }
 
-            final deals = snapshot.data ?? [];
+            final rawDeals = snapshot.data ?? [];
+            final deals = rawDeals.where((d) => !_locallyDeletedDealIds.contains(d.id)).toList();
 
             if (deals.isEmpty) {
               return Container(
@@ -2258,14 +2298,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: DealCard(
                     deal: deal,
                     viewMode: CardViewMode.horizontal,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DealDetailScreen(dealId: deal.id),
-                        ),
-                      );
-                    },
+                    onTap: () => _openDealDetail(context, deal),
                   ),
                 );
               },

@@ -14,6 +14,7 @@ import '../widgets/guest_login_bottom_sheet.dart';
 import '../widgets/scroll_to_top_button.dart';
 import 'category_preferences_screen.dart';
 import 'deal_detail_screen.dart';
+import '../services/deal_sync_service.dart';
 import '../services/ad_manager_service.dart';
 import '../widgets/ad_deal_card.dart';
 import '../widgets/app_snack_bar.dart';
@@ -39,6 +40,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   Stream<List<Deal>>? _myFavoritesStream;
   String? _cachedUserId;
   StreamSubscription? _authSub;
+  StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
 
   // FS-18: Followed Categories SWR & Pagination State
   List<Deal> _followedDealsList = [];
@@ -48,6 +50,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   bool _hasMoreFollowed = true;
   String? _followedErrorMessage;
   bool _isRefreshingFollowed = false;
+
+  final Set<String> _locallyDeletedDealIds = {};
+  final Set<String> _locallyRemovedFavoriteIds = {};
 
   int _favoriteFilterIndex = 0; // 0: Tümü, 1: Aktif, 2: Süresi Dolanlar
 
@@ -69,6 +74,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
     _tabController.addListener(_tabListener);
     _themeService.addListener(_onThemeChanged);
+    _listenToDealSync();
 
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) {
@@ -255,6 +261,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   @override
   void dispose() {
+    _dealSyncSubscription?.cancel();
     _authSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _tabController.removeListener(_tabListener);
@@ -264,6 +271,49 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     _followedCategoriesScrollController.removeListener(_scrollListener);
     _followedCategoriesScrollController.dispose();
     super.dispose();
+  }
+
+  /// FS-18 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
+  void _listenToDealSync() {
+    _dealSyncSubscription?.cancel();
+    _dealSyncSubscription = DealSyncService.instance.stream.listen((event) {
+      if (!mounted) return;
+      if (event.action == DealSyncAction.dealDeleted) {
+        _locallyDeletedDealIds.add(event.dealId);
+      } else if (event.action == DealSyncAction.favoriteToggled) {
+        if (event.isFavorite == false) {
+          _locallyRemovedFavoriteIds.add(event.dealId);
+        } else {
+          _locallyRemovedFavoriteIds.remove(event.dealId);
+        }
+      }
+
+      final index = _followedDealsList.indexWhere((d) => d.id == event.dealId);
+      if (index != -1) {
+        setState(() {
+          if (event.action == DealSyncAction.dealDeleted) {
+            _followedDealsList.removeAt(index);
+          } else {
+            _followedDealsList[index] = event.applyTo(_followedDealsList[index]);
+          }
+        });
+      } else {
+        setState(() {});
+      }
+    });
+  }
+
+  /// Fırsat detayına gidiş ve güvenli çift katmanlı senkronizasyon köprüsü
+  Future<void> _openDealDetail(BuildContext context, Deal deal) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DealDetailScreen(dealId: deal.id),
+      ),
+    );
+    if (result is Deal && mounted) {
+      DealSyncService.instance.notifyDealUpdated(result);
+    }
   }
 
   void _showCustomSnackBar({
@@ -580,7 +630,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           );
         }
 
-        final deals = snapshot.data ?? [];
+        final rawDeals = snapshot.data ?? [];
+        final deals = rawDeals
+            .where((d) => !_locallyDeletedDealIds.contains(d.id) && !_locallyRemovedFavoriteIds.contains(d.id))
+            .toList();
 
         if (deals.isEmpty) {
           return RefreshIndicator(
@@ -1274,12 +1327,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               viewMode: CardViewMode.vertical,
               onTap: () {
                 HapticFeedback.lightImpact();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DealDetailScreen(dealId: deal.id),
-                  ),
-                );
+                _openDealDetail(context, deal);
               },
             ),
           );
@@ -1674,12 +1722,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                         viewMode: CardViewMode.vertical,
                         onTap: () {
                           HapticFeedback.lightImpact();
-                          Navigator.push(
-                            ctx,
-                            MaterialPageRoute(
-                              builder: (_) => DealDetailScreen(dealId: deal.id),
-                            ),
-                          );
+                          _openDealDetail(ctx, deal);
                         },
                       ),
                     );
