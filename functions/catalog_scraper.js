@@ -57,6 +57,56 @@ function getRandomUserAgent() {
 }
 
 /**
+ * FAZ 2 (FS-CF-08): Aktüel broşür kapak görselini Firebase Storage'a yedekler (Akakçe CDN 403 engeli kalkanı).
+ * Eğer yükleme başarılı olursa Storage URL'i döner, aksi halde orijinal URL'i korur.
+ */
+async function uploadCoverToStorage(coverUrl, catalogId) {
+  if (!coverUrl || typeof coverUrl !== 'string') return null;
+  if (process.env.FUNCTIONS_EMULATOR === 'true') return null;
+
+  try {
+    const bucket = admin.storage().bucket();
+    const destination = `catalogs/${catalogId}_cover.webp`;
+    const file = bucket.file(destination);
+
+    // Daha önce yüklenmişse doğrudan Storage URL'i kullan
+    const [exists] = await file.exists().catch(() => [false]);
+    if (exists) {
+      return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(destination)}?alt=media`;
+    }
+
+    // Akakçe CDN referer ve user-agent ile görseli çek
+    const res = await fetch(coverUrl, {
+      headers: {
+        'User-Agent': getRandomUserAgent(),
+        'Referer': 'https://www.akakce.com/'
+      },
+      signal: AbortSignal.timeout(6000)
+    });
+
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: 'image/webp',
+        cacheControl: 'public, max-age=604800' // 7 gün CDN önbelleği
+      }
+    });
+
+    try {
+      await file.makePublic();
+    } catch (_) {}
+
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(destination)}?alt=media`;
+  } catch (err) {
+    functions.logger.warn(`⚠️ [FS-CF-08] Katalog kapak görseli Storage yedekleme uyarısı (${catalogId}):`, err.message);
+    return null;
+  }
+}
+
+/**
  * Validates if the returned HTML is valid catalog content and not a WAF block/error/captcha page.
  */
 function isValidHtml(html, minLength = 2500) {
@@ -410,14 +460,20 @@ async function scrapeAndSaveCatalogs() {
               if (finalCover.startsWith('//')) finalCover = 'https:' + finalCover;
               finalCover = finalCover.replace('/_bro/u/', '/_bro/l/').replace('/_bro/y/', '/_bro/l/').replace('/_bro/m/', '/_bro/l/');
 
+              const catalogId = `${store.code}_${item.brochureId}`;
+              // FAZ 2 (FS-CF-08): Kapak görselini Firebase Storage'a yedekleme (Akakçe CDN 403 engeli kalkanı)
+              const storageCoverUrl = await uploadCoverToStorage(finalCover, catalogId);
+
               return {
-                katalogId: `${store.code}_${item.brochureId}`,
+                katalogId: catalogId,
                 magazaKodu: store.code,
                 katalogBasligi: item.titleSuffix,
                 baslangicTarihi: admin.firestore.Timestamp.fromDate(baslangicTarihi),
                 bitisTarihi: admin.firestore.Timestamp.fromDate(bitisTarihi),
                 sayfaResimleri,
-                kapakResmi: finalCover
+                kapakResmi: storageCoverUrl || finalCover,
+                originalKapakResmi: finalCover,
+                storageCoverUrl: storageCoverUrl || null
               };
             }
           }
@@ -482,7 +538,12 @@ async function scrapeAndSaveCatalogs() {
 
   for (const chunk of deleteChunks) {
     const batch = db.batch();
-    chunk.forEach(doc => batch.delete(doc.ref));
+    chunk.forEach(doc => {
+      batch.delete(doc.ref);
+      try {
+        admin.storage().bucket().file(`catalogs/${doc.id}_cover.webp`).delete().catch(() => {});
+      } catch (_) {}
+    });
     await batch.commit();
   }
   functions.logger.info(`Reconciled catalogs: ${obsoleteDocs.length} obsolete catalogs deleted.`);

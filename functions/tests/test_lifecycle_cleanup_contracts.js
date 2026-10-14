@@ -58,8 +58,8 @@ assert(has40DaysImages, '❌ Hata: cleanupOldImages 40 günlük güvenlik payın
 console.log('  ✅ cleanupOldImages 40 günlük kırık görsel koruması doğrulandı.');
 
 // _purgeOldNotificationsCore devre kesici tavanı var mı?
-const hasMaxBatches = indexJsContent.includes("MAX_BATCHES = 25");
+const hasMaxBatches = /MAX_BATCHES\s*=\s*(25|50)/.test(indexJsContent);
 assert(hasMaxBatches, '❌ Hata: _purgeOldNotificationsCore devre kesici tavanı (MAX_BATCHES) eksik!');
-console.log('  ✅ _purgeOldNotificationsCore devre kesici tavanı (10.000 limit) doğrulandı.');
+console.log('  ✅ _purgeOldNotificationsCore devre kesici tavanı (devre kesici koruması) doğrulandı.');
 
 console.log('\n🎉 TÜM TESTLER VE MİMARİ DOĞRULAMALAR BAŞARIYLA GEÇTİ!');

@@ -158,6 +158,142 @@ function wrapCall(name, handler) {
   };
 }
 
+// =========================================================================
+// FAZ 1 (FS-CF-01 & FS-CF-02): MERKEZİ BELLEK ÖNBELLEĞİ, DAĞITIK SAYAÇ VE YARDIMCILAR
+// =========================================================================
+
+// Türkiye Zaman Dilimi Tarih Formatlayıcı (YYYY-MM-DD)
+function getTurkeyDateStr(date = new Date()) {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+}
+
+let _cachedMasterConfig = null;
+let _cachedMasterConfigTime = 0;
+const MASTER_CONFIG_CACHE_TTL_MS = 60000; // 60 saniye bellek içi TTL
+
+async function getCachedMasterConfig(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && _cachedMasterConfig && (now - _cachedMasterConfigTime < MASTER_CONFIG_CACHE_TTL_MS)) {
+    return _cachedMasterConfig;
+  }
+  try {
+    const [sysConfigDoc, appConfigDoc] = await Promise.all([
+      admin.firestore().collection('systemConfig').doc('notifications').get(),
+      admin.firestore().collection('settings').doc('app').get()
+    ]);
+    const sysData = sysConfigDoc.exists ? (sysConfigDoc.data() || {}) : {};
+    const appData = appConfigDoc.exists ? (appConfigDoc.data() || {}) : {};
+    const isSysDisabled = sysConfigDoc.exists && sysData.enabled === false;
+    const isAppDisabled = appConfigDoc.exists && appData.notificationsEnabled === false;
+
+    _cachedMasterConfig = {
+      isGloballyEnabled: !isSysDisabled && !isAppDisabled,
+      isSysDisabled,
+      isAppDisabled,
+      sysConfig: sysData,
+      appConfig: appData,
+      cachedAt: now
+    };
+    _cachedMasterConfigTime = now;
+    return _cachedMasterConfig;
+  } catch (err) {
+    if (_cachedMasterConfig) {
+      functions.logger.warn('⚠️ Master config fetch error, stale cache kullanılıyor:', err.message);
+      return _cachedMasterConfig;
+    }
+    throw err;
+  }
+}
+
+const NUM_NOTIFICATION_SHARDS = 10;
+let _lastStatParentDate = null;
+
+async function recordNotificationPushStat(count = 1) {
+  if (!count || count <= 0) return;
+  try {
+    const todayStr = getTurkeyDateStr();
+    const shardId = Math.floor(Math.random() * NUM_NOTIFICATION_SHARDS).toString();
+    const statDocRef = admin.firestore().collection('notificationStats').doc(todayStr);
+    const shardRef = statDocRef.collection('shards').doc(shardId);
+
+    const promises = [
+      shardRef.set({
+        count: admin.firestore.FieldValue.increment(count),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true })
+    ];
+
+    if (_lastStatParentDate !== todayStr) {
+      _lastStatParentDate = todayStr;
+      promises.push(
+        statDocRef.set({
+          date: todayStr,
+          hasShards: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).catch(err => {
+          functions.logger.warn('⚠️ notificationStats parent init error:', err.message);
+        })
+      );
+    }
+
+    await Promise.all(promises);
+  } catch (err) {
+    functions.logger.warn('⚠️ recordNotificationPushStat error:', err);
+  }
+}
+
+// Güvenli Yönetici veya Dahili Bakım Anahtarı Doğrulayıcı (HTTP Endpoint Koruması & P1-14 Custom Claims)
+async function _verifyAdminOrInternalSecret(req) {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') return true;
+
+  const providedKey = req.headers['x-admin-secret'] || req.headers['x-maintenance-key'] || req.query.key;
+  const configuredSecret = process.env.ADMIN_SECRET_KEY || (functions.config().admin && functions.config().admin.secret);
+  if (configuredSecret && providedKey && String(providedKey) === String(configuredSecret)) {
+    return true;
+  }
+
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    const idToken = authHeader.split('Bearer ')[1].trim();
+    try {
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      // P1-14: Custom Claims öncelikli kontrol (0 Firestore okuması)
+      if (decoded.admin === true || decoded.isAdmin === true || decoded.role === 'admin') {
+        return true;
+      }
+      // Fallback: Firestore users/{uid} doküman kontrolü
+      const userDoc = await admin.firestore().collection('users').doc(decoded.uid).get();
+      if (userDoc.exists) {
+        const u = userDoc.data() || {};
+        if (u.isAdmin === true || u.isadmin === true || u.isAdmin === 'true' || u.isadmin === 'true' || u.role === 'admin') {
+          return true;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return false;
+}
+
+// Alt koleksiyonları 400'lük güvenli batch parçalarıyla tamamen silen yardımcı fonksiyon
+async function _deleteSubcollectionBatch(colRef) {
+  const db = admin.firestore();
+  let hasMore = true;
+  while (hasMore) {
+    const snap = await colRef.limit(400).get();
+    if (snap.empty) {
+      hasMore = false;
+      break;
+    }
+    const batch = db.batch();
+    snap.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.size < 400) {
+      hasMore = false;
+    }
+  }
+}
+
 const cleanTopicName = (str) => {
   if (!str) return 'genel';
   return normalize(str).replace(/[^a-z0-9_]/g, '_');
@@ -466,18 +602,10 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   try {
     let notificationsEnabled = true;
     try {
-      const [appConfigDoc, sysConfigDoc] = await Promise.all([
-        admin.firestore().collection('settings').doc('app').get(),
-        admin.firestore().collection('systemConfig').doc('notifications').get()
-      ]);
-      if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
-        notificationsEnabled = false;
-      }
-      if (sysConfigDoc.exists && sysConfigDoc.data().enabled === false) {
-        notificationsEnabled = false;
-      }
+      const masterConfig = await getCachedMasterConfig();
+      notificationsEnabled = masterConfig.isGloballyEnabled;
     } catch (cfgErr) {
-      functions.logger.warn('⚠️ Ayarlar okunurken hata, varsayılan açık:', cfgErr.message);
+      functions.logger.warn('⚠️ Master config okunurken hata, varsayılan açık:', cfgErr.message);
     }
 
     const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
@@ -704,8 +832,8 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       reasonDetail: match.detail,
       reasons: match.reasons || {},
       read: false,
-      isTopicDelivered: match.reason === 'category',
-      pushStatus: match.reason === 'category' ? 'delivered_via_topic' : 'pending',
+      isTopicDelivered: (match.reason === 'category' || match.reason === 'keyword'),
+      pushStatus: (match.reason === 'category' || match.reason === 'keyword') ? 'delivered_via_topic' : 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -783,10 +911,8 @@ exports.onDealCreated = functions.firestore
     if (isUserSubmitted) {
       // Normal kullanıcı paylaşımı - dealSharingEnabled kontrolü yap
       try {
-        const settingsDoc = await admin.firestore().collection('settings').doc('app').get();
-        const dealSharingEnabled = settingsDoc.exists && settingsDoc.data()
-          ? (settingsDoc.data().dealSharingEnabled !== false)
-          : true;
+        const masterConfig = await getCachedMasterConfig();
+        const dealSharingEnabled = masterConfig.appConfig.dealSharingEnabled !== false;
 
         if (!dealSharingEnabled) {
           // Paylaşımlar durdurulmuş - deal'i sil
@@ -1143,43 +1269,48 @@ exports.onDealUpdated = functions.firestore
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
-        // Güncel kullanıcı verilerini alıp otomatik rozet kontrolü yap
-        const userSnap = await userRef.get();
-        if (userSnap.exists) {
-          const uData = userSnap.data() || {};
-          const currentBadges = Array.isArray(uData.badges) ? uData.badges : [];
-          const pts = Number(uData.points) || 0;
-          const tLikes = Number(uData.totalLikes) || 0;
-          const dCount = Number(uData.dealCount) || 0;
+        // FAZ 2 (FS-CF-03): Rozet kontrolü her oyda bir tekrarlanmaz;
+        // Viral oylama anında users/{postedBy} üzerinde write contention ve N+1 okuma/yazma kilitlenmesini önlemek için
+        // rozet kontrolü yalnızca eşik oylarda (ilk 5 oy veya her 5 oyda bir) yürütülür.
+        const shouldCheckBadges = (newHotVotes <= 5 || newHotVotes % 5 === 0);
+        if (shouldCheckBadges) {
+          const userSnap = await userRef.get();
+          if (userSnap.exists) {
+            const uData = userSnap.data() || {};
+            const currentBadges = Array.isArray(uData.badges) ? uData.badges : [];
+            const pts = Number(uData.points) || 0;
+            const tLikes = Number(uData.totalLikes) || 0;
+            const dCount = Number(uData.dealCount) || 0;
 
-          const eligible = [];
-          // Fırsat Paylaşım Rozetleri
-          if (dCount >= 1) eligible.push('first_spark');
-          if (dCount >= 10) eligible.push('hunter_apprentice');
-          if (dCount >= 20) eligible.push('contributor');
-          if (dCount >= 50) eligible.push('master_hunter');
-          if (dCount >= 150) eligible.push('legendary_hunter');
+            const eligible = [];
+            // Fırsat Paylaşım Rozetleri
+            if (dCount >= 1) eligible.push('first_spark');
+            if (dCount >= 10) eligible.push('hunter_apprentice');
+            if (dCount >= 20) eligible.push('contributor');
+            if (dCount >= 50) eligible.push('master_hunter');
+            if (dCount >= 150) eligible.push('legendary_hunter');
 
-          // Puan & Sıcaklık Rozetleri
-          if (pts >= 15) eligible.push('bronze');
-          if (pts >= 35) eligible.push('voice_of_community');
-          if (pts >= 50) eligible.push('active_voter');
-          if (pts >= 100) eligible.push('silver');
-          if (pts >= 150) eligible.push('flame_master');
-          if (pts >= 300) eligible.push('gold');
-          if (pts >= 500) eligible.push('volcanic_record');
+            // Puan & Sıcaklık Rozetleri
+            if (pts >= 15) eligible.push('bronze');
+            if (pts >= 35) eligible.push('voice_of_community');
+            if (pts >= 50) eligible.push('active_voter');
+            if (pts >= 100) eligible.push('silver');
+            if (pts >= 150) eligible.push('flame_master');
+            if (pts >= 300) eligible.push('gold');
+            if (pts >= 500) eligible.push('volcanic_record');
 
-          // Beğeni Rozetleri
-          if (tLikes >= 40) eligible.push('helpful');
-          if (tLikes >= 150) eligible.push('top_reviewer');
+            // Beğeni Rozetleri
+            if (tLikes >= 40) eligible.push('helpful');
+            if (tLikes >= 150) eligible.push('top_reviewer');
 
-          const newBadges = eligible.filter(b => !currentBadges.includes(b));
-          if (newBadges.length > 0) {
-            await userRef.set({
-              badges: admin.firestore.FieldValue.arrayUnion(...newBadges),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-            functions.logger.info(`🎉 Kullanıcı ${postedBy} yeni rozetler kazandı:`, newBadges);
+            const newBadges = eligible.filter(b => !currentBadges.includes(b));
+            if (newBadges.length > 0) {
+              await userRef.set({
+                badges: admin.firestore.FieldValue.arrayUnion(...newBadges),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              }, { merge: true });
+              functions.logger.info(`🎉 Kullanıcı ${postedBy} yeni rozetler kazandı:`, newBadges);
+            }
           }
         }
       } catch (voteScoreErr) {
@@ -1225,12 +1356,13 @@ exports.onCommentCreated = functions.firestore
     // Yorum paylaşım durumu kontrolü (sadece normal kullanıcılar için, admin hariç)
     const userId = comment.userId || 'unknown';
     let isAdmin = false;
+    let cachedUserDoc = null;
 
     if (userId && userId !== 'unknown') {
       try {
-        const userDoc = await admin.firestore().collection('users').doc(userId).get();
-        isAdmin = userDoc.exists && userDoc.data()
-          ? (userDoc.data().isAdmin === true || userDoc.data().isadmin === true || userDoc.data().isAdmin === 'true' || userDoc.data().isadmin === 'true')
+        cachedUserDoc = await admin.firestore().collection('users').doc(userId).get();
+        isAdmin = cachedUserDoc.exists && cachedUserDoc.data()
+          ? (cachedUserDoc.data().isAdmin === true || cachedUserDoc.data().isadmin === true || cachedUserDoc.data().isAdmin === 'true' || cachedUserDoc.data().isadmin === 'true')
           : false;
       } catch (adminCheckErr) {
         functions.logger.warn('⚠️ Admin kontrolü sırasında hata:', adminCheckErr.message);
@@ -1240,10 +1372,8 @@ exports.onCommentCreated = functions.firestore
     // Admin değilse yorum paylaşım durumunu kontrol et (Acil Durum Şalteri)
     if (!isAdmin) {
       try {
-        const settingsDoc = await admin.firestore().collection('settings').doc('app').get();
-        const commentSharingEnabled = settingsDoc.exists && settingsDoc.data()
-          ? (settingsDoc.data().commentSharingEnabled !== false)
-          : true;
+        const masterConfig = await getCachedMasterConfig();
+        const commentSharingEnabled = masterConfig.appConfig.commentSharingEnabled !== false;
 
         if (!commentSharingEnabled) {
           functions.logger.warn('🚫 Yorum paylaşımı durdurulmuş, yorum siliniyor:', commentId);
@@ -1311,10 +1441,13 @@ exports.onCommentCreated = functions.firestore
     const replierUserId = comment.userId || 'unknown';
 
     // P1-16 (R-AUTH-14): Gönderici adını sahte istemci verisinden değil, otoriter kullanıcı profilinden doğrula
+    // FS-CF-13: Üstte çekilen cachedUserDoc yeniden kullanılır (Tekil okuma garantisi, N+1 sıfırlama)
     let verifiedSenderName = 'Bir kullanıcı';
     if (replierUserId && replierUserId !== 'unknown') {
       try {
-        const senderUserDoc = await admin.firestore().collection('users').doc(replierUserId).get();
+        const senderUserDoc = (cachedUserDoc && replierUserId === userId)
+          ? cachedUserDoc
+          : await admin.firestore().collection('users').doc(replierUserId).get();
         if (senderUserDoc.exists) {
           const sData = senderUserDoc.data() || {};
           verifiedSenderName = sData.displayName || sData.userName || sData.username || (comment.userName || 'Bir kullanıcı');
@@ -1836,18 +1969,10 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
     try {
       let notificationsEnabled = true;
       try {
-        const [appConfigDoc, sysConfigDoc] = await Promise.all([
-          admin.firestore().collection('settings').doc('app').get(),
-          admin.firestore().collection('systemConfig').doc('notifications').get()
-        ]);
-        if (appConfigDoc.exists && appConfigDoc.data().notificationsEnabled === false) {
-          notificationsEnabled = false;
-        }
-        if (sysConfigDoc.exists && sysConfigDoc.data().enabled === false) {
-          notificationsEnabled = false;
-        }
+        const masterConfig = await getCachedMasterConfig();
+        notificationsEnabled = masterConfig.isGloballyEnabled;
       } catch (cfgErr) {
-        functions.logger.warn('⚠️ Ayarlar okunurken hata, varsayılan açık:', cfgErr.message);
+        functions.logger.warn('⚠️ Master config okunurken hata, varsayılan açık:', cfgErr.message);
       }
 
       const turkeyTime = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour12: false });
@@ -2198,8 +2323,10 @@ exports.onCouponUpdated = functions
 
     if (afterData.durum === 'aktif' && netSoguk >= 5) {
       if (afterData.kaynakTipi === 'web') {
-        functions.logger.info(`🗑️ Web kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), siliniyor: ${kuponId}`);
-        await admin.firestore().collection('kuponlar').doc(kuponId).delete();
+        functions.logger.info(`🗑️ Web kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), votes alt koleksiyonu ve doküman siliniyor: ${kuponId}`);
+        const kuponRef = admin.firestore().collection('kuponlar').doc(kuponId);
+        await _deleteSubcollectionBatch(kuponRef.collection('votes'));
+        await kuponRef.delete();
         return null;
       } else {
         functions.logger.info(`❄️ Topluluk kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), 'gecersiz' yapılıyor: ${kuponId}`);
@@ -2298,20 +2425,13 @@ exports.onNotificationCreated = functions.firestore
       return null;
     }
 
-    // 0. Check global Master Switch for push notifications (P0-08 / R-AUTH-11 Çift Şalter)
+    // 0. Check global Master Switch for push notifications (P0-08 / R-AUTH-11 Çift Şalter & FS-CF-01 Bellek Önbelleği)
     let sysConfig = {};
     try {
-      const [sysConfigDoc, appConfigDoc] = await Promise.all([
-        admin.firestore().collection('systemConfig').doc('notifications').get(),
-        admin.firestore().collection('settings').doc('app').get()
-      ]);
-      if (sysConfigDoc.exists) {
-        sysConfig = sysConfigDoc.data() || {};
-      }
-      const isSysDisabled = sysConfigDoc.exists && sysConfig.enabled === false;
-      const isAppDisabled = appConfigDoc.exists && appConfigDoc.data() && appConfigDoc.data().notificationsEnabled === false;
-      if (isSysDisabled || isAppDisabled) {
-        functions.logger.info(`🚫 Global master notification switch is disabled (sys: ${!isSysDisabled}, app: ${!isAppDisabled}). Skipping push for ${notificationId}`);
+      const masterConfig = await getCachedMasterConfig();
+      sysConfig = masterConfig.sysConfig || {};
+      if (!masterConfig.isGloballyEnabled) {
+        functions.logger.info(`🚫 Global master notification switch is disabled (sys: ${!masterConfig.isSysDisabled}, app: ${!masterConfig.isAppDisabled}). Skipping push for ${notificationId}`);
         await snap.ref.set({
           pushEligible: false,
           pushStatus: 'disabled_by_system_master_switch',
@@ -2972,17 +3092,8 @@ exports.onNotificationCreated = functions.firestore
     }, { merge: true });
 
     if (successCount > 0) {
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const statRef = admin.firestore().collection('notificationStats').doc(todayStr);
-        await statRef.set({
-          date: todayStr,
-          count: admin.firestore.FieldValue.increment(successCount),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-      } catch (statErr) {
-        functions.logger.warn('⚠️ notificationStats update error:', statErr);
-      }
+      // FAZ 1 (FS-CF-02): Dağıtık Sayaç (Sharded Counter) ile 1 write/sec hotspot engeli
+      await recordNotificationPushStat(successCount);
     }
 
     functions.logger.info(`✅ Push gönderim süreci tamamlandı. Başarılı cihaz sayısı: ${successCount}/${devices.length}`);
@@ -2992,14 +3103,15 @@ exports.onNotificationCreated = functions.firestore
 // SSRF Koruma Yardımcısı - Özel ve dahili IP aralıklarını denetler
 function isPrivateIp(ip) {
   if (!ip) return true;
-  if (ip.startsWith('127.')) return true; // IPv4 Loopback
-  if (ip.startsWith('10.')) return true;  // Class A Private
-  if (ip.startsWith('192.168.')) return true; // Class C Private
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) return true; // Class B Private
-  if (ip.startsWith('169.254.')) return true; // Link-local / Cloud Metadata (169.254.169.254)
-  if (ip.startsWith('0.') || ip === '255.255.255.255') return true;
-  if (/^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./.test(ip)) return true; // CGNAT
-  if (ip === '::1' || ip === '::' || /^fe80:/i.test(ip) || /^fc00:/i.test(ip) || /^fd00:/i.test(ip)) return true; // IPv6 loopback / ULA / link-local
+  const normalized = ip.toLowerCase().startsWith('::ffff:') ? ip.substring(7) : ip;
+  if (normalized.startsWith('127.')) return true; // IPv4 Loopback
+  if (normalized.startsWith('10.')) return true;  // Class A Private
+  if (normalized.startsWith('192.168.')) return true; // Class C Private
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(normalized)) return true; // Class B Private
+  if (normalized.startsWith('169.254.')) return true; // Link-local / Cloud Metadata (169.254.169.254)
+  if (normalized.startsWith('0.') || normalized === '255.255.255.255') return true;
+  if (/^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\./.test(normalized)) return true; // CGNAT
+  if (normalized === '::1' || normalized === '::' || /^fe80:/i.test(normalized) || /^fc00:/i.test(normalized) || /^fd00:/i.test(normalized)) return true; // IPv6 loopback / ULA / link-local
   return false;
 }
 
@@ -3032,11 +3144,14 @@ async function validateSafePublicUrl(urlString) {
     throw new Error('Özel veya yerel IP adreslerine erişim engellendi');
   }
 
-  // DNS Rebinding koruması
+  // DNS Rebinding ve Çoklu-A Kaydı SSRF Koruması (FS-CF-05)
   try {
-    const lookup = await dns.lookup(hostname);
-    if (isPrivateIp(lookup.address)) {
-      throw new Error('Dahili IP adresi çözümlemesi engellendi');
+    const lookupResults = await dns.lookup(hostname, { all: true });
+    const records = Array.isArray(lookupResults) ? lookupResults : [lookupResults];
+    for (const record of records) {
+      if (isPrivateIp(record.address)) {
+        throw new Error('Dahili IP adresi çözümlemesi engellendi');
+      }
     }
   } catch (dnsErr) {
     if (dnsErr.message.includes('engellendi')) throw dnsErr;
@@ -3135,7 +3250,7 @@ exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLi
   // CORS headers
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, x-admin-secret, x-maintenance-key');
 
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -3171,6 +3286,17 @@ exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLi
       });
       return;
     }
+  }
+
+  // P0 Kalkanı (FS-CF-05): Yönetici Yetkilendirmesi (Açık Proxy ve DoS İstismar Kalkanı)
+  const isAuthorized = await _verifyAdminOrInternalSecret(req);
+  if (!isAuthorized) {
+    functions.logger.warn(`🚫 [resolveShortLink] Yetkisiz açık erişim engellendi. IP: ${clientIp}`);
+    res.status(401).json({
+      success: false,
+      error: 'Yetkisiz erişim. Geçerli bir Yönetici ID Token veya bakım anahtarı gereklidir.'
+    });
+    return;
   }
 
   try {
@@ -3250,10 +3376,12 @@ exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLi
  * 3. Eşzamanlı Silme (Concurrency): 10'arlı paralel chunk'lar halinde hızlı silme sağlandı.
  * 4. Sayfalama ve Bellek Koruması: maxResults: 1000 ile OOM çökmeleri engellendi.
  */
-async function _cleanupOldImagesCore({ days = 40, maxFiles = 1000 } = {}) {
+async function _cleanupOldImagesCore({ days = 40, maxFiles = 3000 } = {}) {
   functions.logger.info(`🧹 Storage görsel temizleme başlıyor (${days} Günlük güvenlik payı, max: ${maxFiles})...`);
   const bucket = admin.storage().bucket();
   const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
+  const startTime = Date.now();
+  const MAX_EXECUTION_TIME_MS = 240000; // 4 dakika güvenlik kalkanı (300s timeout öncesi)
 
   let deletedCount = 0;
   let errorCount = 0;
@@ -3261,17 +3389,40 @@ async function _cleanupOldImagesCore({ days = 40, maxFiles = 1000 } = {}) {
   const deletedFiles = [];
 
   try {
-    const [files] = await bucket.getFiles({
+    const PAGE_SIZE = 1000;
+    let currentQuery = {
       prefix: 'deals/',
       autoPaginate: false,
-      maxResults: maxFiles
-    });
+      maxResults: Math.min(maxFiles, PAGE_SIZE)
+    };
+    let pagesScanned = 0;
+    const maxPages = 5;
+    const filesToInspect = [];
 
-    functions.logger.info(`📂 Storage'da incelenecek ${files.length} görsel dosyası bulundu.`);
+    while (currentQuery && pagesScanned < maxPages && filesToInspect.length < maxFiles) {
+      if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
+        functions.logger.warn(`⏱️ Storage dosya listeleme zaman aşımı sınırına yaklaştı (${pagesScanned} sayfa tarandı).`);
+        break;
+      }
+
+      const [files, nextQuery] = await bucket.getFiles(currentQuery);
+      if (!files || files.length === 0) break;
+
+      filesToInspect.push(...files);
+      pagesScanned++;
+
+      if (nextQuery && filesToInspect.length < maxFiles) {
+        currentQuery = nextQuery;
+      } else {
+        break;
+      }
+    }
+
+    functions.logger.info(`📂 Storage'da ${pagesScanned} sayfada incelenecek ${filesToInspect.length} görsel dosyası bulundu.`);
 
     const filesToDelete = [];
 
-    for (const file of files) {
+    for (const file of filesToInspect) {
       try {
         let createdTime;
         if (file.metadata && file.metadata.timeCreated) {
@@ -3297,6 +3448,11 @@ async function _cleanupOldImagesCore({ days = 40, maxFiles = 1000 } = {}) {
     // 10'arlı eşzamanlı parçalar halinde güvenli ve hızlı silme
     const CONCURRENCY = 10;
     for (let i = 0; i < filesToDelete.length; i += CONCURRENCY) {
+      if (Date.now() - startTime > MAX_EXECUTION_TIME_MS) {
+        functions.logger.warn(`⏱️ Storage silme işlemi zaman sınırına yaklaştı. Kalan ${filesToDelete.length - i} dosya sonraki çalıştırmaya devredildi.`);
+        break;
+      }
+
       const chunk = filesToDelete.slice(i, i + CONCURRENCY);
       await Promise.all(chunk.map(async ({ file, createdTime }) => {
         try {
@@ -3315,7 +3471,7 @@ async function _cleanupOldImagesCore({ days = 40, maxFiles = 1000 } = {}) {
       }));
     }
 
-    functions.logger.info(`✅ Görsel temizliği tamamlandı! Silinen: ${deletedCount}, Atlanan: ${skippedCount}, Hata: ${errorCount}`);
+    functions.logger.info(`✅ Görsel temizliği tamamlandı! Silinen: ${deletedCount}, Atlanan: ${skippedCount}, Hata: ${errorCount}, Sayfa: ${pagesScanned}`);
 
     // Firestore istatistik kaydı
     await admin.firestore().collection('system').doc('cleanup_stats').set({
@@ -3323,13 +3479,15 @@ async function _cleanupOldImagesCore({ days = 40, maxFiles = 1000 } = {}) {
       deletedCount,
       skippedCount,
       errorCount,
-      totalFiles: files.length,
+      totalFiles: filesToInspect.length,
+      pagesScanned,
       thresholdDays: days,
       cutoffDate: cutoffDate.toISOString()
     }, { merge: true });
 
     return {
-      totalFiles: files.length,
+      totalFiles: filesToInspect.length,
+      pagesScanned,
       deletedCount,
       skippedCount,
       errorCount,
@@ -3351,37 +3509,9 @@ exports.cleanupOldImages = functions
   .pubsub.schedule('0 0 * * *') // Her gün gece 00:00'da çalışır
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('cleanupOldImages', async (context) => {
-    await _cleanupOldImagesCore({ days: 40 });
+    await _cleanupOldImagesCore({ days: 40, maxFiles: 3000 });
     return null;
   }));
-
-// Güvenli Yönetici veya Dahili Bakım Anahtarı Doğrulayıcı (HTTP Endpoint Koruması)
-async function _verifyAdminOrInternalSecret(req) {
-  if (process.env.FUNCTIONS_EMULATOR === 'true') return true;
-
-  const providedKey = req.headers['x-admin-secret'] || req.headers['x-maintenance-key'] || req.query.key;
-  const configuredSecret = process.env.ADMIN_SECRET_KEY || (functions.config().admin && functions.config().admin.secret);
-  if (configuredSecret && providedKey && String(providedKey) === String(configuredSecret)) {
-    return true;
-  }
-
-  const authHeader = req.headers.authorization || '';
-  if (authHeader.startsWith('Bearer ')) {
-    const idToken = authHeader.split('Bearer ')[1].trim();
-    try {
-      const decoded = await admin.auth().verifyIdToken(idToken);
-      const userDoc = await admin.firestore().collection('users').doc(decoded.uid).get();
-      if (userDoc.exists) {
-        const u = userDoc.data() || {};
-        if (u.isAdmin === true || u.isadmin === true || u.isAdmin === 'true' || u.isadmin === 'true' || u.role === 'admin') {
-          return true;
-        }
-      }
-    } catch (_) {}
-  }
-
-  return false;
-}
 
 /**
  * 📷 MANUEL GÖRSELLERİ TEMİZLE - HTTP ile tetiklenir (Yetki ve Güvenlik Eşik Korumalı)
@@ -3520,15 +3650,11 @@ exports.sendManualNotification = functions
 
     if (targetType === 'all') {
       // 0. GÜVENLİK & SESSİZ SAAT KALKANI (R-AUTH-11):
-      // A. Global Bildirim Şalteri Kontrolü:
+      // A. Global Bildirim Şalteri Kontrolü (FS-CF-01 Bellek Önbelleği):
       let isGloballyEnabled = true;
       try {
-        const [sysDoc, appDoc] = await Promise.all([
-          admin.firestore().collection('systemConfig').doc('notifications').get(),
-          admin.firestore().collection('settings').doc('app').get()
-        ]);
-        if (sysDoc.exists && sysDoc.data().enabled === false) isGloballyEnabled = false;
-        if (appDoc.exists && appDoc.data().notificationsEnabled === false) isGloballyEnabled = false;
+        const masterConfig = await getCachedMasterConfig();
+        isGloballyEnabled = masterConfig.isGloballyEnabled;
       } catch (chkErr) {
         functions.logger.warn('⚠️ Global bildirim şalteri kontrol uyarısı:', chkErr.message);
       }
@@ -3589,53 +3715,9 @@ exports.sendManualNotification = functions
         functions.logger.warn('⚠️ globalAnnouncements dokümanı oluşturulurken hata:', annErr.message);
       }
 
-      // 3. KULLANICI BİLDİRİM MERKEZİ (In-App Feed) Geriye Dönük Uyumluluk:
-      // Eski sürüm istemcilerin de kişisel kutularında görebilmesi için azami 300 aktif kullanıcıya
-      // isTopicDelivered: true ve pushStatus: 'delivered_via_topic' bayraklarıyla güvenle yazılır.
-      // Bu bayraklar sayesinde onNotificationCreated tetikleyicisi ASLA mükerrer push fırlatmaz.
-      const MAX_INAPP_TARGETS = 300;
-      const usersSnap = await admin.firestore().collection('users')
-        .select()
-        .limit(MAX_INAPP_TARGETS)
-        .get();
-
-      let batch = admin.firestore().batch();
-      let opCount = 0;
-      const notificationId = logRef.id;
-
-      for (const uDoc of usersSnap.docs) {
-        const userId = uDoc.id;
-        const notificationRef = admin.firestore()
-          .collection('users')
-          .doc(userId)
-          .collection('notifications')
-          .doc(notificationId);
-
-        batch.set(notificationRef, {
-          id: notificationId,
-          announcementId: logRef.id,
-          type: notifType,
-          reason: notifReason,
-          title: cleanTitle,
-          body: cleanBody,
-          imageUrl: cleanImageUrl || null,
-          dealId: cleanDealId || null,
-          read: false,
-          isTopicDelivered: true,
-          pushStatus: 'delivered_via_topic',
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-
-        opCount++;
-        if (opCount >= 400) {
-          await batch.commit();
-          batch = admin.firestore().batch();
-          opCount = 0;
-        }
-      }
-      if (opCount > 0) {
-        await batch.commit();
-      }
+      // 3. KÜRESEL BİLDİRİM MİMARİSİ (FS-CF-07):
+      // 100k kullanıcı ölçeğinde rastgele 300 kullanıcıya kişisel bildirim yazarak 300 container
+      // tetiklenmesi önlenmiştir. Mobil istemciler globalAnnouncements koleksiyonunu doğrudan dinler.
       responseId = `broadcast_topic_${broadcastTopic}_and_global_announcement_${logRef.id}`;
 
     } else if (targetType === 'token') {
@@ -3704,13 +3786,8 @@ exports.sendManualNotification = functions
       responseId
     });
 
-    // 5. Günlük istatistik güncelle (Admin paneli çizgi grafik için)
-    const todayStr = new Date().toISOString().split('T')[0];
-    const statRef = admin.firestore().collection('notificationStats').doc(todayStr);
-    await statRef.set({
-      date: todayStr,
-      count: admin.firestore.FieldValue.increment(1)
-    }, { merge: true });
+    // 5. Günlük istatistik güncelle (FAZ 1 FS-CF-02: Dağıtık Sayaç)
+    await recordNotificationPushStat(1);
 
     return { success: true, responseId };
   } catch (error) {
@@ -3748,7 +3825,9 @@ exports.sendManualNotification = functions
  * 4. Dinamik Bounded Limit & Telemetri: Opsiyonel data.limit parametresi (min 10, max 500),
  *    totalScanned ve hasMore sinyali ile admin paneline tam şeffaflık sağlar.
  */
-exports.cleanupInvalidTokens = functions.https.onCall(wrapCall('cleanupInvalidTokens', async (data, context) => {
+exports.cleanupInvalidTokens = functions
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onCall(wrapCall('cleanupInvalidTokens', async (data, context) => {
   // Admin yetki kontrolü
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
@@ -3773,10 +3852,16 @@ exports.cleanupInvalidTokens = functions.https.onCall(wrapCall('cleanupInvalidTo
     functions.logger.info(`🤖 Geçersiz token temizleme işlemi başlatıldı (userDevices limit: ${scanLimit})...`);
 
     const db = admin.firestore();
-    const devicesSnap = await db.collection('userDevices')
+    // FS-CF-14: Sayfalı imleç (Cursor-based pagination) ile 100k cihaz koleksiyonunun tamamını tarayabilme
+    let query = db.collection('userDevices')
       .where('active', '==', true)
-      .limit(scanLimit)
-      .get();
+      .orderBy(admin.firestore.FieldPath.documentId());
+
+    if (data && data.startAfterDocId && typeof data.startAfterDocId === 'string' && data.startAfterDocId.trim()) {
+      query = query.startAfter(data.startAfterDocId.trim());
+    }
+
+    const devicesSnap = await query.limit(scanLimit).get();
 
     let checkedCount = 0;
     const invalidDocs = [];
@@ -3841,14 +3926,16 @@ exports.cleanupInvalidTokens = functions.https.onCall(wrapCall('cleanupInvalidTo
       cleanedCount += batchChunk.length;
     }
 
-    functions.logger.info(`✅ Token temizlik tamamlandı. Taranan: ${devicesSnap.size}, Kontrol: ${checkedCount}, Pasifleştirilen: ${cleanedCount}`);
+    const lastDoc = docs.length > 0 ? docs[docs.length - 1] : null;
+    functions.logger.info(`✅ Token temizlik tamamlandı. Taranan: ${devicesSnap.size}, Kontrol: ${checkedCount}, Pasifleştirilen: ${cleanedCount}, Son ID: ${lastDoc ? lastDoc.id : 'yok'}`);
 
     return {
       success: true,
       checkedCount,
       cleanedCount,
       totalScanned: devicesSnap.size,
-      hasMore: devicesSnap.size === scanLimit
+      hasMore: devicesSnap.size === scanLimit,
+      lastDocId: lastDoc ? lastDoc.id : null
     };
   } catch (error) {
     throw error; // wrapCall yakalayıp systemErrors koleksiyonuna kaydeder
@@ -4002,6 +4089,40 @@ async function _cleanupExpiredDealsCore() {
 }
 
 /**
+ * FAZ 1 (FS-CF-02): Dünün notificationStats shard'larını toplayıp ana dokümana konsolide eder
+ */
+async function _rollupNotificationStatsShardsCore() {
+  const db = admin.firestore();
+  try {
+    const yesterday = new Date(Date.now() - 86400000);
+    const yesterdayStr = getTurkeyDateStr(yesterday);
+    const yesterdayDocRef = db.collection('notificationStats').doc(yesterdayStr);
+    const shardsSnap = await yesterdayDocRef.collection('shards').get();
+
+    if (!shardsSnap.empty) {
+      let shardTotal = 0;
+      const deleteBatch = db.batch();
+      shardsSnap.forEach(sDoc => {
+        shardTotal += (sDoc.data().count || 0);
+        deleteBatch.delete(sDoc.ref);
+      });
+
+      await yesterdayDocRef.set({
+        date: yesterdayStr,
+        count: admin.firestore.FieldValue.increment(shardTotal),
+        hasShards: false,
+        consolidatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      await deleteBatch.commit();
+      functions.logger.info(`✅ [FS-CF-02] Dünün bildirim istatistik shard'ları konsolide edildi: ${yesterdayStr} (+${shardTotal})`);
+    }
+  } catch (err) {
+    functions.logger.warn('⚠️ [FS-CF-02] notificationStats shard rollup uyarısı:', err.message);
+  }
+}
+
+/**
  * ⌛ 48 Saat Geçen Fırsatları Süresi Doldu (isExpired: true) Olarak İşaretler
  * Fırsatlar veritabanından SİLİNMEZ, 30 gün boyunca kullanıcının favorilerinde ve arşivde orijinal görseliyle kalır.
  */
@@ -4011,6 +4132,7 @@ exports.cleanupExpiredDeals = functions
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('cleanupExpiredDeals', async (context) => {
     await _cleanupExpiredDealsCore();
+    await _rollupNotificationStatsShardsCore();
     return null;
   }));
 
@@ -4047,6 +4169,7 @@ exports.cleanupExpiredDealsManual = functions
 
     try {
       const stats = await _cleanupExpiredDealsCore();
+      await _rollupNotificationStatsShardsCore();
       res.status(200).json({
         success: true,
         message: 'Fırsat süresi doldu işaretleme tamamlandı (Fırsatlar silinmedi, arşivlendi).',
@@ -4074,27 +4197,7 @@ exports.cleanupExpiredDealsManual = functions
  *    (500) aşılmayacak şekilde 400'lük parçalar halinde silinir.
  * 3. Hata İzolasyonu: Bir fırsatın silinmesinde oluşacak hata diğer fırsatların veya bildirimlerin
  *    silinmesini engellemez.
-/**
- * Alt koleksiyonları 400'lük güvenli batch parçalarıyla tamamen silen yardımcı fonksiyon
  */
-async function _deleteSubcollectionBatch(colRef) {
-  const db = admin.firestore();
-  let hasMore = true;
-  while (hasMore) {
-    const snap = await colRef.limit(400).get();
-    if (snap.empty) {
-      hasMore = false;
-      break;
-    }
-    const batch = db.batch();
-    snap.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-    if (snap.size < 400) {
-      hasMore = false;
-    }
-  }
-}
-
 async function _purgeOldDealsCore(days = 30) {
   const db = admin.firestore();
   const now = new Date();
@@ -4235,15 +4338,22 @@ async function _purgeOldDealsCore(days = 30) {
 async function _purgeOldNotificationsCore(days = 30) {
   const db = admin.firestore();
   const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
+  const startTime = Date.now();
+  const MAX_EXECUTION_TIME_MS = 450000; // 7.5 dakika zaman aşımı emniyeti
 
   functions.logger.info(`🧹 ${days} günden eski bildirimleri temizleme başladı. Eşik tarihi: ${cutoffDate.toISOString()}`);
 
   let totalDeleted = 0;
   let hasMore = true;
   let batchCount = 0;
-  const MAX_BATCHES = 25; // Maksimum 10.000 bildirim/sefer (Cloud Function timeout koruması)
+  const MAX_BATCHES = 50; // FAZ 2 (FS-CF-06): Azami 20.000 bildirim/sefer (Günlük 20.000 = ayda 600.000 temizlik)
 
   while (hasMore && batchCount < MAX_BATCHES) {
+    if (Date.now() - startTime >= MAX_EXECUTION_TIME_MS) {
+      functions.logger.warn(`⏱️ [FS-CF-06] Bildirim temizliği maksimum süreye (${MAX_EXECUTION_TIME_MS}ms) ulaştı. Kalanlar sonraki çalıştırmaya devredildi.`);
+      break;
+    }
+
     const snap = await db.collectionGroup('notifications')
       .where('createdAt', '<', cutoffDate)
       .limit(400)
@@ -4273,7 +4383,7 @@ async function _purgeOldNotificationsCore(days = 30) {
   }
 
   if (batchCount >= MAX_BATCHES && hasMore) {
-    functions.logger.warn(`⚠️ Azami bildirim temizleme tavanına (${MAX_BATCHES * 400}) ulaşıldı. Kalanlar bir sonraki periyotta temizlenecektir.`);
+    functions.logger.warn(`⚠️ [FS-CF-06] Azami günlük bildirim temizleme tavanına (${MAX_BATCHES * 400}) ulaşıldı. Kalanlar bir sonraki periyotta temizlenecektir.`);
   }
 
   functions.logger.info(`✅ Eski bildirim temizliği tamamlandı. Toplam silinen bildirim: ${totalDeleted}`);
@@ -4353,10 +4463,10 @@ async function _purgeOldSystemErrorsCore(days = 30) {
 
 exports.purgeOldDeals = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
-  .pubsub.schedule('0 4 * * 0') // Her Pazar 04:00'da çalışır
+  .pubsub.schedule('30 3 * * *') // FAZ 2 (FS-CF-06): Her gün gece 03:30'da çalışır (Günlük temizlik)
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('purgeOldDeals', async (context) => {
-    functions.logger.info('🔥 30 günlük fırsat ve bildirim kalıcı silme görevi başladı...');
+    functions.logger.info('🔥 Günlük fırsat, bildirim ve log kalıcı silme görevi başladı...');
     await _purgeOldDealsCore(30);
     return null;
   }));
@@ -4631,7 +4741,9 @@ async function _cleanupUserDataCore(userId) {
   return deletedStats;
 }
 
-exports.onUserDeleted = functions.auth.user().onDelete(wrapTrigger('onUserDeleted', async (user, context) => {
+exports.onUserDeleted = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .auth.user().onDelete(wrapTrigger('onUserDeleted', async (user, context) => {
   const userId = user.uid;
   functions.logger.info(`🗑️ Kullanıcı hesabı kalıcı silme tetiklendi: ${userId}`);
   await _cleanupUserDataCore(userId);
@@ -4642,7 +4754,9 @@ exports.onUserDeleted = functions.auth.user().onDelete(wrapTrigger('onUserDelete
  * P0-12 (R-PRV-08): KULLANICI KENDİ HESABINI SİLME (Callable)
  * İstemci tarafı güvenli kimlik doğrulama sonrası çağrılır. Verileri kaskat olarak temizler ve Auth kullanıcısını siler.
  */
-exports.deleteMyAccount = functions.https.onCall(wrapCall('deleteMyAccount', async (data, context) => {
+exports.deleteMyAccount = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(wrapCall('deleteMyAccount', async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
   }
@@ -4757,7 +4871,9 @@ exports.revokeAppleToken = functions.https.onCall(wrapCall('revokeAppleToken', a
  * 15. ADMİN TARAFINDAN KULLANICI HESABINI SİLME (Callable) - FAZ 6
  * Sadece adminler tetikleyebilir. Auth ve Firestore verilerini kaskat olarak temizler.
  */
-exports.adminDeleteUser = functions.https.onCall(wrapCall('adminDeleteUser', async (data, context) => {
+exports.adminDeleteUser = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(wrapCall('adminDeleteUser', async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
   }
@@ -5178,27 +5294,35 @@ function generateUserSearchKeywords(username, displayName, nickname) {
   return Array.from(kwSet).slice(0, 60);
 }
 
-exports.onUserUpdated = functions.firestore
+exports.onUserUpdated = functions
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .firestore
   .document('users/{userId}')
   .onUpdate(wrapTrigger('onUserUpdated', async (change, context) => {
     const before = change.before.data();
     const after = change.after.data();
     const userId = context.params.userId;
 
-    const oldPhoto = before.profileImageUrl || before.photoURL || '';
-    let newPhoto = after.profileImageUrl || after.photoURL || '';
-    const lowerPhoto = newPhoto.toLowerCase();
-    if (lowerPhoto.includes('kullanıcı pp') || lowerPhoto.includes('kullanici pp')) {
-      newPhoto = 'assets/avatars/avatar_cat.webp';
-    } else if (lowerPhoto.includes('kkpp') || lowerPhoto.includes('ayi') || lowerPhoto.includes('ayı') || lowerPhoto.includes('kullanıcı profili') || lowerPhoto.includes('kullanici profili')) {
-      newPhoto = 'assets/avatars/avatar_duck.webp';
-    } else if (lowerPhoto === 'assets/profil.jpg' || lowerPhoto === 'assets/profil.webp') {
-      newPhoto = 'assets/avatars/avatar_duck.webp';
-    } else if (newPhoto.startsWith('assets/') && /\.(jpg|jpeg|png)$/i.test(newPhoto)) {
-      newPhoto = newPhoto.replace(/\.(jpg|jpeg|png)$/i, '.webp');
+    function sanitizeAvatarUrl(url) {
+      if (!url || typeof url !== 'string') return '';
+      let sanitized = url.trim();
+      const lower = sanitized.toLowerCase();
+      if (lower.includes('kullanıcı pp') || lower.includes('kullanici pp')) {
+        return 'assets/avatars/avatar_cat.webp';
+      } else if (lower.includes('kkpp') || lower.includes('ayi') || lower.includes('ayı') || lower.includes('kullanıcı profili') || lower.includes('kullanici profili')) {
+        return 'assets/avatars/avatar_duck.webp';
+      } else if (lower === 'assets/profil.jpg' || lower === 'assets/profil.webp') {
+        return 'assets/avatars/avatar_duck.webp';
+      } else if (sanitized.startsWith('assets/') && /\.(jpg|jpeg|png)$/i.test(sanitized)) {
+        return sanitized.replace(/\.(jpg|jpeg|png)$/i, '.webp');
+      }
+      return sanitized;
     }
-    const oldName = before.username || before.displayName || before.nickname || '';
-    const newName = after.username || after.displayName || after.nickname || '';
+
+    const oldPhoto = sanitizeAvatarUrl(before.profileImageUrl || before.photoURL || '');
+    const newPhoto = sanitizeAvatarUrl(after.profileImageUrl || after.photoURL || '');
+    const oldName = (before.username || before.displayName || before.nickname || '').trim();
+    const newName = (after.username || after.displayName || after.nickname || '').trim();
 
     const photoChanged = oldPhoto !== newPhoto;
     const nameChanged = oldName !== newName;
@@ -5238,121 +5362,114 @@ exports.onUserUpdated = functions.firestore
     };
 
     /**
-     * Güvenli ve bounded batch güncelleme yardımcı fonksiyonu.
-     * Belgeleri kontrol eder ve yalnızca verisi değişmiş olanları batch'e ekler.
-     * 400 işlem sınırını aşmadan otomatik commit eder.
+     * Sayfalı ve sınırlı (cursor-based pagination) senkronizasyon fonksiyonu.
+     * 100k kullanıcı ölçeğinde aktif kullanıcıların 300'den fazla yorum/mesaj/fırsat
+     * üretmiş olabileceği senaryoda hard-cutoff yerine maxLimit'e (varsayılan 1200) kadar
+     * startAfter(lastDoc) ile sayfalar halinde tarar ve günceller.
      */
-    async function syncDocsWithBatch(docs, getUpdateData) {
-      let updatedCount = 0;
-      let skippedCount = 0;
-      let batch = db.batch();
-      let countInBatch = 0;
+    async function syncCollectionWithPagination(baseQuery, getUpdateData, entityName, maxLimit = 1200) {
+      let totalScanned = 0;
+      let totalUpdated = 0;
+      let totalSkipped = 0;
+      let lastDoc = null;
+      const pageSize = 400;
 
-      for (const doc of docs) {
-        const updateData = getUpdateData(doc.data());
-        if (!updateData || Object.keys(updateData).length === 0) {
-          skippedCount++;
-          continue;
+      while (totalScanned < maxLimit) {
+        const currentLimit = Math.min(pageSize, maxLimit - totalScanned);
+        let q = baseQuery.limit(currentLimit);
+        if (lastDoc) {
+          q = q.startAfter(lastDoc);
         }
 
-        batch.update(doc.ref, updateData);
-        countInBatch++;
-        updatedCount++;
+        const snap = await q.get();
+        if (snap.empty) break;
 
-        if (countInBatch >= 400) {
+        totalScanned += snap.size;
+        lastDoc = snap.docs[snap.docs.length - 1];
+
+        let batch = db.batch();
+        let countInBatch = 0;
+
+        for (const doc of snap.docs) {
+          const updateData = getUpdateData(doc.data());
+          if (!updateData || Object.keys(updateData).length === 0) {
+            totalSkipped++;
+            continue;
+          }
+
+          batch.update(doc.ref, updateData);
+          countInBatch++;
+          totalUpdated++;
+        }
+
+        if (countInBatch > 0) {
           await batch.commit();
-          batch = db.batch();
-          countInBatch = 0;
+        }
+
+        if (snap.size < currentLimit) {
+          break; // Son sayfaya ulaşıldı
         }
       }
 
-      if (countInBatch > 0) {
-        await batch.commit();
-      }
-
-      return { updatedCount, skippedCount };
+      return { scanned: totalScanned, updated: totalUpdated, skipped: totalSkipped };
     }
 
-    // 1. Yorumları Senkronize Et - Collection Group Query (Limit 300)
+    // 1. Yorumları Senkronize Et - Collection Group Query (Limit 1200, 400'erli sayfalar)
     try {
-      const commentsSnap = await db.collectionGroup('comments')
-        .where('userId', '==', userId)
-        .limit(300)
-        .get();
-
-      syncStats.comments.scanned = commentsSnap.size;
-      const res = await syncDocsWithBatch(commentsSnap.docs, (data) => {
+      const baseCommentsQuery = db.collectionGroup('comments').where('userId', '==', userId);
+      const res = await syncCollectionWithPagination(baseCommentsQuery, (data) => {
         const update = {};
         if (photoChanged && data.userProfileImageUrl !== newPhoto) update.userProfileImageUrl = newPhoto;
         if (nameChanged && data.userName !== newName) update.userName = newName;
         return update;
-      });
-      syncStats.comments.updated = res.updatedCount;
-      syncStats.comments.skipped = res.skippedCount;
-      functions.logger.info(`💬 Yorum senkronizasyonu (${userId}): ${res.updatedCount} güncellendi, ${res.skippedCount} atlandı.`);
+      }, 'comments');
+      syncStats.comments = res;
+      functions.logger.info(`💬 Yorum senkronizasyonu (${userId}): ${res.updated} güncellendi, ${res.skipped} atlandı (Taranan: ${res.scanned}).`);
     } catch (commentErr) {
       functions.logger.error('❌ Yorum senkronizasyon hatası:', commentErr.message);
     }
 
-    // 2. Gönderilen Mesajları Senkronize Et (Limit 300)
+    // 2. Gönderilen Mesajları Senkronize Et (Limit 1200, 400'erli sayfalar)
     try {
-      const sentMsgSnap = await db.collection('messages')
-        .where('senderId', '==', userId)
-        .limit(300)
-        .get();
-
-      syncStats.sentMessages.scanned = sentMsgSnap.size;
-      const res = await syncDocsWithBatch(sentMsgSnap.docs, (data) => {
+      const baseSentQuery = db.collection('messages').where('senderId', '==', userId);
+      const res = await syncCollectionWithPagination(baseSentQuery, (data) => {
         const update = {};
         if (photoChanged && data.senderImageUrl !== newPhoto) update.senderImageUrl = newPhoto;
         if (nameChanged && data.senderName !== newName) update.senderName = newName;
         return update;
-      });
-      syncStats.sentMessages.updated = res.updatedCount;
-      syncStats.sentMessages.skipped = res.skippedCount;
-      functions.logger.info(`✉️ Gönderilen mesaj senkronizasyonu (${userId}): ${res.updatedCount} güncellendi, ${res.skippedCount} atlandı.`);
+      }, 'sentMessages');
+      syncStats.sentMessages = res;
+      functions.logger.info(`✉️ Gönderilen mesaj senkronizasyonu (${userId}): ${res.updated} güncellendi, ${res.skipped} atlandı (Taranan: ${res.scanned}).`);
     } catch (msgErr) {
       functions.logger.error('❌ Gönderilen mesaj senkronizasyon hatası:', msgErr.message);
     }
 
-    // 3. Alınan Mesajları Senkronize Et (Limit 300)
+    // 3. Alınan Mesajları Senkronize Et (Limit 1200, 400'erli sayfalar)
     try {
-      const receivedMsgSnap = await db.collection('messages')
-        .where('receiverId', '==', userId)
-        .limit(300)
-        .get();
-
-      syncStats.receivedMessages.scanned = receivedMsgSnap.size;
-      const res = await syncDocsWithBatch(receivedMsgSnap.docs, (data) => {
+      const baseReceivedQuery = db.collection('messages').where('receiverId', '==', userId);
+      const res = await syncCollectionWithPagination(baseReceivedQuery, (data) => {
         const update = {};
         if (photoChanged && data.receiverImageUrl !== newPhoto) update.receiverImageUrl = newPhoto;
         if (nameChanged && data.receiverName !== newName) update.receiverName = newName;
         return update;
-      });
-      syncStats.receivedMessages.updated = res.updatedCount;
-      syncStats.receivedMessages.skipped = res.skippedCount;
-      functions.logger.info(`✉️ Alınan mesaj senkronizasyonu (${userId}): ${res.updatedCount} güncellendi, ${res.skippedCount} atlandı.`);
+      }, 'receivedMessages');
+      syncStats.receivedMessages = res;
+      functions.logger.info(`✉️ Alınan mesaj senkronizasyonu (${userId}): ${res.updated} güncellendi, ${res.skipped} atlandı (Taranan: ${res.scanned}).`);
     } catch (msgErr) {
       functions.logger.error('❌ Alınan mesaj senkronizasyon hatası:', msgErr.message);
     }
 
-    // 4. Kullanıcının Fırsatlarını Senkronize Et (Deals - Limit 300)
+    // 4. Kullanıcının Fırsatlarını Senkronize Et (Deals - Limit 1200, 400'erli sayfalar)
     try {
-      const userDealsSnap = await db.collection('deals')
-        .where('postedBy', '==', userId)
-        .limit(300)
-        .get();
-
-      syncStats.deals.scanned = userDealsSnap.size;
-      const res = await syncDocsWithBatch(userDealsSnap.docs, (data) => {
+      const baseDealsQuery = db.collection('deals').where('postedBy', '==', userId);
+      const res = await syncCollectionWithPagination(baseDealsQuery, (data) => {
         const update = {};
         if (photoChanged && data.postedByAvatar !== newPhoto) update.postedByAvatar = newPhoto;
         if (nameChanged && data.postedByName !== newName) update.postedByName = newName;
         return update;
-      });
-      syncStats.deals.updated = res.updatedCount;
-      syncStats.deals.skipped = res.skippedCount;
-      functions.logger.info(`🔥 Fırsat senkronizasyonu (${userId}): ${res.updatedCount} güncellendi, ${res.skippedCount} atlandı.`);
+      }, 'deals');
+      syncStats.deals = res;
+      functions.logger.info(`🔥 Fırsat senkronizasyonu (${userId}): ${res.updated} güncellendi, ${res.skipped} atlandı (Taranan: ${res.scanned}).`);
     } catch (dealErr) {
       functions.logger.error('❌ Fırsat senkronizasyon hatası:', dealErr.message);
     }

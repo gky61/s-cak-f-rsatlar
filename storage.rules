@@ -38,6 +38,13 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
+    match /catalogs/{allPaths=**} {
+      // FAZ 2 (FS-CF-08): Katalog kapak görselleri herkes tarafından okunabilir (mobil istemci ve web)
+      allow read: if true;
+      allow write: if isAdmin() && (request.resource == null || isValidImage());
+      allow delete: if isAdmin();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

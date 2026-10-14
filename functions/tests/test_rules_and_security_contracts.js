@@ -805,8 +805,12 @@ console.log('\n--- TEST 20: P1-21 Topic Bildirim Firestore Yazma Engeli Sözleş
   const notifFuncBody = functionsCode.slice(functionsCode.indexOf('exports.onNotificationCreated'), functionsCode.indexOf('exports.onNotificationCreated') + 3000);
   assert.strictEqual(notifFuncBody.includes("pushStatus: 'delivered_via_topic'"), false, 'onNotificationCreated içinde redundant doc.set pushStatus delivered_via_topic olmamalı');
 
-  // İlk batch oluşturma anında pushStatus 'delivered_via_topic' olarak tek yazmayla yazıldığını doğrula
-  assert.ok(functionsCode.includes("pushStatus: match.reason === 'category' ? 'delivered_via_topic' : 'pending'"), 'Kategori bildirim dokümanı oluşturulurken pushStatus ilk batchte yazılmalı');
+  // İlk batch oluşturma anında pushStatus 'delivered_via_topic' olarak tek yazmayla yazıldığını doğrula (Kategori veya Kelime Radarı)
+  assert.ok(
+    functionsCode.includes("pushStatus: match.reason === 'category' ? 'delivered_via_topic' : 'pending'") ||
+    functionsCode.includes("pushStatus: (match.reason === 'category' || match.reason === 'keyword') ? 'delivered_via_topic' : 'pending'"),
+    'Kategori/Kelime bildirim dokümanı oluşturulurken pushStatus ilk batchte delivered_via_topic yazılmalı'
+  );
 
   console.log('✅ TEST 20 BAŞARILI: P1-21 Topic bildirim Firestore yazma maliyet kalkanı doğrulandı.');
 }

@@ -1913,7 +1913,9 @@ async function approveDeal(dealId) {
                     console.log('🔄 Kısa link tespit edildi, çözülüyor...', currentUrl);
                     try {
                         const functionsUrl = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net/resolveShortLink`;
-                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(currentUrl)}`);
+                        const idToken = auth && auth.currentUser ? await auth.currentUser.getIdToken() : '';
+                        const headers = idToken ? { 'Authorization': `Bearer ${idToken}` } : {};
+                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(currentUrl)}`, { headers });
                         const data = await response.json();
 
                         if (data.success && data.resolvedUrl) {
@@ -2620,7 +2622,9 @@ async function showDealModal(deal) {
 
                     try {
                         const functionsUrl = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net/resolveShortLink`;
-                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(sourceUrl)}`);
+                        const idToken = auth && auth.currentUser ? await auth.currentUser.getIdToken() : '';
+                        const headers = idToken ? { 'Authorization': `Bearer ${idToken}` } : {};
+                        const response = await fetch(`${functionsUrl}?url=${encodeURIComponent(sourceUrl)}`, { headers });
                         const data = await response.json();
 
                         if (data.success && data.resolvedUrl) {
@@ -9465,7 +9469,8 @@ async function loadDashboardData() {
         const todayMidnight = new Date();
         todayMidnight.setHours(0, 0, 0, 0);
 
-        const todayStr = `${todayMidnight.getFullYear()}-${String(todayMidnight.getMonth() + 1).padStart(2, '0')}-${String(todayMidnight.getDate()).padStart(2, '0')}`;
+        // Türkiye Zaman Dilimi (Europe/Istanbul) ile 100% senkronize tarih anahtarı
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
 
         // Helper to parse dates safely
         const parseDate = (val) => {
@@ -9805,11 +9810,17 @@ async function loadDashboardData() {
         const elIos = document.getElementById('dashIosDevices');
         if (elIos) elIos.textContent = iosCount;
 
-        // Notification stats today
+        // Notification stats today (FAZ 1 FS-CF-02: Dağıtık Sayaç & Shards Toplamı)
         let todayPushCount = 0;
         if (notifStatsSnapResult.status === 'fulfilled' && notifStatsSnapResult.value && notifStatsSnapResult.value.exists) {
             todayPushCount = notifStatsSnapResult.value.data().count || notifStatsSnapResult.value.data().totalSent || 0;
         }
+        try {
+            const todayShardsSnap = await db.collection('notificationStats').doc(todayStr).collection('shards').get();
+            if (!todayShardsSnap.empty) {
+                todayShardsSnap.forEach(s => { todayPushCount += (s.data().count || 0); });
+            }
+        } catch (_) {}
         const elTodayPush = document.getElementById('dashTodayPushCount');
         if (elTodayPush) elTodayPush.textContent = todayPushCount;
 
@@ -9844,15 +9855,20 @@ async function loadDashboardData() {
         const elDailyText = document.getElementById('dashDailyLimitText');
         if (elDailyText) elDailyText.textContent = `${dailyLimit} bildirim / gün`;
 
-        // 7-day push volume indicator
+        // 7-day push volume indicator (FAZ 1 FS-CF-02: Shards Toplamı ile)
         try {
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const sevenDaysAgoStr = new Date(Date.now() - 7 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
             const sevenDaysStats = await db.collection('notificationStats')
-                .where('date', '>=', sevenDaysAgo.toISOString().split('T')[0])
+                .where('date', '>=', sevenDaysAgoStr)
                 .get();
             let sum7 = 0;
             sevenDaysStats.forEach(d => { sum7 += (d.data().count || d.data().totalSent || 0); });
+            try {
+                const todayShardsFor7 = await db.collection('notificationStats').doc(todayStr).collection('shards').get();
+                if (!todayShardsFor7.empty) {
+                    todayShardsFor7.forEach(s => { sum7 += (s.data().count || 0); });
+                }
+            } catch (_) {}
             const el7Days = document.getElementById('dash7DaysPushTotal');
             if (el7Days) el7Days.textContent = `${Math.max(sum7, 56)} Push`;
         } catch (_) {
@@ -11144,26 +11160,31 @@ async function loadNotificationStats() {
     const now = new Date();
 
     for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(now.getDate() - i);
-        d.setHours(0, 0, 0, 0);
-
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
-        const label = `${day}/${month}`;
+        const d = new Date(now.getTime() - i * 86400000);
+        const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+        const label = d.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit' });
         last7Days.push({ date: d, dateStr, label, count: 0 });
     }
 
     try {
-        // 1. notificationStats koleksiyonunu sorgula
+        // 1. notificationStats koleksiyonunu ve shards alt koleksiyonunu sorgula (FAZ 1 FS-CF-02)
         const promises = last7Days.map(async (day) => {
             try {
-                const doc = await db.collection('notificationStats').doc(day.dateStr).get();
-                if (doc.exists) {
-                    day.count = doc.data().count || 0;
+                const docRef = db.collection('notificationStats').doc(day.dateStr);
+                const [doc, shardsSnap] = await Promise.all([
+                    docRef.get().catch(() => null),
+                    docRef.collection('shards').get().catch(() => null)
+                ]);
+                let total = 0;
+                if (doc && doc.exists) {
+                    total += (doc.data().count || 0);
                 }
+                if (shardsSnap && !shardsSnap.empty) {
+                    shardsSnap.forEach(s => {
+                        total += (s.data().count || 0);
+                    });
+                }
+                day.count = total;
             } catch (_) {}
         });
         await Promise.all(promises);
