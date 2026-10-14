@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/deal.dart';
 import '../services/firestore_service.dart';
+import '../services/deal_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
@@ -42,7 +43,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   StreamSubscription? _authSub;
   StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
 
-  // FS-18: Followed Categories SWR & Pagination State
+  // Server-First Single-Flight Hydration State (Followed Categories)
   List<Deal> _followedDealsList = [];
   DocumentSnapshot? _lastFollowedDocument;
   bool _isLoadingFollowed = false;
@@ -50,6 +51,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   bool _hasMoreFollowed = true;
   String? _followedErrorMessage;
   bool _isRefreshingFollowed = false;
+  Future<DealsPageResult>? _activeFollowedServerFuture;
+  static const Duration _followedServerTimeout = Duration(milliseconds: 1400);
 
   final Set<String> _locallyDeletedDealIds = {};
   final Set<String> _locallyRemovedFavoriteIds = {};
@@ -163,49 +166,128 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     }
   }
 
-  /// FS-18: Followed Categories SWR + Cache-First ilk yükleme
-  Future<void> _loadFollowedFirstPage() async {
+  /// Server-First Single-Flight Hydration (Favori Kategorilerim)
+  /// Lansman Kalite Standardı: İlk açılışta doğrudan sunucudan (Source.server) taze veri çeker.
+  /// 1400ms içinde sunucu dönerse 0 jank, 0 reload ile en güncel kategori fırsatlarını gösterir.
+  /// Ağ yavaşsa veya kesildiyse anında yerel SQLite cache kalkanına döner (Resilient Cache Fallback).
+  /// Arka planda tamamlanan sunucu isteği kullanıcı scroll pozisyonuna saygı duyarak listeyi günceller.
+  Future<void> _loadFollowedFirstPage({bool isRefresh = false}) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || !mounted || _isRefreshingFollowed) return;
-    _isRefreshingFollowed = true;
+    if (user == null || !mounted) return;
+
+    if (isRefresh) {
+      if (_isRefreshingFollowed) return;
+      _isRefreshingFollowed = true;
+    } else {
+      if (_activeFollowedServerFuture != null) return;
+      if (_isLoadingFollowed && _followedDealsList.isNotEmpty) return;
+    }
+
     setState(() {
       _isLoadingFollowed = true;
       _followedErrorMessage = null;
     });
 
     try {
-      // 1. Aşama: Cache-First (0ms yerel önbellekten açılış)
-      try {
-        final cacheResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
+      // 1. Pull-to-Refresh: Kullanıcı manuel aşağı çektiğinde doğrudan sunucudan al
+      if (isRefresh) {
+        final serverResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
           userId: user.uid,
           limit: 45,
-          source: Source.cache,
+          source: Source.server,
         );
-        if (mounted && cacheResult.deals.isNotEmpty) {
+
+        if (mounted) {
           setState(() {
-            _followedDealsList = cacheResult.deals;
-            _lastFollowedDocument = cacheResult.lastDocument;
-            _hasMoreFollowed = cacheResult.hasMore;
+            _followedDealsList = serverResult.deals;
+            _lastFollowedDocument = serverResult.lastDocument;
+            _hasMoreFollowed = serverResult.hasMore;
+            _isLoadingFollowed = false;
             _isFirstLoadFollowed = false;
+            _followedErrorMessage = null;
           });
         }
-      } catch (_) {}
+        return;
+      }
 
-      // 2. Aşama: SWR Server Revalidation (Sunucudan taze doğrula)
-      final serverResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
+      // 2. İlk Yükleme: Server-First (Single-Flight Future)
+      final serverFuture = _firestoreService.getFollowedCategoriesDealsPaginated(
         userId: user.uid,
         limit: 45,
         source: Source.server,
       );
+      _activeFollowedServerFuture = serverFuture;
+      serverFuture.whenComplete(() {
+        if (_activeFollowedServerFuture == serverFuture) {
+          _activeFollowedServerFuture = null;
+        }
+      });
 
-      if (mounted) {
-        setState(() {
-          _followedDealsList = serverResult.deals;
-          _lastFollowedDocument = serverResult.lastDocument;
-          _hasMoreFollowed = serverResult.hasMore;
-          _isLoadingFollowed = false;
-          _isFirstLoadFollowed = false;
-        });
+      bool serverLoaded = false;
+      try {
+        final serverResult = await serverFuture.timeout(_followedServerTimeout);
+        if (mounted) {
+          serverLoaded = true;
+          setState(() {
+            _followedDealsList = serverResult.deals;
+            _lastFollowedDocument = serverResult.lastDocument;
+            _hasMoreFollowed = serverResult.hasMore;
+            _isLoadingFollowed = false;
+            _isFirstLoadFollowed = false;
+            _followedErrorMessage = null;
+          });
+        }
+      } catch (e) {
+        // Ağ gecikmesi veya bağlantı hatası: Cache Fallback devreye girer
+      }
+
+      // 3. Resilient Cache Fallback (Yavaş ağ / çevrimdışı kalkanı)
+      if (!serverLoaded && mounted) {
+        bool cacheLoaded = false;
+        try {
+          final cacheResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
+            userId: user.uid,
+            limit: 45,
+            source: Source.cache,
+          );
+          if (mounted && cacheResult.deals.isNotEmpty) {
+            cacheLoaded = true;
+            setState(() {
+              _followedDealsList = cacheResult.deals;
+              _lastFollowedDocument = cacheResult.lastDocument;
+              _hasMoreFollowed = cacheResult.hasMore;
+              _isLoadingFollowed = false;
+              _isFirstLoadFollowed = false;
+            });
+          }
+        } catch (_) {}
+
+        // Eğer cache boşsa ve sunucu henüz dönmediyse, serverFuture'ı bekle
+        if (!cacheLoaded && _followedDealsList.isEmpty && mounted) {
+          serverFuture.then((res) {
+            if (mounted) {
+              setState(() {
+                _followedDealsList = res.deals;
+                _lastFollowedDocument = res.lastDocument;
+                _hasMoreFollowed = res.hasMore;
+                _isLoadingFollowed = false;
+                _isFirstLoadFollowed = false;
+                _followedErrorMessage = null;
+              });
+            }
+          }).catchError((err) {
+            if (mounted && _followedDealsList.isEmpty) {
+              setState(() {
+                _isLoadingFollowed = false;
+                _isFirstLoadFollowed = false;
+                _followedErrorMessage = 'Fırsatlar yüklenemedi';
+              });
+            }
+          });
+        } else {
+          // Önbellekten veri basıldıysa, arka planda tamamlanacak serverFuture'ı dinle (Scroll-Aware)
+          _attachBackgroundFollowedServerListener(serverFuture);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -218,8 +300,37 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         });
       }
     } finally {
-      _isRefreshingFollowed = false;
+      if (mounted) {
+        _isRefreshingFollowed = false;
+      }
     }
+  }
+
+  /// Arka planda sunucu tamamlandığında scroll durumuna göre listeyi pürüzsüz günceller
+  void _attachBackgroundFollowedServerListener(Future<DealsPageResult> serverFuture) {
+    serverFuture.then((res) {
+      if (!mounted) return;
+      if (res.deals.isEmpty) return;
+
+      // Kullanıcı listenin başındaysa pürüzsüzce güncelle
+      final isAtTop = !_followedCategoriesScrollController.hasClients ||
+          _followedCategoriesScrollController.offset <= 120;
+      if (isAtTop) {
+        setState(() {
+          _followedDealsList = res.deals;
+          _lastFollowedDocument = res.lastDocument;
+          _hasMoreFollowed = res.hasMore;
+          _isLoadingFollowed = false;
+          _isFirstLoadFollowed = false;
+        });
+      } else {
+        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, pagination lastDoc'u ve hasMore'u koru
+        _lastFollowedDocument = res.lastDocument ?? _lastFollowedDocument;
+        _hasMoreFollowed = res.hasMore;
+      }
+    }).catchError((_) {
+      // Sessizce yoksay; yerel önbellek zaten ekranda
+    });
   }
 
   /// FS-18: Sonsuz kaydırma - Takip edilen kategoriler sonraki sayfa
@@ -1303,7 +1414,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           setState(() {
             _myFavoritesStream = _firestoreService.getFavoriteDeals(currentUser.uid);
           });
-          await _loadFollowedFirstPage();
+          await _loadFollowedFirstPage(isRefresh: true);
         }
       },
       child: GridView.builder(
@@ -1420,7 +1531,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     if (_followedErrorMessage != null && _followedDealsList.isEmpty) {
       return RefreshIndicator(
         color: AppTheme.primary,
-        onRefresh: _loadFollowedFirstPage,
+        onRefresh: () => _loadFollowedFirstPage(isRefresh: true),
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -1482,7 +1593,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     if (deals.isEmpty) {
       return RefreshIndicator(
         color: AppTheme.primary,
-        onRefresh: _loadFollowedFirstPage,
+        onRefresh: () => _loadFollowedFirstPage(isRefresh: true),
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -1777,7 +1888,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
         return RefreshIndicator(
           color: AppTheme.primary,
-          onRefresh: _loadFollowedFirstPage,
+          onRefresh: () => _loadFollowedFirstPage(isRefresh: true),
           child: CustomScrollView(
             controller: scrollController,
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),

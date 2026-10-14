@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/deal.dart';
 import '../models/category.dart';
 import '../services/firestore_service.dart';
+import '../services/deal_service.dart';
 import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/deal_card.dart';
@@ -36,7 +37,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   bool _showScrollToTop = false;
   String _selectedCategory = 'tumu';
 
-  // FS-18: SWR, Pagination & Cache-First State
+  // Server-First Single-Flight Hydration State
   List<Deal> _dealsList = [];
   DocumentSnapshot? _lastDocument;
   bool _isLoading = false;
@@ -45,6 +46,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   String? _errorMessage;
   bool _isRefreshing = false;
   StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
+  Future<DealsPageResult>? _activeServerFuture;
+  static const Duration _serverTimeout = Duration(milliseconds: 1400);
 
   @override
   void initState() {
@@ -97,48 +100,123 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     }
   }
 
-  /// SWR + Cache-First ilk yükleme
-  Future<void> _loadFirstPage() async {
-    if (!mounted || _isRefreshing) return;
-    _isRefreshing = true;
+  /// Server-First Single-Flight Hydration
+  /// Lansman Kalite Standardı: İlk açılışta doğrudan sunucudan (Source.server) taze veri çeker.
+  /// 1400ms içinde sunucu dönerse 0 jank, 0 eski veri sıçraması ile en popüler fırsatları gösterir.
+  /// Ağ yavaşsa veya kesildiyse anında yerel SQLite cache kalkanına döner (Resilient Cache Fallback).
+  /// Arka planda tamamlanan sunucu isteği kullanıcı scroll pozisyonuna saygı duyarak listeyi günceller.
+  Future<void> _loadFirstPage({bool isRefresh = false}) async {
+    if (!mounted) return;
+    if (isRefresh) {
+      if (_isRefreshing) return;
+      _isRefreshing = true;
+    } else {
+      if (_activeServerFuture != null) return;
+      if (_isLoading && _dealsList.isNotEmpty) return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      // 1. Aşama: Cache-First (0 milisaniye yerel önbellekten anında açılış)
-      try {
-        final cacheResult = await _firestoreService.getPopularDealsPaginated(
+      // 1. Pull-to-Refresh: Kullanıcı manuel aşağı çektiğinde doğrudan sunucudan al
+      if (isRefresh) {
+        final serverResult = await _firestoreService.getPopularDealsPaginated(
           limit: 45,
-          source: Source.cache,
+          source: Source.server,
         );
-        if (mounted && cacheResult.deals.isNotEmpty) {
+
+        if (mounted) {
           setState(() {
-            _dealsList = cacheResult.deals;
-            _lastDocument = cacheResult.lastDocument;
-            _hasMore = cacheResult.hasMore;
+            _dealsList = serverResult.deals;
+            _lastDocument = serverResult.lastDocument;
+            _hasMore = serverResult.hasMore;
+            _isLoading = false;
             _isFirstLoad = false;
+            _errorMessage = null;
           });
         }
-      } catch (_) {
-        // Önbellek boşsa sessizce sunucu aşamasına geç
+        return;
       }
 
-      // 2. Aşama: Stale-While-Revalidate (Sunucudan taze doğrula)
-      final serverResult = await _firestoreService.getPopularDealsPaginated(
+      // 2. İlk Yükleme: Server-First (Single-Flight Future)
+      final serverFuture = _firestoreService.getPopularDealsPaginated(
         limit: 45,
         source: Source.server,
       );
+      _activeServerFuture = serverFuture;
+      serverFuture.whenComplete(() {
+        if (_activeServerFuture == serverFuture) {
+          _activeServerFuture = null;
+        }
+      });
 
-      if (mounted) {
-        setState(() {
-          _dealsList = serverResult.deals;
-          _lastDocument = serverResult.lastDocument;
-          _hasMore = serverResult.hasMore;
-          _isLoading = false;
-          _isFirstLoad = false;
-        });
+      bool serverLoaded = false;
+      try {
+        final serverResult = await serverFuture.timeout(_serverTimeout);
+        if (mounted) {
+          serverLoaded = true;
+          setState(() {
+            _dealsList = serverResult.deals;
+            _lastDocument = serverResult.lastDocument;
+            _hasMore = serverResult.hasMore;
+            _isLoading = false;
+            _isFirstLoad = false;
+            _errorMessage = null;
+          });
+        }
+      } catch (e) {
+        // Ağ gecikmesi veya bağlantı hatası: Cache Fallback devreye girer
+      }
+
+      // 3. Resilient Cache Fallback (Yavaş ağ / çevrimdışı kalkanı)
+      if (!serverLoaded && mounted) {
+        bool cacheLoaded = false;
+        try {
+          final cacheResult = await _firestoreService.getPopularDealsPaginated(
+            limit: 45,
+            source: Source.cache,
+          );
+          if (mounted && cacheResult.deals.isNotEmpty) {
+            cacheLoaded = true;
+            setState(() {
+              _dealsList = cacheResult.deals;
+              _lastDocument = cacheResult.lastDocument;
+              _hasMore = cacheResult.hasMore;
+              _isLoading = false;
+              _isFirstLoad = false;
+            });
+          }
+        } catch (_) {}
+
+        // Eğer cache boşsa ve sunucu henüz dönmediyse, serverFuture'ı bekle
+        if (!cacheLoaded && _dealsList.isEmpty && mounted) {
+          serverFuture.then((res) {
+            if (mounted) {
+              setState(() {
+                _dealsList = res.deals;
+                _lastDocument = res.lastDocument;
+                _hasMore = res.hasMore;
+                _isLoading = false;
+                _isFirstLoad = false;
+                _errorMessage = null;
+              });
+            }
+          }).catchError((err) {
+            if (mounted && _dealsList.isEmpty) {
+              setState(() {
+                _isLoading = false;
+                _isFirstLoad = false;
+                _errorMessage = 'Popüler fırsatlar yüklenemedi';
+              });
+            }
+          });
+        } else {
+          // Önbellekten veri basıldıysa, arka planda tamamlanacak serverFuture'ı dinle (Scroll-Aware)
+          _attachBackgroundServerListener(serverFuture);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -151,8 +229,36 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         });
       }
     } finally {
-      _isRefreshing = false;
+      if (mounted) {
+        _isRefreshing = false;
+      }
     }
+  }
+
+  /// Arka planda sunucu tamamlandığında scroll durumuna göre listeyi pürüzsüz günceller
+  void _attachBackgroundServerListener(Future<DealsPageResult> serverFuture) {
+    serverFuture.then((res) {
+      if (!mounted) return;
+      if (res.deals.isEmpty) return;
+
+      // Kullanıcı listenin başındaysa pürüzsüzce güncelle
+      final isAtTop = !_scrollController.hasClients || _scrollController.offset <= 120;
+      if (isAtTop) {
+        setState(() {
+          _dealsList = res.deals;
+          _lastDocument = res.lastDocument;
+          _hasMore = res.hasMore;
+          _isLoading = false;
+          _isFirstLoad = false;
+        });
+      } else {
+        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, pagination lastDoc'u ve hasMore'u koru
+        _lastDocument = res.lastDocument ?? _lastDocument;
+        _hasMore = res.hasMore;
+      }
+    }).catchError((_) {
+      // Sessizce yoksay; yerel önbellek zaten ekranda
+    });
   }
 
   /// Sonsuz kaydırma: Bir sonraki sayfayı getir
@@ -563,7 +669,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         color: primaryColor,
         onRefresh: () async {
           HapticFeedback.lightImpact();
-          await _loadFirstPage();
+          await _loadFirstPage(isRefresh: true);
         },
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
@@ -615,7 +721,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         color: primaryColor,
         onRefresh: () async {
           HapticFeedback.lightImpact();
-          await _loadFirstPage();
+          await _loadFirstPage(isRefresh: true);
         },
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
@@ -677,7 +783,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
     return RefreshIndicator(
       onRefresh: () async {
         HapticFeedback.lightImpact();
-        await _loadFirstPage();
+        await _loadFirstPage(isRefresh: true);
       },
       color: primaryColor,
       child: ListenableBuilder(

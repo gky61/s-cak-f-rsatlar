@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/services.dart';
 import 'dart:async';
 import '../services/firestore_service.dart';
+import '../services/deal_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/app_badge_service.dart';
@@ -648,7 +649,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // FS-09: SWR (Stale-While-Revalidate) & Cache-First İlk Yükleme
+  // FS-09: Server-First & Akıllı Önbellek Kalkanı (Zero-Jank Hydration Architecture)
+  // Açılışta (Cold Start) ve kategori değişiminde SplashScreen/Skeleton süresi içinde
+  // doğrudan en güncel sunucu verisini çeker; kullanıcıya bayat önbellek verisi basıp
+  // 2 saniye sonra ekranı zıplatma (content jumping / reload) kusurunu %100 engeller.
+  // Ağ gecikmesi veya çevrimdışı durumda 1400ms kalkanı ile sessizce yerel önbelleğe (fallback) döner.
   Future<void> _fetchInitialDeals({bool isRefresh = false}) async {
     if (isRefresh) {
       if (_isRefreshingDeals) return;
@@ -667,33 +672,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _startInitialLoadingTimeout();
       }
 
-      // 1. SWR / Cache-First Adımı (0ms yerel bellek / önbellek açılışı)
-      if (!isRefresh && _dealsList.isEmpty) {
-        try {
-          final cacheResult = await _firestoreService.getDealsPaginated(
-            limit: 20,
-            category: requestedCategory,
-            subCategory: requestedSubCategory,
-            source: Source.cache,
-          );
-          if (cacheResult.deals.isNotEmpty &&
-              mounted &&
-              _selectedCategory == requestedCategory &&
-              _selectedSubCategory == requestedSubCategory) {
-            setState(() {
-              _dealsList = cacheResult.deals;
-              _lastDealDocument = cacheResult.lastDocument;
-              _hasMore = cacheResult.hasMore;
-              _isLoadingDeals = false;
-            });
-          }
-        } catch (_) {
-          // Cache boş veya ilk kurulum, sunucu isteğine devam et
-        }
-      }
-
-      // 2. Sunucudan taze veri çekimi (Revalidation)
-      try {
+      // A. Pull-to-refresh (Kullanıcı aşağı çektiğinde doğrudan taze sunucu verisini al)
+      if (isRefresh) {
         final serverResult = await _firestoreService.getDealsPaginated(
           limit: 20,
           category: requestedCategory,
@@ -716,24 +696,165 @@ class _HomeScreenState extends State<HomeScreen> {
           });
           _initialLoadingTimeoutTimer?.cancel();
         }
-      } catch (e) {
+        return;
+      }
+
+      // B. İlk Açılış veya Kategori Değişimi: Server-First (SplashScreen Senkronizasyonu)
+      // Tekil Future (Single-Flight) oluşturulur; böylece yavaş ağlarda mükerrer ağ isteği atılmaz.
+      final serverFuture = _firestoreService.getDealsPaginated(
+        limit: 20,
+        category: requestedCategory,
+        subCategory: requestedSubCategory,
+        source: Source.server,
+      );
+
+      bool serverLoaded = false;
+      try {
+        final serverResult = await serverFuture.timeout(const Duration(milliseconds: 1400));
+
         if (mounted &&
             _selectedCategory == requestedCategory &&
             _selectedSubCategory == requestedSubCategory) {
+          serverLoaded = true;
           setState(() {
-            // Eğer önceden cache'ten veri geldiyse kullanıcıya hata gösterme
-            if (_dealsList.isEmpty) {
-              _dealsError = e.toString();
-            }
+            _dealsList = serverResult.deals;
+            _lastDealDocument = serverResult.lastDocument;
+            _hasMore = serverResult.hasMore;
             _isLoadingDeals = false;
+            _hasServerData = true;
+            _dealsError = null;
+            _hasNewDealsPill = false;
+            _newDealsCount = 0;
           });
+          _initialLoadingTimeoutTimer?.cancel();
         }
+      } catch (serverError) {
+        _log('ℹ️ Server-First zaman aşımı veya ağ kesintisi: $serverError. Önbellek kalkanına dönülüyor...');
+      }
+
+      // C. Çevrimdışı / Yavaş Ağ Kalkanı (Resilient Cache Fallback)
+      // Sunucu 1400ms içinde dönemezse veya cihaz çevrimdışıysa yerel önbellek devreye girer
+      if (!serverLoaded && mounted && _selectedCategory == requestedCategory) {
+        bool cacheLoaded = false;
+        try {
+          final cacheResult = await _firestoreService.getDealsPaginated(
+            limit: 20,
+            category: requestedCategory,
+            subCategory: requestedSubCategory,
+            source: Source.cache,
+          );
+          if (cacheResult.deals.isNotEmpty &&
+              mounted &&
+              _selectedCategory == requestedCategory &&
+              _selectedSubCategory == requestedSubCategory) {
+            cacheLoaded = true;
+            setState(() {
+              _dealsList = cacheResult.deals;
+              _lastDealDocument = cacheResult.lastDocument;
+              _hasMore = cacheResult.hasMore;
+              _isLoadingDeals = false;
+            });
+          }
+        } catch (_) {
+          // Önbellek de boşsa sunucu arka plan tamamlamasını bekle
+        }
+
+        // Önbellek de boşsa ve sunucu henüz dönmediyse, serverFuture sonucunu bekle;
+        // Önbellekten veri basıldıysa, mevcut serverFuture'a arka plan dinleyicisi bağla
+        if (!cacheLoaded && _dealsList.isEmpty && mounted) {
+          serverFuture.then((res) {
+            if (mounted &&
+                _selectedCategory == requestedCategory &&
+                _selectedSubCategory == requestedSubCategory) {
+              setState(() {
+                _dealsList = res.deals;
+                _lastDealDocument = res.lastDocument;
+                _hasMore = res.hasMore;
+                _isLoadingDeals = false;
+                _hasServerData = true;
+                _dealsError = null;
+              });
+              _initialLoadingTimeoutTimer?.cancel();
+            }
+          }).catchError((err) {
+            if (mounted &&
+                _selectedCategory == requestedCategory &&
+                _selectedSubCategory == requestedSubCategory &&
+                _dealsList.isEmpty) {
+              setState(() {
+                _dealsError = err.toString();
+                _isLoadingDeals = false;
+              });
+            }
+          });
+        } else if (cacheLoaded) {
+          _attachBackgroundServerListener(serverFuture, requestedCategory, requestedSubCategory);
+        }
+      }
+    } catch (e) {
+      if (mounted &&
+          _selectedCategory == requestedCategory &&
+          _selectedSubCategory == requestedSubCategory) {
+        setState(() {
+          if (_dealsList.isEmpty) {
+            _dealsError = e.toString();
+          }
+          _isLoadingDeals = false;
+        });
       }
     } finally {
       if (isRefresh) {
         _isRefreshingDeals = false;
       }
     }
+  }
+
+  /// Yavaş ağlarda 1400ms timeout sonrası arka planda mevcut sunucu isteği tamamlandığında
+  /// yeni bir ağ sorgusu atmadan (Single-Flight) kullanıcı deneyimini bozmadan zarifçe senkronize eden kalkan
+  void _attachBackgroundServerListener(
+    Future<DealsPageResult> serverFuture,
+    String requestedCategory,
+    String? requestedSubCategory,
+  ) {
+    serverFuture.then((serverResult) {
+      if (!mounted ||
+          _selectedCategory != requestedCategory ||
+          _selectedSubCategory != requestedSubCategory) {
+        return;
+      }
+
+      // Kullanıcı henüz ekranı kaydırmadıysa ve liste başındaysa pürüzsüz güncelle
+      final bool isAtTop = !_scrollController.hasClients || _scrollController.offset <= 10;
+      if (_dealsList.isEmpty || isAtTop) {
+        setState(() {
+          _dealsList = serverResult.deals;
+          _lastDealDocument = serverResult.lastDocument;
+          _hasMore = serverResult.hasMore;
+          _isLoadingDeals = false;
+          _hasServerData = true;
+          _dealsError = null;
+        });
+      } else {
+        // Kullanıcı aşağı kaydırıp bir fırsatı inceliyorsa kartları zıplatma;
+        // Yüzen hap ("Yeni Fırsatlar Var") ile kullanıcı iradesine sun
+        setState(() {
+          _hasServerData = true;
+          _hasNewDealsPill = true;
+          _newDealsCount = 1;
+        });
+      }
+      _initialLoadingTimeoutTimer?.cancel();
+    }).catchError((e) {
+      if (mounted &&
+          _selectedCategory == requestedCategory &&
+          _selectedSubCategory == requestedSubCategory &&
+          _dealsList.isEmpty) {
+        setState(() {
+          _dealsError = e.toString();
+          _isLoadingDeals = false;
+        });
+      }
+    });
   }
 
   // FS-09: En yeni onaylı fırsatı dinleyen ultra hafif dinleyici (limit: 1)
