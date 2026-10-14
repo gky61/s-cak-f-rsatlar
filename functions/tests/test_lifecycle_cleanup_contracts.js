@@ -15,9 +15,7 @@ const functionsIndex = require('../index.js');
 
 const requiredExports = [
   'cleanupOldImages',
-  'cleanupOldImagesManual',
   'cleanupExpiredDeals',
-  'cleanupExpiredDealsManual',
   'purgeOldDeals',
   'purgeOldDealsManual',
   'purgeOldNotificationsManual'
@@ -56,10 +54,15 @@ console.log('  ✅ O(Deals x Users) kota patlatan döngünün tamamen kaldırıl
 const has40DaysImages = indexJsContent.includes("days = 40");
 assert(has40DaysImages, '❌ Hata: cleanupOldImages 40 günlük güvenlik payına sahip değil!');
 console.log('  ✅ cleanupOldImages 40 günlük kırık görsel koruması doğrulandı.');
-
 // _purgeOldNotificationsCore devre kesici tavanı var mı?
 const hasMaxBatches = /MAX_BATCHES\s*=\s*(25|50)/.test(indexJsContent);
 assert(hasMaxBatches, '❌ Hata: _purgeOldNotificationsCore devre kesici tavanı (MAX_BATCHES) eksik!');
 console.log('  ✅ _purgeOldNotificationsCore devre kesici tavanı (devre kesici koruması) doğrulandı.');
 
+// cleanupExpiredDeals 02:30 TSİ (30 2 * * *) zamanlama ve katalog kazıyıcı I/O izolasyonu var mı?
+const hasExpiredDealsSchedule = indexJsContent.includes(".pubsub.schedule('30 2 * * *')");
+assert(hasExpiredDealsSchedule, '❌ Hata: cleanupExpiredDeals zamanlaması 02:30 TSİ (30 2 * * *) olmalıdır!');
+console.log('  ✅ cleanupExpiredDeals 02:30 TSİ takvim izolasyonu doğrulandı.');
+
 console.log('\n🎉 TÜM TESTLER VE MİMARİ DOĞRULAMALAR BAŞARIYLA GEÇTİ!');
+

@@ -853,7 +853,14 @@ async function matchAndCreateDealNotifications(deal, dealId) {
 }
 
 /**
- * 1. YENİ FIRSAT GELDİĞİNDE
+ * @function onDealCreated
+ * @category Realtime Event Trigger
+ * @description Yeni fırsat paylaşımlarını anlık denetler; ReDoS korumalı küfür filtresi uygular,
+ * onaylı fırsatlarda hedefli 300 aboneye bildirim dağıtır, onaysızlarda adminlere APNs/FCM iletir.
+ * @trigger Firestore: deals/{dealId} (onCreate)
+ * @schedule Anlık (7/24)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Flutter (add_deal_screen), Telegram Bot (cloud-run-bot), Web Admin (app.js)
  */
 exports.onDealCreated = functions.firestore
   .document('deals/{dealId}')
@@ -1131,7 +1138,14 @@ exports.onDealCreated = functions.firestore
   }));
 
 /**
- * 2. FIRSAT GÜNCELLENDİĞİNDE (Onaylandıysa Herkese Bildir + Anahtar Kelime)
+ * @function onDealUpdated
+ * @category Realtime Event Trigger
+ * @description Fırsat güncellemelerini işler; onay durum geçişinde bildirimleri dağıtır,
+ * bot hesaplarını izole ederek gerçek kullanıcıların puan ve rozetlerini günceller.
+ * @trigger Firestore: deals/{dealId} (onUpdate)
+ * @schedule Anlık (7/24)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Flutter (deal_detail_screen), Web Admin (app.js)
  */
 exports.onDealUpdated = functions.firestore
   .document('deals/{dealId}')
@@ -1321,7 +1335,16 @@ exports.onDealUpdated = functions.firestore
     return null;
   }));
 
-// Yorum moderasyonu - Collection group trigger
+/**
+ * @function onCommentCreated
+ * @category Realtime Event Trigger
+ * @description Yeni yorumları denetler; küfür filtresi uygular, sayaç güvenliğini sağlar,
+ * fırsat veya üst yorum sahibine tekil okuma optimizasyonuyla bildirim dokümanı oluşturur.
+ * @trigger Firestore: deals/{dealId}/comments/{commentId} (onCreate)
+ * @schedule Anlık (7/24)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Flutter (deal_detail_screen, comment_service.dart)
+ */
 exports.onCommentCreated = functions.firestore
   .document('deals/{dealId}/comments/{commentId}')
   .onCreate(wrapTrigger('onCommentCreated', async (snap, context) => {
@@ -1554,10 +1577,14 @@ exports.onCommentCreated = functions.firestore
   }));
 
 /**
- * 4. ADMIN MESAJI GÖNDERİLDİĞİNDE
- * adminToUserMessages koleksiyonuna doküman yazıldığında tetiklenir.
- * Sadece users/{uid}/notifications/ altına bildirim dokümanı oluşturur.
- * FCM push gönderimi onNotificationCreated birleşik motoruna bırakılır (Tek Sorumluluk).
+ * @function onAdminMessageCreated
+ * @category Realtime Event Trigger
+ * @description Yönetici tarafından gönderilen resmi mesajları çift kalkan emoji düzeltmesiyle
+ * hedef kullanıcının bildirim alt koleksiyonuna aktarır.
+ * @trigger Firestore: adminToUserMessages/{messageId} (onCreate)
+ * @schedule Anlık (Yönetici mesaj attığında)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Web Admin Paneli (app.js)
  */
 exports.onAdminMessageCreated = functions.firestore
   .document('adminToUserMessages/{messageId}')
@@ -1627,8 +1654,14 @@ exports.onAdminMessageCreated = functions.firestore
   }));
 
 /**
- * 5. KULLANICI MESAJI GÖNDERİLDİĞİNDE (User-to-User)
- * Flutter app 'messages' koleksiyonunu kullanıyor
+ * @function onUserMessageCreated
+ * @category Realtime Event Trigger
+ * @description Birebir sohbet mesajlarında paralel kullanıcı kontrolü ve ban filtresi yaparak
+ * alıcı cihazlara DATA-ONLY FCM push bildirimi gönderir.
+ * @trigger Firestore: messages/{messageId} (onCreate)
+ * @schedule Anlık (7/24)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Flutter (chat_screen.dart, chat_service.dart)
  */
 exports.onUserMessageCreated = functions.firestore
   .document('messages/{messageId}')
@@ -1819,8 +1852,14 @@ exports.onUserMessageCreated = functions.firestore
   }));
 
 /**
- * 5.1. TOPLULUK KUPONU PAYLAŞILDIĞINDA (NOTIF-15)
- * kuponlar/{kuponId} koleksiyonunda yeni belge oluşturulduğunda tetiklenir
+ * @function onCouponCreated
+ * @category Realtime Event Trigger
+ * @description Topluluk kuponu eklendiğinde küfür filtresini çalıştırır, kuponu 'beklemede'
+ * durumuna alarak yazara bilgilendirme bildirimi oluşturur.
+ * @trigger Firestore: kuponlar/{kuponId} (onCreate)
+ * @schedule Anlık (Kupon paylaşıldığında)
+ * @resources 512MB RAM / 120s Timeout
+ * @clients Flutter (kupon_form_page.dart)
  */
 exports.onCouponCreated = functions
   .runWith({ timeoutSeconds: 120, memory: '512MB' })
@@ -2228,9 +2267,14 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
 }
 
 /**
- * kuponlar/{kuponId} koleksiyonunda belge güncellendiğinde tetiklenir.
- * Kupon durumu 'beklemede' -> 'aktif' olduğunda onay bildirimlerini ve FCM topic push yayını fırlatır.
- * Kupon durumu 'beklemede' -> 'reddedildi' olduğunda yazara red gerekçesi bildirimi gönderir.
+ * @function onCouponUpdated
+ * @category Realtime Event Trigger
+ * @description Kupon onay/red geçişlerini ve oylama eşiklerini yönetir; onaylanan kuponlarda
+ * FCM topic push gönderir ve in-app bildirim dokümanlarını yazar.
+ * @trigger Firestore: kuponlar/{kuponId} (onUpdate)
+ * @schedule Anlık (Kupon güncellendiğinde/onaylandığında)
+ * @resources 512MB RAM / 120s Timeout
+ * @clients Flutter Mobil Admin, Web Admin Paneli (app.js)
  */
 exports.onCouponUpdated = functions
   .runWith({ timeoutSeconds: 120, memory: '512MB' })
@@ -2349,8 +2393,14 @@ exports.onCouponUpdated = functions
   }));
 
 /**
- * 6. BİRLEŞİK BİLDİRİM TETİKLEYİCİSİ - Push Notification Gönder
- * users/{userId}/notifications/{notificationId} koleksiyonunu dinler
+ * @function onNotificationCreated
+ * @category Realtime Event Trigger
+ * @description Kullanıcı bildirim dokümanlarını dinler; sessiz saatler, hız limiti,
+ * master şalter denetimi yaparak FCM/APNs push bildirimini hedefe iletir.
+ * @trigger Firestore: users/{userId}/notifications/{notificationId} (onCreate)
+ * @schedule Anlık (7/24)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Tüm bildirim üreten sistem bileşenleri
  */
 exports.onNotificationCreated = functions.firestore
   .document('users/{userId}/notifications/{notificationId}')
@@ -3245,7 +3295,16 @@ async function resolveRedirect(initialUrl, options = {}) {
 // P1-18 (R-API-01): IP Başına Hız Limiti Haritası (Dakikada azami 60 istek)
 const _resolveShortLinkRateMap = new Map();
 
-// Kısa linki gerçek URL'ye dönüştürme fonksiyonu (SSRF Korumalı & Dayanıklı)
+/**
+ * @function resolveShortLink
+ * @category On-Demand HTTP Endpoint
+ * @description Web Admin panelinden girilen kısaltılmış veya yönlendirmeli e-ticaret linklerini
+ * SSRF korumalı ve IP hız limitli olarak nihai hedef URL'ye çözer.
+ * @trigger HTTPS Request (onRequest)
+ * @schedule İsteğe Bağlı (Admin link girdiğinde)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Web Admin Paneli (app.js fetch API)
+ */
 exports.resolveShortLink = functions.https.onRequest(wrapRequest('resolveShortLink', async (req, res) => {
   // CORS headers
   res.set('Access-Control-Allow-Origin', '*');
@@ -3501,8 +3560,14 @@ async function _cleanupOldImagesCore({ days = 40, maxFiles = 3000 } = {}) {
 }
 
 /**
- * 📷 ESKİ GÖRSELLERİ TEMİZLE - Her gün gece yarısı çalışır
- * 40 günden eski sahipsiz/eski deal görsellerini Firebase Storage'dan siler
+ * @function cleanupOldImages
+ * @category Scheduled Cron Pipeline
+ * @description Storage deals/ klasöründeki 40 günden eski görselleri 10'arlı eşzamanlı
+ * havuzla ve en fazla 1.000 dosya tavanıyla temizleyerek depolama maliyetini düşürür.
+ * @trigger Cloud Scheduler: Her gün 00:00 TSİ (0 0 * * *)
+ * @schedule 00:00 TSİ (Günlük)
+ * @resources 512MB RAM / 300s Timeout
+ * @clients GCP Cloud Scheduler
  */
 exports.cleanupOldImages = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -3514,49 +3579,14 @@ exports.cleanupOldImages = functions
   }));
 
 /**
- * 📷 MANUEL GÖRSELLERİ TEMİZLE - HTTP ile tetiklenir (Yetki ve Güvenlik Eşik Korumalı)
- * Kullanım: GET veya POST isteği at (?days=40&maxFiles=500 desteklenir, min days: 35)
- */
-exports.cleanupOldImagesManual = functions
-  .runWith({ timeoutSeconds: 300, memory: '512MB' })
-  .https.onRequest(wrapRequest('cleanupOldImagesManual', async (req, res) => {
-    // 1. Yönetici Yetkilendirmesi (Açık HTTP DoS ve Veri Kaybı Koruması)
-    const isAuthorized = await _verifyAdminOrInternalSecret(req);
-    if (!isAuthorized) {
-      functions.logger.warn('🚫 cleanupOldImagesManual yetkisiz erişim denemesi engellendi.');
-      res.status(403).json({
-        success: false,
-        error: 'Yetkisiz erişim. Yönetici ID Token veya geçerli bakım anahtarı gereklidir.'
-      });
-      return;
-    }
-
-    try {
-      // 2. Katı Güvenlik Eşiği (Safety Clamping): Fırsatlar 30 gün yayında kaldığından,
-      // hiçbir şartta 35 günden daha yeni canlı görseller silinemez!
-      const rawDays = parseInt(req.query.days || (req.body && req.body.days), 10);
-      const days = Math.max(35, Math.min(180, isNaN(rawDays) ? 40 : rawDays));
-
-      const rawMax = parseInt(req.query.maxFiles || (req.body && req.body.maxFiles), 10);
-      const maxFiles = Math.min(Math.max(10, isNaN(rawMax) ? 1000 : rawMax), 1000);
-
-      const stats = await _cleanupOldImagesCore({ days, maxFiles });
-
-      res.status(200).json({
-        success: true,
-        message: `Görsel temizliği tamamlandı (${days} günlük güvenlik payı uygulandı).`,
-        stats
-      });
-    } catch (error) {
-      functions.logger.error('❌ Manuel temizleme hatası:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }));
-
-
-
-/**
- * 11. Manuel Bildirim Gönderimi (Callable) - FAZ 3 (300s Timeout, Global FCM Topic & Bounded In-App Feed)
+ * @function sendManualNotification
+ * @category On-Demand Callable
+ * @description Web Admin panelinden toplu push bildirimi gönderir; dual-topic tekil çağrıyla
+ * maliyetsiz küresel yayın yapar ve globalAnnouncements koleksiyonunu besler.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 512MB RAM / 300s Timeout
+ * @clients Web Admin Paneli (app.js)
  */
 exports.sendManualNotification = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -3813,17 +3843,14 @@ exports.sendManualNotification = functions
 }));
 
 /**
- * 12. Geçersiz FCM Token'larının Temizleme (Callable) - FAZ 3
- * 
- * MİMARİ İYİLEŞTİRMELER:
- * 1. Eşzamanlılık Havuzu (Concurrency Pooling): 500 cihazı aynı anda Promise.all ile
- *    FCM API'sine yollamak yerine 20'şerli havuzlarda sorgular; FCM 429 quota aşımını ve soket tükenmesini engeller.
- * 2. Atomik Batch Güncelleme: Tekil doc.ref.update() yerine, tespit edilen geçersiz cihazları
- *    400'lük Firestore batch gruplarıyla tek seferde pasifleştirir (maliyet ve gecikmeyi düşürür).
- * 3. Kapsamlı Hata Kodları: messaging/invalid-registration-token ve registration-token-not-registered'ın yanı sıra
- *    messaging/invalid-argument ve messaging/mismatched-credential kodlarını da kapsar.
- * 4. Dinamik Bounded Limit & Telemetri: Opsiyonel data.limit parametresi (min 10, max 500),
- *    totalScanned ve hasMore sinyali ile admin paneline tam şeffaflık sağlar.
+ * @function cleanupInvalidTokens
+ * @category On-Demand Callable
+ * @description Web Admin panelinden başlatılan cihaz bakım aracıdır; 20'li paralel FCM
+ * dry-run havuzuyla geçersiz cihaz token'larını tespit edip pasife çeker.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 512MB RAM / 300s Timeout
+ * @clients Web Admin Paneli (app.js)
  */
 exports.cleanupInvalidTokens = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -4123,12 +4150,18 @@ async function _rollupNotificationStatsShardsCore() {
 }
 
 /**
- * ⌛ 48 Saat Geçen Fırsatları Süresi Doldu (isExpired: true) Olarak İşaretler
- * Fırsatlar veritabanından SİLİNMEZ, 30 gün boyunca kullanıcının favorilerinde ve arşivde orijinal görseliyle kalır.
+ * @function cleanupExpiredDeals
+ * @category Scheduled Cron Pipeline
+ * @description 48 saati dolmuş fırsatları isExpired=true olarak işaretler ve dünün dağıtık
+ * bildirim sayaç shard'larını konsolide eder. Katalog kazıma öncesi veritabanını hazırlar.
+ * @trigger Cloud Scheduler: Her gün 02:30 TSİ (30 2 * * *)
+ * @schedule 02:30 TSİ (Günlük - Optimize Edilmiş Yeni Saat)
+ * @resources 512MB RAM / 360s Timeout
+ * @clients GCP Cloud Scheduler
  */
 exports.cleanupExpiredDeals = functions
   .runWith({ timeoutSeconds: 360, memory: '512MB' })
-  .pubsub.schedule('0 3 * * *') // Her gün gece 03:00'da çalışır
+  .pubsub.schedule('30 2 * * *') // Her gün gece 02:30'da çalışır
   .timeZone('Europe/Istanbul')
   .onRun(wrapTrigger('cleanupExpiredDeals', async (context) => {
     await _cleanupExpiredDealsCore();
@@ -4136,50 +4169,7 @@ exports.cleanupExpiredDeals = functions
     return null;
   }));
 
-/**
- * ⌛ MANUEL ESKİ FIRSATLARI SÜRESİ DOLDU YAP - HTTP ile tetiklenir (Yetki & Rate-Limit Korumalı)
- * Kullanım: GET veya POST isteği at (Yönetici ID Token veya Bakım Anahtarı gereklidir)
- */
-let lastManualExpiredRun = 0;
-exports.cleanupExpiredDealsManual = functions
-  .runWith({ timeoutSeconds: 360, memory: '512MB' })
-  .https.onRequest(wrapRequest('cleanupExpiredDealsManual', async (req, res) => {
-    // 1. Yönetici Yetkilendirmesi (Açık HTTP DoS ve Kaynak Tüketim Koruması)
-    const isAuthorized = await _verifyAdminOrInternalSecret(req);
-    if (!isAuthorized) {
-      functions.logger.warn('🚫 cleanupExpiredDealsManual yetkisiz erişim denemesi engellendi.');
-      res.status(403).json({
-        success: false,
-        error: 'Yetkisiz erişim. Yönetici ID Token veya geçerli bakım anahtarı gereklidir.'
-      });
-      return;
-    }
 
-    // 2. Rate-Limit / Debounce Koruması (En az 60 saniyede bir çalıştırılabilir)
-    const now = Date.now();
-    if (now - lastManualExpiredRun < 60000) {
-      const waitSeconds = Math.ceil((60000 - (now - lastManualExpiredRun)) / 1000);
-      res.status(429).json({
-        success: false,
-        error: `Bu işlem çok sık tetiklendi. Lütfen ${waitSeconds} saniye sonra tekrar deneyin.`
-      });
-      return;
-    }
-    lastManualExpiredRun = now;
-
-    try {
-      const stats = await _cleanupExpiredDealsCore();
-      await _rollupNotificationStatsShardsCore();
-      res.status(200).json({
-        success: true,
-        message: 'Fırsat süresi doldu işaretleme tamamlandı (Fırsatlar silinmedi, arşivlendi).',
-        stats
-      });
-    } catch (error) {
-      functions.logger.error('❌ Manuel süresi doldu işaretleme genel hatası:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }));
 
 /**
  * 🔥 30 GÜN GEÇMİŞ FIRSATLARI KALICI OLARAK SİLER (Haftalık)
@@ -4461,6 +4451,16 @@ async function _purgeOldSystemErrorsCore(days = 30) {
   return { deletedCount: totalDeleted };
 }
 
+/**
+ * @function purgeOldDeals
+ * @category Scheduled Cron Pipeline
+ * @description 30 günden eski fırsatları, alt koleksiyonları, eski bildirimleri (≤20.000)
+ * ve sistem loglarını 400'lük batch'lerle kalıcı silerek veritabanını temizler.
+ * @trigger Cloud Scheduler: Her gün 03:30 TSİ (30 3 * * *)
+ * @schedule 03:30 TSİ (Günlük)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients GCP Cloud Scheduler
+ */
 exports.purgeOldDeals = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
   .pubsub.schedule('30 3 * * *') // FAZ 2 (FS-CF-06): Her gün gece 03:30'da çalışır (Günlük temizlik)
@@ -4471,6 +4471,16 @@ exports.purgeOldDeals = functions
     return null;
   }));
 
+/**
+ * @function purgeOldDealsManual
+ * @category On-Demand Callable
+ * @description Web Admin panelinden parametrik derin temizlik başlatır; eski fırsatları,
+ * alt koleksiyonları, bildirimleri ve sistem loglarını kalıcı siler.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients Web Admin Paneli (app.js)
+ */
 exports.purgeOldDealsManual = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
   .https.onCall(wrapCall('purgeOldDealsManual', async (data, context) => {
@@ -4500,6 +4510,16 @@ exports.purgeOldDealsManual = functions
     };
   }));
 
+/**
+ * @function purgeOldNotificationsManual
+ * @category On-Demand Callable
+ * @description Web Admin panelinden bağımsız bildirim temizliği yürütür; 30 günden eski
+ * kullanıcı bildirimlerini 400'lük batch'lerle ve devre kesici korumasıyla temizler.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients Web Admin Paneli (app.js)
+ */
 exports.purgeOldNotificationsManual = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
   .https.onCall(wrapCall('purgeOldNotificationsManual', async (data, context) => {
@@ -4529,34 +4549,7 @@ exports.purgeOldNotificationsManual = functions
     };
   }));
 
-exports.purgeOldSystemErrorsManual = functions
-  .runWith({ timeoutSeconds: 540, memory: '1GB' })
-  .https.onCall(wrapCall('purgeOldSystemErrorsManual', async (data, context) => {
-    // Admin kontrolü
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', 'Giriş yapmalısınız.');
-    }
-    const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
-    const isCallerAdmin = callerDoc.exists && (
-      callerDoc.data().isAdmin === true ||
-      callerDoc.data().isadmin === true ||
-      callerDoc.data().isAdmin === 'true' ||
-      callerDoc.data().isadmin === 'true' ||
-      callerDoc.data().role === 'admin'
-    );
-    if (!isCallerAdmin) {
-      throw new functions.https.HttpsError('permission-denied', 'Admin yetkisi gerekli.');
-    }
 
-    const days = (data && data.days) ? parseInt(data.days, 10) : 30;
-    functions.logger.info(`🔥 Admin ${context.auth.uid} tarafından manuel sistem logu temizleme tetiklendi (${days} günlük).`);
-    const result = await _purgeOldSystemErrorsCore(days);
-    return {
-      success: true,
-      message: `${result.deletedCount} adet eski sistem logu kalıcı olarak silindi.`,
-      stats: result
-    };
-  }));
 
 /**
  * 14. KULLANICI AUTH HESABI SİLİNDİĞİNDE TETİKLENEN SİLME İŞLEMİ (KVKK / GDPR Tam Uyumlu)
@@ -4741,6 +4734,16 @@ async function _cleanupUserDataCore(userId) {
   return deletedStats;
 }
 
+/**
+ * @function onUserDeleted
+ * @category Realtime Event Trigger (Auth)
+ * @description Kullanıcı hesabı silindiğinde Firestore profili, favorileri, cihaz token'ları,
+ * bildirimleri ve Storage dosyalarını 400'lük batch'lerle kaskat olarak kalıcı siler.
+ * @trigger Firebase Auth: user.onDelete
+ * @schedule Anlık (Hesap silindiğinde)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients Flutter (auth_service.dart), Firebase Auth SDK
+ */
 exports.onUserDeleted = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
   .auth.user().onDelete(wrapTrigger('onUserDeleted', async (user, context) => {
@@ -4751,48 +4754,14 @@ exports.onUserDeleted = functions
 }));
 
 /**
- * P0-12 (R-PRV-08): KULLANICI KENDİ HESABINI SİLME (Callable)
- * İstemci tarafı güvenli kimlik doğrulama sonrası çağrılır. Verileri kaskat olarak temizler ve Auth kullanıcısını siler.
- */
-exports.deleteMyAccount = functions
-  .runWith({ timeoutSeconds: 540, memory: '1GB' })
-  .https.onCall(wrapCall('deleteMyAccount', async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Bu işlem için giriş yapmalısınız.');
-  }
-
-  const userId = context.auth.uid;
-  functions.logger.info(`🗑️ deleteMyAccount çağrıldı: ${userId}`);
-
-  try {
-    // 1. Kaskat Firestore, Storage ve ilişkili verileri kalıcı sil
-    const stats = await _cleanupUserDataCore(userId);
-
-    // 2. Firebase Auth'dan kullanıcıyı kalıcı olarak sil
-    let authDeleted = false;
-    try {
-      await admin.auth().deleteUser(userId);
-      authDeleted = true;
-      functions.logger.info(`✅ Firebase Auth kullanıcısı başarıyla silindi: ${userId}`);
-    } catch (authErr) {
-      if (authErr.code === 'auth/user-not-found') {
-        functions.logger.warn(`⚠️ Auth kullanıcısı zaten silinmiş: ${userId}`);
-      } else {
-        throw authErr;
-      }
-    }
-
-    return { success: true, userId, authDeleted, stats };
-  } catch (error) {
-    functions.logger.error(`❌ deleteMyAccount hatası (${userId}):`, error);
-    if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', `Hesap silinirken hata oluştu: ${error.message}`);
-  }
-}));
-
-/**
- * FS-AUTH-08: APPLE TOKEN REVOCATION (Callable) - Apple Guideline 5.1.1(v) Uyumlu
- * Apple ile oturum açmış kullanıcı hesabını sildiğinde Apple yetkilendirme jetonunu iptal eder.
+ * @function revokeAppleToken
+ * @category On-Demand Callable
+ * @description Apple ile giriş yapmış kullanıcıların hesap silme sürecinde Apple OAuth yetki
+ * jetonunu Apple sunucularından iptal eder (Apple Guideline 5.1.1(v) uyumluluğu).
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Apple hesabı silindiğinde)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Flutter Mobil (auth_service.dart)
  */
 exports.revokeAppleToken = functions.https.onCall(wrapCall('revokeAppleToken', async (data, context) => {
   if (!context.auth) {
@@ -4868,8 +4837,14 @@ exports.revokeAppleToken = functions.https.onCall(wrapCall('revokeAppleToken', a
 }));
 
 /**
- * 15. ADMİN TARAFINDAN KULLANICI HESABINI SİLME (Callable) - FAZ 6
- * Sadece adminler tetikleyebilir. Auth ve Firestore verilerini kaskat olarak temizler.
+ * @function adminDeleteUser
+ * @category On-Demand Callable
+ * @description Web ve Mobil Admin panellerinden kullanıcı silmeyi sağlar; yönetici yetkisini
+ * doğrular, kullanıcının Auth hesabını ve ilişkili tüm Firestore/Storage verilerini siler.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients Web Admin Paneli (app.js), Flutter Mobil Admin (user_service.dart)
  */
 exports.adminDeleteUser = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
@@ -4940,8 +4915,14 @@ exports.adminDeleteUser = functions
 }));
 
 /**
- * 16. TEST DATA JENERATÖRÜ (Callable) - Sadece Adminler - FAZ 6
- * İzolasyonlu test kullanıcısı oluşturur, ilişkili cihazları, ayarları ve mock fırsatları ekler.
+ * @function generateTestData
+ * @category DEV Test Tool (Protected)
+ * @description Web Admin panelinden test kullanıcısı ve mock fırsatlar oluşturur;
+ * canlı PROD ortamında güvenlik gereği kilitlenmiştir (permission-denied).
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (DEV Ortamı Admin Tetiklemesi)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Web Admin Paneli (app.js) - Yalnızca DEV
  */
 exports.generateTestData = functions.https.onCall(wrapCall('generateTestData', async (data, context) => {
   if (!context.auth) {
@@ -4958,6 +4939,17 @@ exports.generateTestData = functions.https.onCall(wrapCall('generateTestData', a
 
   if (!isCallerAdmin) {
     throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
+  }
+
+  // FS-TEST-01: Canlı (PROD) Veritabanı Koruma Kalkanı
+  let currentProjectId = process.env.GCLOUD_PROJECT || (admin.apps && admin.apps[0] && admin.apps[0].options && admin.apps[0].options.projectId);
+  if (!currentProjectId && process.env.FIREBASE_CONFIG) {
+    try {
+      currentProjectId = JSON.parse(process.env.FIREBASE_CONFIG).projectId;
+    } catch (_) {}
+  }
+  if (currentProjectId === 'firsatkolik-prod-e6eae') {
+    throw new functions.https.HttpsError('permission-denied', 'Bu işlem PROD ortamında güvenlik gereği yasaklanmıştır.');
   }
 
   const rawEmailInput = (data && data.email ? String(data.email) : 'testuser').trim();
@@ -5117,8 +5109,14 @@ exports.generateTestData = functions.https.onCall(wrapCall('generateTestData', a
 }));
 
 /**
- * 17. TÜM TEST VERİLERİNİ TEMİZLEME (Callable) - Sadece Adminler - FAZ 6
- * E-postası @test.firsatkolik.com ile biten veya isTest: true olan kullanıcıları ve fırsatları kalıcı temizler.
+ * @function cleanupTestData
+ * @category DEV Test Tool (Protected)
+ * @description Web Admin panelinden sahte test verilerini toplu olarak temizler;
+ * canlı PROD ortamında güvenlik gereği kilitlenmiştir (permission-denied).
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (DEV Ortamı Admin Tetiklemesi)
+ * @resources 256MB RAM / 60s Timeout
+ * @clients Web Admin Paneli (app.js) - Yalnızca DEV
  */
 exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', async (data, context) => {
   if (!context.auth) {
@@ -5135,6 +5133,17 @@ exports.cleanupTestData = functions.https.onCall(wrapCall('cleanupTestData', asy
 
   if (!isCallerAdmin) {
     throw new functions.https.HttpsError('permission-denied', 'Sadece adminler bu işlemi yapabilir.');
+  }
+
+  // FS-TEST-02: Canlı (PROD) Veritabanı Koruma Kalkanı
+  let currentProjectId = process.env.GCLOUD_PROJECT || (admin.apps && admin.apps[0] && admin.apps[0].options && admin.apps[0].options.projectId);
+  if (!currentProjectId && process.env.FIREBASE_CONFIG) {
+    try {
+      currentProjectId = JSON.parse(process.env.FIREBASE_CONFIG).projectId;
+    } catch (_) {}
+  }
+  if (currentProjectId === 'firsatkolik-prod-e6eae') {
+    throw new functions.https.HttpsError('permission-denied', 'Bu işlem PROD ortamında güvenlik gereği yasaklanmıştır.');
   }
 
   try {
@@ -5294,6 +5303,16 @@ function generateUserSearchKeywords(username, displayName, nickname) {
   return Array.from(kwSet).slice(0, 60);
 }
 
+/**
+ * @function onUserUpdated
+ * @category Realtime Event Trigger
+ * @description Profil adı ve fotoğrafı değişikliklerini algılar; yorum ve mesajlardaki
+ * denormalize alanları azami 300 doküman sınırıyla güvenli şekilde senkronize eder.
+ * @trigger Firestore: users/{userId} (onUpdate)
+ * @schedule Anlık (Profil güncellendiğinde)
+ * @resources 512MB RAM / 300s Timeout
+ * @clients Flutter Profil Ekranı, Web Admin Paneli
+ */
 exports.onUserUpdated = functions
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
   .firestore
@@ -5546,8 +5565,14 @@ async function executeWithScraperLock(lockName, triggerType, scrapeFn) {
 }
 
 /**
- * 16. KUPON KAZIMA VE KAYDETME - MANUEL (Callable) - FAZ 5
- * Sadece adminler tetikleyebilir. Dağıtık kilit korumalıdır.
+ * @function scrapeCouponsManual
+ * @category On-Demand Callable
+ * @description Web Admin panelinden manuel kupon kazıma başlatır; dağıtık mutex kilidiyle
+ * planlı cron görevleriyle çakışmayı engeller.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients Web Admin Paneli (app.js)
  */
 exports.scrapeCouponsManual = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
@@ -5574,8 +5599,14 @@ exports.scrapeCouponsManual = functions
   }));
 
 /**
- * 17. KUPON KAZIMA VE KAYDETME - ZAMANLANMIŞ (Scheduled) - FAZ 5
- * Her gün gece 04:00'da otomatik çalışır. Dağıtık kilit korumalıdır.
+ * @function scrapeCouponsScheduled
+ * @category Scheduled Cron Pipeline
+ * @description Harici e-ticaret sitelerinden indirim kuponlarını otonom kazır,
+ * dağıtık mutex kilidi ve 400'lük batch ile veritabanına yazar.
+ * @trigger Cloud Scheduler: Her gün 04:00 TSİ (0 4 * * *)
+ * @schedule 04:00 TSİ (Günlük)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients GCP Cloud Scheduler
  */
 exports.scrapeCouponsScheduled = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
@@ -5590,8 +5621,14 @@ exports.scrapeCouponsScheduled = functions
   }));
 
 /**
- * 18. AKTÜEL KATALOG KAZIMA VE KAYDETME - MANUEL (Callable) - FAZ 5
- * Sadece adminler tetikleyebilir. Dağıtık kilit korumalıdır.
+ * @function scrapeCatalogsManual
+ * @category On-Demand Callable
+ * @description Web Admin panelinden manuel katalog kazıma başlatır; dağıtık mutex kilidi ve
+ * Akakçe proxy hattı üzerinden 36 market broşürünü günceller.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin tetiklemesi)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients Web Admin Paneli (app.js)
  */
 exports.scrapeCatalogsManual = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
@@ -5618,8 +5655,14 @@ exports.scrapeCatalogsManual = functions
   }));
 
 /**
- * 19. AKTÜEL KATALOG KAZIMA VE KAYDETME - ZAMANLANMIŞ (Scheduled) - FAZ 5
- * Her gün gece 03:00'da otomatik çalışır. (v2026.07.28 - Google Translate Proxy) Dağıtık kilit korumalıdır.
+ * @function scrapeCatalogsScheduled
+ * @category Scheduled Cron Pipeline
+ * @description 36 zincir marketin aktüel kataloglarını otonom kazır, kapak görsellerini
+ * Storage'a yedekler ve dağıtık mutex kilidiyle tekil çalışmayı güvenceye alır.
+ * @trigger Cloud Scheduler: Her gün 03:00 TSİ (0 3 * * *)
+ * @schedule 03:00 TSİ (Günlük)
+ * @resources 1GB RAM / 540s Timeout
+ * @clients GCP Cloud Scheduler
  */
 exports.scrapeCatalogsScheduled = functions
   .runWith({ timeoutSeconds: 540, memory: '1GB' })
@@ -5633,11 +5676,18 @@ exports.scrapeCatalogsScheduled = functions
     return null;
   }));
 
-/**
- * 20. OBSERVABILITY & TELEMETRİ GÖZLEMLEME SERVİSİ (Modül 11)
- * Web Admin için GA4 Data API ve veritabanı telemetri verilerini çeker.
- */
 const { getObservabilityMetricsHandler } = require('./observability_service');
+
+/**
+ * @function getObservabilityMetrics
+ * @category On-Demand Callable
+ * @description Web Admin Modül 11 için sistem sağlık metriklerini, Firestore sayaçlarını
+ * ve GA4 verilerini hafif projeksiyonla derleyip sunar.
+ * @trigger HTTPS Callable (onCall)
+ * @schedule İsteğe Bağlı (Admin paneli açıldığında)
+ * @resources 512MB RAM / 60s Timeout
+ * @clients Web Admin Paneli (observability_manager.js)
+ */
 exports.getObservabilityMetrics = functions
   .runWith({ timeoutSeconds: 60, memory: '512MB' })
   .https.onCall(wrapCall('getObservabilityMetrics', getObservabilityMetricsHandler));

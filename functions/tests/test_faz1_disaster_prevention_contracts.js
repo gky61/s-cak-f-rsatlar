@@ -158,16 +158,16 @@ console.log('\n--- TEST 4: FS-CF-04 Hesap Silme Fonksiyonları (540s & 1GB) Söz
                              indexJs.match(/exports\.onUserDeleted\s*=\s*functions\s*\.runWith\(\{\s*timeoutSeconds:\s*540,\s*memory:\s*['"]1GB['"]\s*\}\)/);
   assert.ok(onUserDeletedMatch, 'onUserDeleted fonksiyonu 540s timeout ve 1GB bellek ile çalışmalıdır');
 
-  // deleteMyAccount runWith kontrolü
-  const deleteMyAccountMatch = indexJs.match(/exports\.deleteMyAccount\s*=\s*functions\s*\.runWith\(\{\s*timeoutSeconds:\s*540,\s*memory:\s*['"]1GB['"]\s*\}\)/);
-  assert.ok(deleteMyAccountMatch, 'deleteMyAccount fonksiyonu 540s timeout ve 1GB bellek ile çalışmalıdır');
+  // deleteMyAccount tasfiye kontrolü (Çift çalışma ve yarış durumu engeli)
+  const hasDeleteMyAccount = indexJs.includes('exports.deleteMyAccount =');
+  assert.strictEqual(hasDeleteMyAccount, false, 'deleteMyAccount fonksiyonu çift silme ve yarış durumunu önlemek için kaldırılmış olmalıdır');
 
   // adminDeleteUser runWith kontrolü
   const adminDeleteUserMatch = indexJs.match(/exports\.adminDeleteUser\s*=\s*functions\s*\.runWith\(\{\s*timeoutSeconds:\s*540,\s*memory:\s*['"]1GB['"]\s*\}\)/);
   assert.ok(adminDeleteUserMatch, 'adminDeleteUser fonksiyonu 540s timeout ve 1GB bellek ile çalışmalıdır');
 
   console.log('  ✅ onUserDeleted (540s / 1GB) doğrulandı.');
-  console.log('  ✅ deleteMyAccount (540s / 1GB) doğrulandı.');
+  console.log('  ✅ deleteMyAccount tasfiye edilerek tekil Auth trigger mimarisine geçildiği doğrulandı.');
   console.log('  ✅ adminDeleteUser (540s / 1GB) doğrulandı.');
   console.log('  ✅ 60s timeout SIGKILL nedeniyle yetim veritabanı kaydı (orphaned DB) riski sıfırlandı.');
 }

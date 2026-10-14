@@ -1,17 +1,18 @@
 /**
- * FırsatKolik — 5 Güçlendirilmiş Fonksiyon Mimari ve Güvenlik Sözleşme Testleri
+ * FırsatKolik — Güçlendirilmiş Mimari ve Güvenlik Sözleşme Testleri
  * 
  * Kapsam:
  * 1. onCouponCreated (Hedefli abonelikler & azami 300 kullanıcı tavanı)
- * 2. cleanupOldImagesManual (Days min 35 clamp koruması & admin auth kalkanı)
- * 3. sendManualNotification (Global topic yayını, 500 in-app tavanı & 300s timeout)
- * 4. cleanupExpiredDealsManual (60s debounce rate-limit & admin auth kalkanı)
+ * 2. Görsel Temizliği Güvenlik Eşiği (35 gün taban, 180 gün tavan, 10-1000 dosya güvenlik koruması)
+ * 3. sendManualNotification (Global topic yayını, 300 fallback in-app tavanı & 300s timeout)
+ * 4. Rate-Limit / Debounce Algoritması (60s debounce kalkanı)
  * 5. cleanupTestData (İndeksli sorgu & döngüsel sahipsiz fırsat temizliği)
+ * 6. matchAndCreateDealNotifications (300 tavanı ve öncelik sıralaması)
  */
 
 const assert = require('assert');
 
-console.log('🚀 FırsatKolik Güçlendirilmiş 5 Fonksiyon Test Süiti Başlatılıyor...\n');
+console.log('🚀 FırsatKolik Güçlendirilmiş Fonksiyon Test Süiti Başlatılıyor...\n');
 
 // ==========================================
 // TEST 1: onCouponCreated Fan-out ve Kota Koruması
@@ -44,9 +45,9 @@ console.log('--- TEST 1: onCouponCreated Bounded Fan-out Sözleşmesi ---');
 }
 
 // ==========================================
-// TEST 2: cleanupOldImagesManual 35 Gün ve Eşik Koruması
+// TEST 2: Görsel Temizliği 35 Gün Taban ve Güvenlik Eşiği Koruması
 // ==========================================
-console.log('\n--- TEST 2: cleanupOldImagesManual Güvenlik Eşiği Sözleşmesi ---');
+console.log('\n--- TEST 2: Görsel Temizliği Güvenlik Eşiği ve Clamping Sözleşmesi ---');
 {
   const calculateSafeDays = (inputDays) => {
     const rawDays = parseInt(inputDays, 10);
@@ -68,7 +69,7 @@ console.log('\n--- TEST 2: cleanupOldImagesManual Güvenlik Eşiği Sözleşmesi
   assert.strictEqual(calculateSafeMaxFiles('5'), 10, 'Minimum dosya tavanı 10 olmalı');
   assert.strictEqual(calculateSafeMaxFiles('5000'), 1000, 'Maksimum dosya tavanı 1000 olmalı');
 
-  console.log('✅ TEST 2 BAŞARILI: cleanupOldImagesManual güvenlik eşiği (days/maxFiles) doğrulandı.');
+  console.log('✅ TEST 2 BAŞARILI: Görsel temizliği güvenlik eşiği (days/maxFiles) doğrulandı.');
 }
 
 // ==========================================
@@ -101,9 +102,9 @@ console.log('\n--- TEST 3: sendManualNotification Dual-Topic ve GlobalAnnounceme
 }
 
 // ==========================================
-// TEST 4: cleanupExpiredDealsManual 60s Debounce Koruması
+// TEST 4: İdempotent Debounce ve 60s Rate-Limit Koruması
 // ==========================================
-console.log('\n--- TEST 4: cleanupExpiredDealsManual Rate-Limit Sözleşmesi ---');
+console.log('\n--- TEST 4: İdempotent Debounce ve Rate-Limit Algoritma Sözleşmesi ---');
 {
   let lastRun = 0;
   const checkRateLimit = (currentTime) => {
@@ -126,7 +127,7 @@ console.log('\n--- TEST 4: cleanupExpiredDealsManual Rate-Limit Sözleşmesi ---
   const res3 = checkRateLimit(t0 + 65000); // 65 saniye sonra
   assert.strictEqual(res3.allowed, true, '60 saniye dolduktan sonraki istek onaylanmalı');
 
-  console.log('✅ TEST 4 BAŞARILI: cleanupExpiredDealsManual rate-limit debounce koruması doğrulandı.');
+  console.log('✅ TEST 4 BAŞARILI: İdempotent debounce ve rate-limit koruması doğrulandı.');
 }
 
 // ==========================================

@@ -91,9 +91,10 @@ graph TD
 * 🟢 **Adım 2.1: DEV vs PROD Firebase Projeleri İzolasyonu**  
   *DEV Projesi:* `sicak-firsatlar-e6eae` (No: `560592268193`)  
   *PROD Projesi:* `firsatkolik-prod-e6eae` (No: `228657473310`)
-* 🟢 **Adım 2.2: Cloud Functions 31 Servis Dağıtımı & 100k Felaket Önleme Kalkanı**  
-  *Envanter:* 8 Firestore trigger, 1 Auth trigger, 2 HTTPS onRequest, 6 Scheduled cron, 14 Callable API (Toplam 31 Dışa Aktarım).  
-  *Durum:* Node 22 LTS. 100k kullanıcı (100k DAU) ölçeği için 31 fonksiyonun tamamında tek tek felaket senaryosu denetim döngüsü tamamlandı. Toplam 14 kritik felaket senaryosu (FS-CF-01 .. FS-CF-14: Bellek İçi Config Cache, 10-Shard Distributed Counter, 540s/1GB Hesap Silme Kalkanı, SSRF ve DNS Rebinding Savunması, Günlük 20.000 Bildirim Tasfiyesi, Viral Oylamalarda %80 Azaltılmış Rozet Denetimi, Akakçe Storage Kapak Yedekleme, 1.200 Doküman Cursor Sayfalama, 5.000 Dosya Storage Temizleme, Kelime Radarı Topic ve Çift Push Kalkanı, notificationSubscriptions/userDevices/notifications Composite İndeksleri, onCommentCreated 0-Duplicate Read ve cleanupInvalidTokens Cursor Pagination) %100 uygulandı ve 60 bağımsız sözleşme testiyle doğrulandı (`cloud_functions_100k_felaket_senaryolari_ve_cozum_raporu.md`).
+* 🟢 **Adım 2.2: Cloud Functions Sadeleştirme & 25 Optimize Servis (100k Felaket Önleme Kalkanı)**  
+  *Envanter:* 8 Firestore trigger, 1 Auth trigger, 1 HTTPS onRequest, 5 Scheduled cron, 10 Callable API (Toplam 25 Optimize Çekirdek + 2 DEV Test Aracı = 27 Aktif Dışa Aktarım).  
+  *Konsolidasyon ve Tasfiye:* 4 ölü/mükerrer fonksiyon (`deleteMyAccount`, `purgeOldSystemErrorsManual`, `cleanupExpiredDealsManual`, `cleanupOldImagesManual`) tamamen kaldırılarak 3 GB gereksiz RAM provizyonu ve çift silme yarış durumu bertaraf edildi. `cleanupExpiredDeals` görevi 02:30 TSİ'ye çekilerek 03:00'teki 36 marketlik katalog kazıyıcıyla I/O çekişmesi sıfırlandı. Test araçlarına (`generateTestData`, `cleanupTestData`) canlı PROD koruma kalkanı eklendi. 27 aktif fonksiyonun tamamına kurumsal JSDoc standart kartları entegre edildi (`cloud_functions_optimizasyon_ve_sadelesme_yol_haritasi.md`).  
+  *Durum:* Node 22 LTS. 100k kullanıcı (100k DAU) ölçeği için 14 kritik felaket senaryosu (FS-CF-01 .. FS-CF-14) %100 devrede ve 5 test süitindeki 66+ mimari sözleşme testiyle (%100 GREEN) mühürlendi.
 * 🟢 **Adım 2.3: Storage Güvenlik Kuralları (`storage.rules`)**  
   `deals/` ve `catalogs/` public okuma, yetkili kullanıcı WebP yükleme, 5MB limit, admin silme kuralı mühürlendi.
 * 🟢 **Adım 2.4: Resmi Web Vitrini, Custom Domain, Cloudflare DNS & SSL**  
