@@ -155,6 +155,10 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
 * **3.3. Faz 3.5: UMP Consent & ATT UI Sıralama Orkestrasyonu (✅ TAMAMLANDI):**
   * **Sıfır Çakışma (Zero UI Collision):** İlk açılışta Google AdMob UMP IDFA/GDPR formu açıldığında, FırsatKolik interaktif tanıtım turu (`TutorialSpotlightOverlay`) UMP diyaloğu kapanana kadar `AdManagerService.waitForConsentFlow()` kapısı ile bekletilir.
   * **Apple ATT Uyumu:** `Info.plist` içine `NSUserTrackingUsageDescription` tanımlanarak Apple App Store Guideline 5.1.2 politikasına %100 uyum sağlandı.
+* **3.4. Faz 3.6: 100k Ölçek Dayanıklılığı & Anti-Fraud Frequency Capping (✅ TAMAMLANDI):**
+  * **Anti-Fraud Frequency Cap:** Günlük maksimum 6 ödüllü video izleme tavanı (`maxDailyRewardedVideos: 6`) getirilerek aşırı video izleme kaynaklı AdMob *"Invalid Traffic"* hesap kısıtlamaları ve ban riski sıfırlandı.
+  * **Geçici Ağ/Soket Kesintisi Kalkanı (`isTransientAdError`):** Kod 0 altındaki işletim sistemi kaynaklı soket abort'ları (`Software caused connection abort`) filtrelendi; 3 kademeli (5s, 10s, 20s) üstel gecikmeli (exponential backoff) otomatik yeniden deneme entegre edildi.
+  * **Graceful Wait Kalkanı:** Kullanıcı video izlemek istediğinde reklam henüz hazır değilse 4 saniyelik emniyetli bekleme (`_rewardedLoadCompleter`) ve anlık geri bildirim toast'ı devreye girer.
 
 ---
 
@@ -166,7 +170,8 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
 
 ### FAZ 5: Web Admin Komuta Merkezi, Kill-Switch & Güvenlik (✅ TAMAMLANDI)
 * **Web Admin Canlı Kontrol:** [`web/admin`](file:///d:/firsatkolik/web/admin/admob_manager.js) paneli üzerinden acil durum Kill-Switch'i, format şalterleri (Native Anasayfa, Kuponlar, Aktüel, Popüler Fırsatlar, Favori Kategorilerim, Rewarded) ve reklam sıklıkları anlık yönetilir.
-* **Anti-Spam Cooldown:** 25 saniyelik hata soğuma süresiyle AdMob hesap banı ve kısıtlamaları engellenir.
+* **PROD Firestore `settings/admob` Canlı Mühür:** Canlı veritabanı bootstrap edildi; 16 reklam birimi, kill-switch ve 9 operasyonel parametre mobil istemcilerle anlık çift yönlü senkronize edildi.
+* **Anti-Spam Cooldown & Frequency Cap:** 25 saniyelik hata soğuma süresi ve günlük 6 video tavanı ile AdMob hesap banı ve kısıtlamaları engellenir.
 * **10/10 Statik Kod Denetimi (Inspect):** `python admob_cli.py inspect` ve Web Admin Inspection sekmesinde 10 kontrol noktası %100 başarıyla onaylanır.
 
 

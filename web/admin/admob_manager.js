@@ -81,7 +81,8 @@
                 nativeFollowedCategoriesInterval: 6, // Her 6 favori kategori fırsatında bir tam genişlik Native reklam
                 cooldownSeconds: 25,
                 rewardCreditsPerVideo: 2,
-                dailyFreeCredits: 2
+                dailyFreeCredits: 2,
+                maxDailyRewardedVideos: 6 // Günde izlenebilecek maksimum Rewarded Video tavanı (Anti-Abuse)
             },
             kpis: {
                 todayEstimatedRevenue: 0.00,
@@ -1137,6 +1138,18 @@
 
                         <div>
                             <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
+                                <span>Günlük Video Sınırı (Anti-Abuse)</span>
+                                ${this.renderInfoTip('Günlük Video Sınırı (Frequency Cap)', 'Bir kullanıcının günde en fazla kaç adet ödüllü video izleyebileceğini belirler. Aşırı video izleme kaynaklı AdMob Invalid Traffic ve hesap kısıtlamalarını (ban) engeller.', '🛡️ Güvenli Eşik: 6 Video', 'left')}
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="inputMaxDailyRewardedVideos" min="1" max="50" value="${s.maxDailyRewardedVideos || 6}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <span class="absolute right-3 top-2.5 text-xs text-slate-400">Video</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500 mt-1 block">Hesap banlanmasını önleyen günlük tavan</span>
+                        </div>
+
+                        <div>
+                            <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
                                 <span>Native Sıklığı (Grid)</span>
                                 ${this.renderInfoTip('Native Reklam Sıklığı (Grid)', '2 sütunlu grid akışında her kaç fırsat kartından sonra tam genişlikte yatay Native Reklam yerleştirileceğini belirler. Standart: 6 ürün (3 satırda bir).', '💡 Önerilen: 6 Ürün (3 Satır)', 'left')}
                             </label>
@@ -1678,6 +1691,7 @@
 
             const dInput = parseInt(document.getElementById('inputDailyFreeCredits')?.value, 10);
             const rInput = parseInt(document.getElementById('inputRewardCreditsPerVideo')?.value, 10);
+            const mInput = parseInt(document.getElementById('inputMaxDailyRewardedVideos')?.value, 10);
             const nInput = parseInt(document.getElementById('inputNativeGridInterval')?.value, 10);
             const ncInput = parseInt(document.getElementById('inputNativeCouponsInterval')?.value, 10);
             const naInput = parseInt(document.getElementById('inputNativeAktuelInterval')?.value, 10);
@@ -1686,6 +1700,7 @@
             const cInput = parseInt(document.getElementById('inputCooldownSeconds')?.value, 10);
             const dailyCredits = isNaN(dInput) || dInput < 1 ? 2 : Math.min(dInput, 20);
             const rewardCredits = isNaN(rInput) || rInput < 1 ? 2 : Math.min(rInput, 10);
+            const maxDailyRewardedVideos = isNaN(mInput) || mInput < 1 ? 6 : Math.min(mInput, 50);
             const nativeGridInterval = isNaN(nInput) || nInput < 4 ? 6 : Math.min(nInput, 20);
             const nativeCouponsInterval = isNaN(ncInput) || ncInput < 3 ? 5 : Math.min(ncInput, 15);
             const nativeAktuelInterval = isNaN(naInput) || naInput < 4 ? 6 : Math.min(naInput, 20);
@@ -1695,6 +1710,7 @@
 
             this.data.settings.dailyFreeCredits = dailyCredits;
             this.data.settings.rewardCreditsPerVideo = rewardCredits;
+            this.data.settings.maxDailyRewardedVideos = maxDailyRewardedVideos;
             this.data.settings.nativeGridInterval = nativeGridInterval;
             this.data.settings.nativeCouponsInterval = nativeCouponsInterval;
             this.data.settings.nativeAktuelInterval = nativeAktuelInterval;
@@ -1703,7 +1719,7 @@
             this.data.settings.cooldownSeconds = cooldown;
 
             await this.persistSettings();
-            this.logToConsole(`💾 [SETTINGS] Kupon kredileri (Günlük: ${dailyCredits}, Video: ${rewardCredits}), Native Sıklığı (Anasayfa: ${nativeGridInterval}, Kupon: ${nativeCouponsInterval}, Aktüel: ${nativeAktuelInterval}, Popüler: ${nativePopularInterval}, Favori: ${nativeFollowedCategoriesInterval}) ve güvenlik eşikleri (Cooldown: ${cooldown}s) güncellendi.`);
+            this.logToConsole(`💾 [SETTINGS] Kupon kredileri (Günlük: ${dailyCredits}, Video: ${rewardCredits}, Günlük Limit: ${maxDailyRewardedVideos}), Native Sıklığı (Anasayfa: ${nativeGridInterval}, Kupon: ${nativeCouponsInterval}, Aktüel: ${nativeAktuelInterval}, Popüler: ${nativePopularInterval}, Favori: ${nativeFollowedCategoriesInterval}) ve güvenlik eşikleri (Cooldown: ${cooldown}s) güncellendi.`);
 
             if (typeof window.showToast === 'function') {
                 window.showToast('AdMob ve Kupon parametreleri başarıyla kaydedildi!', 'success');
@@ -1720,6 +1736,7 @@
             const def = this.defaultData.settings;
             const inDaily = document.getElementById('inputDailyFreeCredits');
             const inReward = document.getElementById('inputRewardCreditsPerVideo');
+            const inMaxVideos = document.getElementById('inputMaxDailyRewardedVideos');
             const inGrid = document.getElementById('inputNativeGridInterval');
             const inCoupons = document.getElementById('inputNativeCouponsInterval');
             const inAktuel = document.getElementById('inputNativeAktuelInterval');
@@ -1729,6 +1746,7 @@
 
             if (inDaily) inDaily.value = def.dailyFreeCredits;
             if (inReward) inReward.value = def.rewardCreditsPerVideo;
+            if (inMaxVideos) inMaxVideos.value = def.maxDailyRewardedVideos || 6;
             if (inGrid) inGrid.value = def.nativeGridInterval;
             if (inCoupons) inCoupons.value = def.nativeCouponsInterval;
             if (inAktuel) inAktuel.value = def.nativeAktuelInterval;
@@ -1739,6 +1757,7 @@
             if (this.data && this.data.settings) {
                 this.data.settings.dailyFreeCredits = def.dailyFreeCredits;
                 this.data.settings.rewardCreditsPerVideo = def.rewardCreditsPerVideo;
+                this.data.settings.maxDailyRewardedVideos = def.maxDailyRewardedVideos || 6;
                 this.data.settings.nativeGridInterval = def.nativeGridInterval;
                 this.data.settings.nativeCouponsInterval = def.nativeCouponsInterval;
                 this.data.settings.nativeAktuelInterval = def.nativeAktuelInterval;
@@ -2001,10 +2020,12 @@
             const bOn = this.data?.settings?.bannerEnabled ? 'AÇIK' : 'PASİF (ARŞİV)';
             const rwOn = this.data?.settings?.rewardedEnabled ? 'AÇIK' : 'KAPALI';
 
+            const maxVideos = this.data?.settings?.maxDailyRewardedVideos || 6;
+
             switch(cmd) {
                 case 'status':
                     this.logToConsole('⚡ CMD: python admob_cli.py status --platform all --env prod');
-                    this.logToConsole(`✅ STATUS: ${ks ? 'PAUSED (KILL-SWITCH AKTİF)' : 'OPERATIONAL'} | KillSwitch: ${ks ? 'TRUE (DURDURULDU)' : 'FALSE (AKTİF)'} | Native(Anasayfa): ${nOn} (${nInterval}) | Native(Kuponlar): ${ncOn} (${ncInterval}) | Native(Aktüel): ${naOn} (${naInterval}) | Native(Popüler): ${npOn} (${npInterval}) | Native(FavoriKat): ${nfcOn} (${nfcInterval}) | Rewarded: ${rwOn} | Banner: ${bOn} | Kupon: Günlük ${dCredits} / Video +${rCredits}`);
+                    this.logToConsole(`✅ STATUS: ${ks ? 'PAUSED (KILL-SWITCH AKTİF)' : 'OPERATIONAL'} | KillSwitch: ${ks ? 'TRUE (DURDURULDU)' : 'FALSE (AKTİF)'} | Native(Anasayfa): ${nOn} (${nInterval}) | Native(Kuponlar): ${ncOn} (${ncInterval}) | Native(Aktüel): ${naOn} (${naInterval}) | Native(Popüler): ${npOn} (${npInterval}) | Native(FavoriKat): ${nfcOn} (${nfcInterval}) | Rewarded: ${rwOn} | Banner: ${bOn} | Kupon: Günlük ${dCredits} / Video +${rCredits} / Günlük Video Sınırı: ${maxVideos}`);
                     break;
                 case 'ecpm-optimize':
                     this.logToConsole('⚡ CMD: Agent AdMob Mediation & Floor Price Analizi Başlatıldı');

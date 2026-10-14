@@ -1269,71 +1269,101 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                           const SizedBox(height: 10),
 
                           // Watch Video Button
-                          SizedBox(
-                            width: double.infinity,
-                            height: 42,
-                            child: OutlinedButton(
-                              onPressed: () async {
-                                Navigator.of(sheetContext).pop();
-                                HapticFeedback.mediumImpact();
-
-                                bool userEarnedReward = false;
-                                final adShown = await AdManagerService.instance.showRewardedAd(
-                                  onUserEarnedReward: (reward) {
-                                    userEarnedReward = true;
-                                  },
-                                  onDismissed: () async {
-                                    if (userEarnedReward && mounted) {
-                                      await CouponCreditService.instance.unlockCouponForGuest(kupon.id);
-                                      _markCouponRecentlyUnlocked(kupon.id);
+                          Builder(
+                            builder: (context) {
+                              final canWatch = CouponCreditService.instance.canWatchRewardedAd;
+                              final remainingVideos = CouponCreditService.instance.remainingRewardedAdWatches;
+                              return SizedBox(
+                                width: double.infinity,
+                                height: 42,
+                                child: OutlinedButton(
+                                  onPressed: () async {
+                                    if (!canWatch) {
                                       _showToast(
-                                        message: '🎉 Kupon açıldı! Kodu kopyalamak için üzerine dokunabilirsin.',
-                                        icon: Icons.lock_open_rounded,
-                                        backgroundColor: const Color(0xFF15803D),
+                                        message: 'Bugünlük video ile kupon açma sınırına (${CouponCreditService.instance.maxDailyRewardedVideos}/${CouponCreditService.instance.maxDailyRewardedVideos}) ulaştınız. Gece yarısı haklarınız yenilenecektir veya ücretsiz üye olarak kuponları görüntüleyebilirsiniz.',
+                                        icon: Icons.hourglass_top_rounded,
+                                        backgroundColor: const Color(0xFF334155),
+                                        duration: const Duration(seconds: 4),
+                                      );
+                                      return;
+                                    }
+
+                                    Navigator.of(sheetContext).pop();
+                                    HapticFeedback.mediumImpact();
+
+                                    if (!AdManagerService.instance.isRewardedAdReady) {
+                                      _showToast(
+                                        message: '🎬 Video reklam hazırlanıyor, lütfen bekleyin...',
+                                        icon: Icons.hourglass_top_rounded,
+                                        backgroundColor: const Color(0xFF334155),
+                                        duration: const Duration(seconds: 2),
+                                      );
+                                    }
+
+                                    bool userEarnedReward = false;
+                                    final adShown = await AdManagerService.instance.showRewardedAd(
+                                      onUserEarnedReward: (reward) {
+                                        userEarnedReward = true;
+                                      },
+                                      onDismissed: () async {
+                                        if (userEarnedReward && mounted) {
+                                          await CouponCreditService.instance.unlockCouponForGuest(kupon.id);
+                                          _markCouponRecentlyUnlocked(kupon.id);
+                                          _showToast(
+                                            message: '🎉 Kupon açıldı! Kodu kopyalamak için üzerine dokunabilirsin.',
+                                            icon: Icons.lock_open_rounded,
+                                            backgroundColor: const Color(0xFF15803D),
+                                            duration: const Duration(seconds: 3),
+                                          );
+                                          if (mounted) setState(() {});
+                                        }
+                                      },
+                                    );
+
+                                    // Güvenlik Kalkanı (P1-31 / R-BIZ-03): Fail-closed reklam politikası.
+                                    // Reklam yüklenemezse veya ad-blocker varsa sınırsız kupon açılması engellenir.
+                                    if (!adShown && mounted) {
+                                      _showToast(
+                                        message: 'Reklam şu anda yüklenemedi. Lütfen internet bağlantınızı kontrol edip biraz sonra tekrar deneyin veya günlük ücretsiz haklarınızı kullanın.',
+                                        icon: Icons.info_outline_rounded,
+                                        backgroundColor: const Color(0xFF334155),
                                         duration: const Duration(seconds: 3),
                                       );
                                       if (mounted) setState(() {});
                                     }
                                   },
-                                );
-
-                                // Güvenlik Kalkanı (P1-31 / R-BIZ-03): Fail-closed reklam politikası.
-                                // Reklam yüklenemezse veya ad-blocker varsa sınırsız kupon açılması engellenir.
-                                if (!adShown && mounted) {
-                                  _showToast(
-                                    message: 'Reklam şu anda yüklenemedi. Lütfen internet bağlantınızı kontrol edip biraz sonra tekrar deneyin veya günlük ücretsiz haklarınızı kullanın.',
-                                    icon: Icons.info_outline_rounded,
-                                    backgroundColor: const Color(0xFF334155),
-                                    duration: const Duration(seconds: 3),
-                                  );
-                                  if (mounted) setState(() {});
-                                }
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFFF6D00),
-                                side: const BorderSide(
-                                  color: Color(0xFFFF6D00),
-                                  width: 1.2,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.play_circle_fill_rounded, size: 17),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Videoyu İzle & Bu Kuponu Aç',
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w800,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: canWatch ? const Color(0xFFFF6D00) : const Color(0xFF94A3B8),
+                                    side: BorderSide(
+                                      color: canWatch ? const Color(0xFFFF6D00) : const Color(0xFF94A3B8),
+                                      width: 1.2,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        canWatch ? Icons.play_circle_fill_rounded : Icons.lock_clock_rounded,
+                                        size: 17,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        canWatch
+                                            ? 'Videoyu İzle & Bu Kuponu Aç ($remainingVideos Hak)'
+                                            : 'Günlük Video Sınırına Ulaşıldı',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -1522,70 +1552,100 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
               const SizedBox(height: 18),
 
               // Watch Video Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    Navigator.of(sheetContext).pop();
-                    HapticFeedback.mediumImpact();
-
-                    bool userEarnedReward = false;
-                    final adShown = await AdManagerService.instance.showRewardedAd(
-                      onUserEarnedReward: (reward) {
-                        userEarnedReward = true;
-                      },
-                      onDismissed: () async {
-                        if (userEarnedReward && mounted) {
-                          final creditAmount = CouponCreditService.instance.rewardCreditsPerVideo;
-                          await CouponCreditService.instance.addRewardedCredits();
+              Builder(
+                builder: (context) {
+                  final canWatch = CouponCreditService.instance.canWatchRewardedAd;
+                  final remainingVideos = CouponCreditService.instance.remainingRewardedAdWatches;
+                  return SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        if (!canWatch) {
                           _showToast(
-                            message: '🎉 +$creditAmount Kupon Hakkı Eklendi! Kalan: ${CouponCreditService.instance.remainingCredits} Hak. Açmak istediğin kuponda "Aç" butonuna dokunabilirsin.',
-                            icon: Icons.confirmation_number_rounded,
-                            backgroundColor: const Color(0xFF15803D),
+                            message: 'Bugünlük video ile kupon açma sınırına (${CouponCreditService.instance.maxDailyRewardedVideos}/${CouponCreditService.instance.maxDailyRewardedVideos}) ulaştınız. Gece yarısı haklarınız yenilenecektir.',
+                            icon: Icons.hourglass_top_rounded,
+                            backgroundColor: const Color(0xFF334155),
+                            duration: const Duration(seconds: 4),
+                          );
+                          return;
+                        }
+
+                        Navigator.of(sheetContext).pop();
+                        HapticFeedback.mediumImpact();
+
+                        if (!AdManagerService.instance.isRewardedAdReady) {
+                          _showToast(
+                            message: '🎬 Video reklam hazırlanıyor, lütfen bekleyin...',
+                            icon: Icons.hourglass_top_rounded,
+                            backgroundColor: const Color(0xFF334155),
+                            duration: const Duration(seconds: 2),
+                          );
+                        }
+
+                        bool userEarnedReward = false;
+                        final adShown = await AdManagerService.instance.showRewardedAd(
+                          onUserEarnedReward: (reward) {
+                            userEarnedReward = true;
+                          },
+                          onDismissed: () async {
+                            if (userEarnedReward && mounted) {
+                              final creditAmount = CouponCreditService.instance.rewardCreditsPerVideo;
+                              await CouponCreditService.instance.addRewardedCredits();
+                              _showToast(
+                                message: '🎉 +$creditAmount Kupon Hakkı Eklendi! Kalan: ${CouponCreditService.instance.remainingCredits} Hak. Açmak istediğin kuponda "Aç" butonuna dokunabilirsin.',
+                                icon: Icons.confirmation_number_rounded,
+                                backgroundColor: const Color(0xFF15803D),
+                                duration: const Duration(seconds: 3),
+                              );
+                              if (mounted) setState(() {});
+                            }
+                          },
+                        );
+
+                        // Güvenlik Kalkanı (P1-31 / R-BIZ-03): Fail-closed ödül politikası.
+                        // Reklam gösterilmeden sonsuz hediye kredi dağıtımı engellenir.
+                        if (!adShown && mounted) {
+                          _showToast(
+                            message: 'Video reklam şu anda yüklenemedi. Lütfen internet bağlantınızı kontrol edip biraz sonra tekrar deneyin veya günlük ücretsiz haklarınızı kullanın.',
+                            icon: Icons.info_outline_rounded,
+                            backgroundColor: const Color(0xFF334155),
                             duration: const Duration(seconds: 3),
                           );
                           if (mounted) setState(() {});
                         }
                       },
-                    );
-
-                    // Güvenlik Kalkanı (P1-31 / R-BIZ-03): Fail-closed ödül politikası.
-                    // Reklam gösterilmeden sonsuz hediye kredi dağıtımı engellenir.
-                    if (!adShown && mounted) {
-                      _showToast(
-                        message: 'Video reklam şu anda yüklenemedi. Lütfen internet bağlantınızı kontrol edip biraz sonra tekrar deneyin veya günlük ücretsiz haklarınızı kullanın.',
-                        icon: Icons.info_outline_rounded,
-                        backgroundColor: const Color(0xFF334155),
-                        duration: const Duration(seconds: 3),
-                      );
-                      if (mounted) setState(() {});
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.play_circle_fill_rounded, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        '🎬 Kısa Video İzle (+${CouponCreditService.instance.rewardCreditsPerVideo} Hak Kazan)',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: canWatch ? AppTheme.primary : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                        foregroundColor: canWatch ? Colors.white : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            canWatch ? Icons.play_circle_fill_rounded : Icons.lock_clock_rounded,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            canWatch
+                                ? '🎬 Kısa Video İzle (+${CouponCreditService.instance.rewardCreditsPerVideo} Hak) • Kalan: $remainingVideos'
+                                : '🎬 Günlük Video Sınırına Ulaşıldı (${CouponCreditService.instance.dailyRewardedVideosWatched}/${CouponCreditService.instance.maxDailyRewardedVideos})',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 6),
 

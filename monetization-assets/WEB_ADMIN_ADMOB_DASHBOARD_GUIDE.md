@@ -146,9 +146,10 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
    - `Ödüllü Video (Rewarded)`: Kupon sayfasındaki video ile kupon açma hakkını yönetir (Varsayılan: Açık).
    - `Yatay Banner (Arşiv / Emekli)`: Faz 3.3 ile emekliye ayrılan eski banner birimlerini temsil eder (Varsayılan: Kapalı/Arşiv).
    - Her şalter değişiminde Firestore anında güncellenir ve sağ üstte etkileşimli toast bildirimi verilir.
-3. **Kupon Açma Kredisi ve Güvenlik Parametreleri (8 Operasyonel Parametre - NaN & Sınır Korumalı):**
+3. **Kupon Açma Kredisi ve Güvenlik Parametreleri (9 Operasyonel Parametre - NaN & Sınır Korumalı):**
    - **Günlük Ücretsiz Kupon Açma:** Kullanıcıya her gün hediye edilecek hak (Varsayılan: `2`, Aralık: 1-20).
    - **Video Başına Kupon Açma:** Rewarded video tamamlandığında hesaba yüklenecek hak (Varsayılan: `+2`, Aralık: 1-10).
+   - **Günlük Video Sınırı (Anti-Abuse Frequency Cap):** Kullanıcının bir günde izleyebileceği azami ödüllü video tavanı (Varsayılan: `6`, Aralık: 1-50). AdMob yapay zekasının aşırı video izleme kaynaklı *"Invalid Traffic"* kısıtlaması (Ad Serving Limit / Account Ban) koymasını %100 engeller.
    - **Izgara Akışı Reklam Sıklığı (`nativeGridInterval`):** Anasayfa ızgara (Grid) görünümünde kaç üründe bir tam genişlik yatay native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
    - **Kuponlar Akışı Reklam Sıklığı (`nativeCouponsInterval`):** Kupon listesinde kaç kuponda bir native reklam yerleştirileceğini belirler (Varsayılan: `5`, Aralık: 3-15).
    - **Aktüel Akışı Reklam Sıklığı (`nativeAktuelInterval`):** Aktüel broşür 2 sütunlu gridinde kaç broşürde bir tam genişlik native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).

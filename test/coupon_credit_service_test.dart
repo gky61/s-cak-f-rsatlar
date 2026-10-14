@@ -211,6 +211,51 @@ void main() {
 
       expect(canVote, isFalse);
     });
+
+    test('15. canWatchRewardedAd is true initially, remainingRewardedAdWatches equals 6', () {
+      final service = CouponCreditService.instance;
+      expect(service.maxDailyRewardedVideos, 6);
+      expect(service.dailyRewardedVideosWatched, 0);
+      expect(service.canWatchRewardedAd, isTrue);
+      expect(service.remainingRewardedAdWatches, 6);
+    });
+
+    test('16. Watching rewarded video increments dailyRewardedVideosWatched and decrements remainingRewardedAdWatches', () async {
+      final service = CouponCreditService.instance;
+
+      await service.addRewardedCredits(2);
+      expect(service.dailyRewardedVideosWatched, 1);
+      expect(service.remainingRewardedAdWatches, 5);
+      expect(service.canWatchRewardedAd, isTrue);
+
+      await service.unlockCouponForGuest('guest_video_1');
+      expect(service.dailyRewardedVideosWatched, 2);
+      expect(service.remainingRewardedAdWatches, 4);
+      expect(service.canWatchRewardedAd, isTrue);
+    });
+
+    test('17. Reaching maxDailyRewardedVideos sets canWatchRewardedAd to false and remainingRewardedAdWatches to 0', () async {
+      final service = CouponCreditService.instance;
+
+      for (int i = 0; i < 6; i++) {
+        expect(service.canWatchRewardedAd, isTrue);
+        await service.addRewardedCredits(2);
+      }
+
+      expect(service.dailyRewardedVideosWatched, 6);
+      expect(service.remainingRewardedAdWatches, 0);
+      expect(service.canWatchRewardedAd, isFalse);
+    });
+
+    test('18. updateMaxDailyRewardedVideos dynamically adjusts the capping limit', () {
+      final service = CouponCreditService.instance;
+      service.updateMaxDailyRewardedVideos(10);
+      expect(service.maxDailyRewardedVideos, 10);
+      expect(service.remainingRewardedAdWatches, 10);
+
+      service.updateMaxDailyRewardedVideos(6); // Restore default
+      expect(service.maxDailyRewardedVideos, 6);
+    });
   });
 }
 

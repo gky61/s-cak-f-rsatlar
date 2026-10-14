@@ -23,12 +23,23 @@ class CouponCreditService extends ChangeNotifier {
   static const String _keyCredits = 'firsatkolik_coupon_credits_count';
   static const String _keyDate = 'firsatkolik_coupon_credits_date';
   static const String _keyUnlockedIds = 'firsatkolik_coupon_unlocked_ids';
+  static const String _keyDailyRewardedWatched = 'firsatkolik_daily_rewarded_watched';
 
   static const int defaultDailyCredits = 2;
   static const int rewardCreditsPerAd = 2;
+  static const int defaultMaxDailyRewardedVideos = 6;
 
   int dailyFreeCredits = defaultDailyCredits;
   int rewardCreditsPerVideo = rewardCreditsPerAd;
+  int maxDailyRewardedVideos = defaultMaxDailyRewardedVideos;
+  int dailyRewardedVideosWatched = 0;
+
+  /// Kullanıcının bugün daha fazla ödüllü video izleme hakkı var mı? (Anti-Abuse / Fraud Kalkanı)
+  bool get canWatchRewardedAd => dailyRewardedVideosWatched < maxDailyRewardedVideos;
+
+  /// Bugün kalan ödüllü video izleme hakkı adedi
+  int get remainingRewardedAdWatches =>
+      (maxDailyRewardedVideos - dailyRewardedVideosWatched).clamp(0, maxDailyRewardedVideos);
 
   /// Web Admin / Firestore ayarları üzerinden dinamik güncelleme
   void updateDailyFreeCredits(int val) {
@@ -44,6 +55,15 @@ class CouponCreditService extends ChangeNotifier {
     if (val > 0 && rewardCreditsPerVideo != val) {
       rewardCreditsPerVideo = val;
       _log('⚙️ Rewarded video başına kupon hakkı güncellendi: $rewardCreditsPerVideo');
+      notifyListeners();
+    }
+  }
+
+  /// Web Admin / Firestore ayarları üzerinden dinamik güncelleme (Günlük Max Video Limiti)
+  void updateMaxDailyRewardedVideos(int val) {
+    if (val > 0 && maxDailyRewardedVideos != val) {
+      maxDailyRewardedVideos = val;
+      _log('⚙️ Günlük azami ödüllü video izleme limiti güncellendi: $maxDailyRewardedVideos');
       notifyListeners();
     }
   }
@@ -70,21 +90,25 @@ class CouponCreditService extends ChangeNotifier {
         await prefs.setString(_keyDate, todayStr);
         await prefs.setInt(_keyCredits, dailyFreeCredits);
         await prefs.setStringList(_keyUnlockedIds, []);
+        await prefs.setInt(_keyDailyRewardedWatched, 0);
         creditsNotifier.value = dailyFreeCredits;
         _unlockedCouponIds.clear();
+        dailyRewardedVideosWatched = 0;
       } else {
         // Aynı gün içindeyiz -> Kayıtlı bakiyeyi oku
         final currentCredits = prefs.getInt(_keyCredits) ?? dailyFreeCredits;
         final unlocked = prefs.getStringList(_keyUnlockedIds) ?? [];
+        dailyRewardedVideosWatched = prefs.getInt(_keyDailyRewardedWatched) ?? 0;
 
         creditsNotifier.value = currentCredits;
         _unlockedCouponIds.addAll(unlocked);
-        _log('✅ Kayıtlı kupon kredisi yüklendi: $currentCredits hak | Açılan kuponlar: ${unlocked.length}');
+        _log('✅ Kayıtlı kupon kredisi yüklendi: $currentCredits hak | Açılan kuponlar: ${unlocked.length} | İzlenen video: $dailyRewardedVideosWatched/$maxDailyRewardedVideos');
       }
       _isInitialized = true;
     } catch (e) {
       _log('⚠️ Başlatma hatası: $e');
       creditsNotifier.value = dailyFreeCredits;
+      dailyRewardedVideosWatched = 0;
       _isInitialized = true;
     }
   }
@@ -141,6 +165,7 @@ class CouponCreditService extends ChangeNotifier {
       await prefs.setInt(_keyCredits, newCredits);
       await prefs.setStringList(_keyUnlockedIds, _unlockedCouponIds.toList());
       _log('🎟️ 1 kupon hakkı harcandı. Kalan hak: $newCredits | Kupon: $kuponId');
+      notifyListeners();
       return true;
     } catch (e) {
       _log('⚠️ Kredi düşme hatası: $e');
@@ -157,9 +182,12 @@ class CouponCreditService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final newCredits = remainingCredits + credits;
       creditsNotifier.value = newCredits;
+      dailyRewardedVideosWatched++;
 
       await prefs.setInt(_keyCredits, newCredits);
-      _log('🎉 Reklam izlendi! +$credits kupon hakkı eklendi. Yeni bakiye: $newCredits');
+      await prefs.setInt(_keyDailyRewardedWatched, dailyRewardedVideosWatched);
+      _log('🎉 Reklam izlendi! +$credits kupon hakkı eklendi. Yeni bakiye: $newCredits | Bugün izlenen video: $dailyRewardedVideosWatched/$maxDailyRewardedVideos');
+      notifyListeners();
       return newCredits;
     } catch (e) {
       _log('⚠️ Kredi ekleme hatası: $e');
@@ -177,8 +205,11 @@ class CouponCreditService extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _unlockedCouponIds.add(kuponId);
+      dailyRewardedVideosWatched++;
       await prefs.setStringList(_keyUnlockedIds, _unlockedCouponIds.toList());
-      _log('🔓 Misafir kuponu video ile açtı: $kuponId');
+      await prefs.setInt(_keyDailyRewardedWatched, dailyRewardedVideosWatched);
+      _log('🔓 Misafir kuponu video ile açtı: $kuponId | Bugün izlenen video: $dailyRewardedVideosWatched/$maxDailyRewardedVideos');
+      notifyListeners();
       return true;
     } catch (e) {
       _log('⚠️ Misafir kupon açma hatası: $e');
@@ -196,9 +227,12 @@ class CouponCreditService extends ChangeNotifier {
       await prefs.setString(_keyDate, todayStr);
       await prefs.setInt(_keyCredits, dailyFreeCredits);
       await prefs.setStringList(_keyUnlockedIds, []);
+      await prefs.setInt(_keyDailyRewardedWatched, 0);
       creditsNotifier.value = dailyFreeCredits;
       _unlockedCouponIds.clear();
+      dailyRewardedVideosWatched = 0;
       _log('🌅 Gece yarısı devri tamamlandı ($todayStr). Haklar $dailyFreeCredits\'e sıfırlandı.');
+      notifyListeners();
     }
   }
 
@@ -214,8 +248,10 @@ class CouponCreditService extends ChangeNotifier {
     await prefs.setString(_keyDate, _getTodayString());
     await prefs.setInt(_keyCredits, credits);
     await prefs.setStringList(_keyUnlockedIds, []);
+    await prefs.setInt(_keyDailyRewardedWatched, 0);
     creditsNotifier.value = credits;
     _unlockedCouponIds.clear();
+    dailyRewardedVideosWatched = 0;
     _isInitialized = true;
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -141,16 +142,51 @@ class AdManagerService extends ChangeNotifier {
     return true;
   }
 
+  /// Bir AdMob yükleme hatasının geçici bir ağ/soket kesintisi veya stok yokluğu olup olmadığını belirler.
+  /// 
+  /// - Kod 3 (NO_FILL): Google sunucusunda o anlık reklam envanteri olmaması (Normal piyasa davranışı)
+  /// - Kod 2 (NETWORK_ERROR): Genel ağ bağlantısı kesintisi
+  /// - Kod 5 (GADErrorTimeout): iOS ağ zaman aşımı
+  /// - Kod 0 (INTERNAL_ERROR): Android Google Play Services (GMS) katmanında `SocketException`
+  ///   ("Software caused connection abort", "Connection reset", "Broken pipe", vb.) fırlatıldığında
+  ///   GMS Ads SDK bunu Kod 2 yerine genel catch-all Kod 0 içine düşürür.
+  ///   Bu durum bir konfigürasyon veya kod hatası DEĞİL, işletim sisteminin soketi
+  ///   (Wi-Fi/4G geçişi, arka plan Doze modu veya ekran kilidi) aniden sonlandırmasıdır.
+  static bool isTransientAdError(LoadAdError error) {
+    if (error.code == 3 || error.code == 2 || error.code == 5) {
+      return true;
+    }
+    if (error.code == 0) {
+      final msg = error.message.toLowerCase();
+      if (msg.contains('connection abort') ||
+          msg.contains('connection reset') ||
+          msg.contains('broken pipe') ||
+          msg.contains('socket closed') ||
+          msg.contains('failed to connect') ||
+          msg.contains('ssl handshake') ||
+          msg.contains('timeout') ||
+          msg.contains('network') ||
+          msg.contains('end of stream') ||
+          msg.contains('unexpected end')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Başarısız reklam isteğini kaydeder
   void recordAdFailure(String adUnitId, LoadAdError error) {
     _lastFailedTime[adUnitId] = DateTime.now();
     _log('❌ Reklam yüklenemedi: $adUnitId | Kod: ${error.code} | Mesaj: ${error.message}');
 
-    // Kod 3 (ERROR_CODE_NO_FILL), Kod 2 (ERROR_CODE_NETWORK_ERROR) ve Kod 5 (GADErrorTimeout)
-    // geçici ağ gecikmeleri veya stok yokluğu kaynaklıdır (kod hatası değildir, sahte alarmlar önlenir).
-    // Ancak Kod 0 (INTERNAL_ERROR) veya Kod 1 (INVALID_REQUEST / Yanlış AdUnitId) kritik konfigürasyon hatalarıdır!
-    final isTransientAdCondition = error.code == 3 || error.code == 2 || error.code == 5;
-    if (!isTransientAdCondition) {
+    // Kod 3 (ERROR_CODE_NO_FILL), Kod 2 (ERROR_CODE_NETWORK_ERROR), Kod 5 (GADErrorTimeout)
+    // ve Kod 0 altındaki geçici soket abort / network kesintileri piyasa veya cihaz ağ davranışıdır.
+    // Bunlar sahte alarmları engellemek adına SystemLogService'e kritik error olarak yazılmaz.
+    // Ancak Kod 1 (INVALID_REQUEST / Yanlış AdUnitId) veya mesajı geçici olmayan gerçek dahili hatalar kritiktir!
+    final isTransient = isTransientAdError(error);
+    if (isTransient) {
+      _log('ℹ️ [AdMob] Geçici ağ/soket kesintisi veya stok yokluğu algılandı (Kod: ${error.code}, Mesaj: ${error.message}). Sistem hatası olarak kaydedilmiyor.');
+    } else {
       SystemLogService.instance.logError(
         category: 'admob',
         subCategory: 'ad_load_failure',
@@ -204,16 +240,34 @@ class AdManagerService extends ChangeNotifier {
 
   RewardedAd? _rewardedAd;
   bool _isRewardedLoading = false;
+  int _rewardedRetryAttempts = 0;
+  static const int _maxRewardedRetries = 3;
+  Timer? _rewardedRetryTimer;
+  Completer<bool>? _rewardedLoadCompleter;
 
   /// Ödüllü reklamı arka planda önceden yükler (Pre-load)
-  void preloadRewardedAd() {
-    if (!isAdsEnabled || !rewardedEnabled || _isRewardedLoading || _rewardedAd != null) return;
+  /// Geçici soket/ağ kesintilerinde akıllı üstel gecikmeyle (exponential backoff) otomatik yeniden dener.
+  void preloadRewardedAd({bool isRetry = false}) {
+    if (!isAdsEnabled || !rewardedEnabled || _rewardedAd != null) return;
+    if (_isRewardedLoading) {
+      _log('ℹ️ Ödüllü reklam zaten yükleniyor, mükerrer istek atlanıyor.');
+      return;
+    }
 
     final unitId = DefaultFirebaseOptions.rewardedAdUnitId;
     if (!canRequestAd(unitId)) return;
 
+    if (!isRetry) {
+      _rewardedRetryAttempts = 0;
+      _rewardedRetryTimer?.cancel();
+      _rewardedRetryTimer = null;
+    }
+
     _isRewardedLoading = true;
-    _log('🔄 Ödüllü reklam önyükleniyor...');
+    if (_rewardedLoadCompleter == null || _rewardedLoadCompleter!.isCompleted) {
+      _rewardedLoadCompleter = Completer<bool>();
+    }
+    _log('🔄 Ödüllü reklam önyükleniyor... (Deneme: ${_rewardedRetryAttempts + 1})');
 
     RewardedAd.load(
       adUnitId: unitId,
@@ -222,7 +276,13 @@ class AdManagerService extends ChangeNotifier {
         onAdLoaded: (ad) {
           _isRewardedLoading = false;
           _rewardedAd = ad;
+          _rewardedRetryAttempts = 0;
+          _rewardedRetryTimer?.cancel();
+          _rewardedRetryTimer = null;
           recordAdSuccess(unitId);
+          if (_rewardedLoadCompleter != null && !_rewardedLoadCompleter!.isCompleted) {
+            _rewardedLoadCompleter!.complete(true);
+          }
           _log('✅ Ödüllü reklam belleğe yüklendi ve hazır');
 
           ad.onPaidEvent = (Ad ad, double valueMicros, PrecisionType precision, String currencyCode) {
@@ -261,6 +321,25 @@ class AdManagerService extends ChangeNotifier {
           _isRewardedLoading = false;
           _rewardedAd = null;
           recordAdFailure(unitId, error);
+          if (_rewardedLoadCompleter != null && !_rewardedLoadCompleter!.isCompleted) {
+            _rewardedLoadCompleter!.complete(false);
+          }
+
+          // Dünya Standardı Exponential Backoff Yeniden Deneme Mekanizması:
+          // Geçici ağ/soket kesintisi ("Software caused connection abort" vb.) durumunda
+          // kullanıcı kupon açmak istediğinde reklamsız kalmaması için arka planda kademeli olarak yeniden dener.
+          final isTransient = isTransientAdError(error);
+          if (isTransient && _rewardedRetryAttempts < _maxRewardedRetries && isAdsEnabled && rewardedEnabled) {
+            _rewardedRetryAttempts++;
+            final delaySeconds = math.min(30, 5 * (1 << (_rewardedRetryAttempts - 1)));
+            _log('🔄 [Rewarded Ad] Geçici kesinti nedeniyle ${delaySeconds}s sonra otomatik yeniden denenecek (Deneme: $_rewardedRetryAttempts/$_maxRewardedRetries)...');
+            _rewardedRetryTimer?.cancel();
+            _rewardedRetryTimer = Timer(Duration(seconds: delaySeconds), () {
+              if (isAdsEnabled && rewardedEnabled && _rewardedAd == null && !_isRewardedLoading) {
+                preloadRewardedAd(isRetry: true);
+              }
+            });
+          }
         },
       ),
     );
@@ -269,19 +348,34 @@ class AdManagerService extends ChangeNotifier {
   /// Ödüllü reklam hazır mı?
   bool get isRewardedAdReady => isAdsEnabled && _rewardedAd != null;
 
-  /// Ödüllü reklamı gösterir ve ödül kazanıldığında callback'i tetikler
+  /// Ödüllü reklamı gösterir ve ödül kazanıldığında callback'i tetikler.
+  /// Reklam o anda henüz yükleniyorsa kullanıcıyı hemen yüzüstü bırakmaz;
+  /// emniyetli kısa bir bekleme (waitTimeout) ile yüklenmesini bekleyip açar.
   Future<bool> showRewardedAd({
     required void Function(RewardItem reward) onUserEarnedReward,
     VoidCallback? onDismissed,
+    Duration waitTimeout = const Duration(seconds: 4),
   }) async {
     if (!isAdsEnabled || !rewardedEnabled) {
       _log('⚠️ Reklamlar genel şalterle veya format şalteriyle kapalı.');
       return false;
     }
 
+    // Reklam henüz bellekte hazır değilse yükleme tetikle veya devam eden yüklemeyi bekle
     if (_rewardedAd == null) {
-      _log('⚠️ Ödüllü reklam henüz hazır değil, yükleme tetikleniyor...');
+      _log('⏳ Ödüllü reklam henüz hazır değil, yükleme bekleniyor...');
       preloadRewardedAd();
+      if (_isRewardedLoading && _rewardedLoadCompleter != null) {
+        try {
+          await _rewardedLoadCompleter!.future.timeout(waitTimeout);
+        } catch (_) {
+          _log('⏱️ Ödüllü reklam yükleme beklemesi zaman aşımına uğradı');
+        }
+      }
+    }
+
+    if (_rewardedAd == null) {
+      _log('⚠️ Ödüllü reklam hazırlanamadı.');
       return false;
     }
 
@@ -290,6 +384,12 @@ class AdManagerService extends ChangeNotifier {
 
     adToShow.fullScreenContentCallback = FullScreenContentCallback(
       onAdShowedFullScreenContent: (ad) => _log('📱 Ödüllü reklam açıldı'),
+      onAdClicked: (ad) {
+        AnalyticsService.instance.logAdClick(
+          adUnitId: DefaultFirebaseOptions.rewardedAdUnitId,
+          adFormat: 'rewarded',
+        );
+      },
       onAdDismissedFullScreenContent: (ad) {
         _log('📱 Ödüllü reklam kapatıldı');
         ad.dispose();
@@ -471,12 +571,15 @@ class AdManagerService extends ChangeNotifier {
           // 5. Kupon Kredi Parametreleri → CouponCreditService'e aktar
           final dailyCredits = _parseInt(settings['dailyFreeCredits'], 2);
           final rewardCredits = _parseInt(settings['rewardCreditsPerVideo'], 2);
+          final maxDailyVideos = _parseInt(settings['maxDailyRewardedVideos'], 6);
           if (CouponCreditService.instance.dailyFreeCredits != dailyCredits ||
-              CouponCreditService.instance.rewardCreditsPerVideo != rewardCredits) {
+              CouponCreditService.instance.rewardCreditsPerVideo != rewardCredits ||
+              CouponCreditService.instance.maxDailyRewardedVideos != maxDailyVideos) {
             hasChanges = true;
           }
           CouponCreditService.instance.updateDailyFreeCredits(dailyCredits);
           CouponCreditService.instance.updateRewardCreditsPerAd(rewardCredits);
+          CouponCreditService.instance.updateMaxDailyRewardedVideos(maxDailyVideos);
 
           _log('✅ [FIRESTORE-SYNC] settings/admob senkronize edildi → '
               'Kill:$killSwitchActive | Banner:$newBanner | Rewarded:$newRewarded | '
@@ -488,7 +591,7 @@ class AdManagerService extends ChangeNotifier {
               'NativePopularInterval:$nativePopularInterval | '
               'NativeFollowedInterval:$nativeFollowedCategoriesInterval | '
               'Cooldown:${cooldownSec}s | '
-              'DailyCredits:$dailyCredits | RewardCredits:$rewardCredits');
+              'DailyCredits:$dailyCredits | RewardCredits:$rewardCredits | MaxRewardedVideos:$maxDailyVideos');
 
           if (hasChanges) {
             notifyListeners();
@@ -507,6 +610,11 @@ class AdManagerService extends ChangeNotifier {
   /// Servis temizliği (Uygulama kapanışı veya hot-restart)
   @override
   void dispose() {
+    _rewardedRetryTimer?.cancel();
+    _rewardedRetryTimer = null;
+    if (_rewardedLoadCompleter != null && !_rewardedLoadCompleter!.isCompleted) {
+      _rewardedLoadCompleter!.complete(false);
+    }
     _settingsSubscription?.cancel();
     _settingsSubscription = null;
     _rewardedAd?.dispose();
