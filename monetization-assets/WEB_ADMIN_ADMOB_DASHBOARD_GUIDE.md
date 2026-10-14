@@ -149,7 +149,7 @@ Dashboard sadece pasif bir izleme aracı değil, aynı zamanda canlı bir yönet
 3. **Kupon Açma Kredisi ve Güvenlik Parametreleri (9 Operasyonel Parametre - NaN & Sınır Korumalı):**
    - **Günlük Ücretsiz Kupon Açma:** Kullanıcıya her gün hediye edilecek hak (Varsayılan: `2`, Aralık: 1-20).
    - **Video Başına Kupon Açma:** Rewarded video tamamlandığında hesaba yüklenecek hak (Varsayılan: `+2`, Aralık: 1-10).
-   - **Günlük Video Sınırı (Anti-Abuse Frequency Cap):** Kullanıcının bir günde izleyebileceği azami ödüllü video tavanı (Varsayılan: `6`, Aralık: 1-50). AdMob yapay zekasının aşırı video izleme kaynaklı *"Invalid Traffic"* kısıtlaması (Ad Serving Limit / Account Ban) koymasını %100 engeller.
+   - **Günlük Video Sınırı (Anti-Abuse Frequency Cap):** Kullanıcının bir günde izleyebileceği azami ödüllü video tavanı (Varsayılan: `10`, Aralık: 1-50). AdMob yapay zekasının aşırı video izleme kaynaklı *"Invalid Traffic"* kısıtlaması (Ad Serving Limit / Account Ban) koymasını %100 engeller. Günlük 10 video izleyen bir kullanıcı 20 ekstra kupon hakkı (günlük toplam 22 kupon) kazanır.
    - **Izgara Akışı Reklam Sıklığı (`nativeGridInterval`):** Anasayfa ızgara (Grid) görünümünde kaç üründe bir tam genişlik yatay native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).
    - **Kuponlar Akışı Reklam Sıklığı (`nativeCouponsInterval`):** Kupon listesinde kaç kuponda bir native reklam yerleştirileceğini belirler (Varsayılan: `5`, Aralık: 3-15).
    - **Aktüel Akışı Reklam Sıklığı (`nativeAktuelInterval`):** Aktüel broşür 2 sütunlu gridinde kaç broşürde bir tam genişlik native reklam yerleştirileceğini belirler (Varsayılan: `6`, Aralık: 4-20).

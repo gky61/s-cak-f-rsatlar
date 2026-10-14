@@ -82,7 +82,7 @@
                 cooldownSeconds: 25,
                 rewardCreditsPerVideo: 2,
                 dailyFreeCredits: 2,
-                maxDailyRewardedVideos: 6 // Günde izlenebilecek maksimum Rewarded Video tavanı (Anti-Abuse)
+                maxDailyRewardedVideos: 10 // Günde izlenebilecek maksimum Rewarded Video tavanı (Anti-Abuse)
             },
             kpis: {
                 todayEstimatedRevenue: 0.00,
@@ -1139,10 +1139,10 @@
                         <div>
                             <label class="flex items-center text-xs font-black text-slate-700 dark:text-slate-300 mb-1.5">
                                 <span>Günlük Video Sınırı (Anti-Abuse)</span>
-                                ${this.renderInfoTip('Günlük Video Sınırı (Frequency Cap)', 'Bir kullanıcının günde en fazla kaç adet ödüllü video izleyebileceğini belirler. Aşırı video izleme kaynaklı AdMob Invalid Traffic ve hesap kısıtlamalarını (ban) engeller.', '🛡️ Güvenli Eşik: 6 Video', 'left')}
+                                ${this.renderInfoTip('Günlük Video Sınırı (Frequency Cap)', 'Bir kullanıcının günde en fazla kaç adet ödüllü video izleyebileceğini belirler. Aşırı video izleme kaynaklı AdMob Invalid Traffic ve hesap kısıtlamalarını (ban) engeller.', '🛡️ Güvenli Eşik: 10 Video', 'left')}
                             </label>
                             <div class="relative">
-                                <input type="number" id="inputMaxDailyRewardedVideos" min="1" max="50" value="${s.maxDailyRewardedVideos || 6}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
+                                <input type="number" id="inputMaxDailyRewardedVideos" min="1" max="50" value="${s.maxDailyRewardedVideos || 10}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required>
                                 <span class="absolute right-3 top-2.5 text-xs text-slate-400">Video</span>
                             </div>
                             <span class="text-[10px] text-slate-500 mt-1 block">Hesap banlanmasını önleyen günlük tavan</span>
@@ -1700,7 +1700,7 @@
             const cInput = parseInt(document.getElementById('inputCooldownSeconds')?.value, 10);
             const dailyCredits = isNaN(dInput) || dInput < 1 ? 2 : Math.min(dInput, 20);
             const rewardCredits = isNaN(rInput) || rInput < 1 ? 2 : Math.min(rInput, 10);
-            const maxDailyRewardedVideos = isNaN(mInput) || mInput < 1 ? 6 : Math.min(mInput, 50);
+            const maxDailyRewardedVideos = isNaN(mInput) || mInput < 1 ? 10 : Math.min(mInput, 50);
             const nativeGridInterval = isNaN(nInput) || nInput < 4 ? 6 : Math.min(nInput, 20);
             const nativeCouponsInterval = isNaN(ncInput) || ncInput < 3 ? 5 : Math.min(ncInput, 15);
             const nativeAktuelInterval = isNaN(naInput) || naInput < 4 ? 6 : Math.min(naInput, 20);
@@ -1746,7 +1746,7 @@
 
             if (inDaily) inDaily.value = def.dailyFreeCredits;
             if (inReward) inReward.value = def.rewardCreditsPerVideo;
-            if (inMaxVideos) inMaxVideos.value = def.maxDailyRewardedVideos || 6;
+            if (inMaxVideos) inMaxVideos.value = def.maxDailyRewardedVideos || 10;
             if (inGrid) inGrid.value = def.nativeGridInterval;
             if (inCoupons) inCoupons.value = def.nativeCouponsInterval;
             if (inAktuel) inAktuel.value = def.nativeAktuelInterval;
@@ -1757,7 +1757,7 @@
             if (this.data && this.data.settings) {
                 this.data.settings.dailyFreeCredits = def.dailyFreeCredits;
                 this.data.settings.rewardCreditsPerVideo = def.rewardCreditsPerVideo;
-                this.data.settings.maxDailyRewardedVideos = def.maxDailyRewardedVideos || 6;
+                this.data.settings.maxDailyRewardedVideos = def.maxDailyRewardedVideos || 10;
                 this.data.settings.nativeGridInterval = def.nativeGridInterval;
                 this.data.settings.nativeCouponsInterval = def.nativeCouponsInterval;
                 this.data.settings.nativeAktuelInterval = def.nativeAktuelInterval;
@@ -2020,7 +2020,7 @@
             const bOn = this.data?.settings?.bannerEnabled ? 'AÇIK' : 'PASİF (ARŞİV)';
             const rwOn = this.data?.settings?.rewardedEnabled ? 'AÇIK' : 'KAPALI';
 
-            const maxVideos = this.data?.settings?.maxDailyRewardedVideos || 6;
+            const maxVideos = this.data?.settings?.maxDailyRewardedVideos || 10;
 
             switch(cmd) {
                 case 'status':

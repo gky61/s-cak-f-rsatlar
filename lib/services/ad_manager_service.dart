@@ -571,7 +571,7 @@ class AdManagerService extends ChangeNotifier {
           // 5. Kupon Kredi Parametreleri → CouponCreditService'e aktar
           final dailyCredits = _parseInt(settings['dailyFreeCredits'], 2);
           final rewardCredits = _parseInt(settings['rewardCreditsPerVideo'], 2);
-          final maxDailyVideos = _parseInt(settings['maxDailyRewardedVideos'], 6);
+          final maxDailyVideos = _parseInt(settings['maxDailyRewardedVideos'], 10);
           if (CouponCreditService.instance.dailyFreeCredits != dailyCredits ||
               CouponCreditService.instance.rewardCreditsPerVideo != rewardCredits ||
               CouponCreditService.instance.maxDailyRewardedVideos != maxDailyVideos) {

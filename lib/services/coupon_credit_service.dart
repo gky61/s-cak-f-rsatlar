@@ -27,7 +27,7 @@ class CouponCreditService extends ChangeNotifier {
 
   static const int defaultDailyCredits = 2;
   static const int rewardCreditsPerAd = 2;
-  static const int defaultMaxDailyRewardedVideos = 6;
+  static const int defaultMaxDailyRewardedVideos = 10;
 
   int dailyFreeCredits = defaultDailyCredits;
   int rewardCreditsPerVideo = rewardCreditsPerAd;
