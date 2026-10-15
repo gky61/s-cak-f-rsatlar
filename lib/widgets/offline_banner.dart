@@ -13,49 +13,59 @@ class OfflineBanner extends StatelessWidget {
       builder: (context, snapshot) {
         final isConnected = snapshot.data ?? true;
         
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          height: isConnected ? 0 : 40,
-          child: AnimatedOpacity(
+        return ClipRect(
+          clipBehavior: Clip.hardEdge,
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            opacity: isConnected ? 0 : 1,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade800,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+            curve: Curves.easeInOutCubic,
+            height: isConnected ? 0 : 40,
+            child: OverflowBox(
+              minHeight: 0,
+              maxHeight: 40,
+              alignment: Alignment.topCenter,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 250),
+                opacity: isConnected ? 0 : 1,
+                child: Container(
+                  height: 40,
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade800,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.wifi_off_rounded,
-                    color: Colors.white,
-                    size: 18,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.wifi_off_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Çevrimdışı - Önbellek gösteriliyor',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Çevrimdışı - Önbellek gösteriliyor',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         );
-      },
-    );
+    },
+  );
   }
 }
 

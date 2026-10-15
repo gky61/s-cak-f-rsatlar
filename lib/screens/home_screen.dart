@@ -630,15 +630,21 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted &&
           _selectedCategory == requestedCategory &&
           _selectedSubCategory == requestedSubCategory) {
-        final existingIds = _dealsList.map((d) => d.id).toSet();
-        final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
-        
-        setState(() {
-          _dealsList.addAll(newDeals);
-          _lastDealDocument = result.lastDocument;
-          _hasMore = result.hasMore && newDeals.isNotEmpty;
-          _isLoadingMore = false;
-        });
+        if (!result.isError) {
+          final existingIds = _dealsList.map((d) => d.id).toSet();
+          final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
+          
+          setState(() {
+            _dealsList.addAll(newDeals);
+            _lastDealDocument = result.lastDocument;
+            _hasMore = result.hasMore && newDeals.isNotEmpty;
+            _isLoadingMore = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingMore = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -684,17 +690,27 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted &&
             _selectedCategory == requestedCategory &&
             _selectedSubCategory == requestedSubCategory) {
-          setState(() {
-            _dealsList = serverResult.deals;
-            _lastDealDocument = serverResult.lastDocument;
-            _hasMore = serverResult.hasMore;
-            _isLoadingDeals = false;
-            _hasServerData = true;
-            _dealsError = null;
-            _hasNewDealsPill = false;
-            _newDealsCount = 0;
-          });
-          _initialLoadingTimeoutTimer?.cancel();
+          if (!serverResult.isError) {
+            setState(() {
+              _dealsList = serverResult.deals;
+              _lastDealDocument = serverResult.lastDocument;
+              _hasMore = serverResult.hasMore;
+              _isLoadingDeals = false;
+              _hasServerData = true;
+              _dealsError = null;
+              _hasNewDealsPill = false;
+              _newDealsCount = 0;
+            });
+            _initialLoadingTimeoutTimer?.cancel();
+          } else {
+            // Hata durumunda var olan listeyi KORU! Yalnızca ekran tamamen boşsa hata göster
+            if (_dealsList.isEmpty) {
+              setState(() {
+                _dealsError = serverResult.errorMessage ?? 'Sunucuya bağlanılamadı';
+                _isLoadingDeals = false;
+              });
+            }
+          }
         }
         return;
       }
@@ -715,18 +731,20 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted &&
             _selectedCategory == requestedCategory &&
             _selectedSubCategory == requestedSubCategory) {
-          serverLoaded = true;
-          setState(() {
-            _dealsList = serverResult.deals;
-            _lastDealDocument = serverResult.lastDocument;
-            _hasMore = serverResult.hasMore;
-            _isLoadingDeals = false;
-            _hasServerData = true;
-            _dealsError = null;
-            _hasNewDealsPill = false;
-            _newDealsCount = 0;
-          });
-          _initialLoadingTimeoutTimer?.cancel();
+          if (!serverResult.isError) {
+            serverLoaded = true;
+            setState(() {
+              _dealsList = serverResult.deals;
+              _lastDealDocument = serverResult.lastDocument;
+              _hasMore = serverResult.hasMore;
+              _isLoadingDeals = false;
+              _hasServerData = true;
+              _dealsError = null;
+              _hasNewDealsPill = false;
+              _newDealsCount = 0;
+            });
+            _initialLoadingTimeoutTimer?.cancel();
+          }
         }
       } catch (serverError) {
         _log('ℹ️ Server-First zaman aşımı veya ağ kesintisi: $serverError. Önbellek kalkanına dönülüyor...');
@@ -766,15 +784,23 @@ class _HomeScreenState extends State<HomeScreen> {
             if (mounted &&
                 _selectedCategory == requestedCategory &&
                 _selectedSubCategory == requestedSubCategory) {
-              setState(() {
-                _dealsList = res.deals;
-                _lastDealDocument = res.lastDocument;
-                _hasMore = res.hasMore;
-                _isLoadingDeals = false;
-                _hasServerData = true;
-                _dealsError = null;
-              });
-              _initialLoadingTimeoutTimer?.cancel();
+              if (res.isError && _dealsList.isEmpty) {
+                setState(() {
+                  _dealsError = res.errorMessage ?? 'Sunucuya bağlanılamadı';
+                  _isLoadingDeals = false;
+                });
+                _initialLoadingTimeoutTimer?.cancel();
+              } else {
+                setState(() {
+                  _dealsList = res.deals;
+                  _lastDealDocument = res.lastDocument;
+                  _hasMore = res.hasMore;
+                  _isLoadingDeals = false;
+                  _hasServerData = true;
+                  _dealsError = null;
+                });
+                _initialLoadingTimeoutTimer?.cancel();
+              }
             }
           }).catchError((err) {
             if (mounted &&
@@ -785,6 +811,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _dealsError = err.toString();
                 _isLoadingDeals = false;
               });
+              _initialLoadingTimeoutTimer?.cancel();
             }
           });
         } else if (cacheLoaded) {
@@ -819,7 +846,8 @@ class _HomeScreenState extends State<HomeScreen> {
     serverFuture.then((serverResult) {
       if (!mounted ||
           _selectedCategory != requestedCategory ||
-          _selectedSubCategory != requestedSubCategory) {
+          _selectedSubCategory != requestedSubCategory ||
+          serverResult.isError) {
         return;
       }
 

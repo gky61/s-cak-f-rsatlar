@@ -370,7 +370,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                   Flexible(
                                     flex: 6,
                                     child: Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisSize: MainAxisSize.max,
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
                                         buildStoreLogo(deal.store, size: 14, borderRadius: 3),

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'firestore_service.dart';
 
 void _log(String message) {
   if (kDebugMode) {
@@ -123,6 +124,9 @@ class AppBadgeService {
     }
 
     try {
+      // Buluttaki bildirim tercihlerini (okundu/silindi listeleri) SharedPreferences'a hydrate et (Reinstall dirilme kalkanı)
+      await FirestoreService().syncAnnouncementPreferencesFromCloud(uid);
+
       // 1. Okunmamış Bildirimler (users/{uid}/notifications where read == false)
       // Maliyet ve hız optimizasyonu için AggregateQuery (count) kullanılır
       final notifsCountSnap = await _firestore
@@ -132,7 +136,52 @@ class AppBadgeService {
           .where('read', isEqualTo: false)
           .count()
           .get();
-      final unreadNotifs = notifsCountSnap.count ?? 0;
+      int unreadNotifs = notifsCountSnap.count ?? 0;
+
+      // Kendi Kendini Onaran (Self-Healing) Mutabakat Kalkanı:
+      // Yalnızca kullanıcı bir bildirimle etkileşime girdiğinde (forceSync veya targetUserId != null)
+      // ve küçük sayaçlarda (1-10 bildirim), yerelde/bulutta zaten okunmuş veya gizlenmiş yetim kupon/duyuru dokümanlarını
+      // tespit edip sayacı 0'a düşürür ve Firestore'daki kaydı arka planda okundu yapar.
+      // 100k kullanıcı ölçeğinde rutin arka plan senkronizasyonlarında doküman çekilmez; kota patlama riski sıfırdır.
+      if ((forceSync || targetUserId != null) && unreadNotifs > 0 && unreadNotifs <= 10) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final localRead = prefs.getStringList('read_announcements') ?? [];
+          final localDismissed = prefs.getStringList('dismissed_announcements') ?? [];
+          final readSet = {...localRead, ...FirestoreService.cachedReadAnnouncements};
+          final dismissedSet = {...localDismissed, ...FirestoreService.cachedDismissedAnnouncements};
+
+          if (readSet.isNotEmpty || dismissedSet.isNotEmpty) {
+            final unreadDocs = await _firestore
+                .collection('users')
+                .doc(uid)
+                .collection('notifications')
+                .where('read', isEqualTo: false)
+                .limit(10)
+                .get();
+
+            int adjusted = 0;
+            for (final d in unreadDocs.docs) {
+              final id = d.id;
+              final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+              final annId = d.data()['announcementId'] as String?;
+              final isDismissed = dismissedSet.contains(id) ||
+                  dismissedSet.contains(normalizedId) ||
+                  (annId != null && (dismissedSet.contains(annId) || dismissedSet.contains('manual_$annId')));
+              final isRead = readSet.contains(id) ||
+                  readSet.contains(normalizedId) ||
+                  (annId != null && (readSet.contains(annId) || readSet.contains('manual_$annId')));
+
+              if (isDismissed || isRead) {
+                d.reference.update({'read': true}).catchError((_) {});
+              } else {
+                adjusted++;
+              }
+            }
+            unreadNotifs = adjusted;
+          }
+        } catch (_) {}
+      }
 
       // 2. Okunmamış Birebir Mesajlar (messages where receiverId == uid && isRead == false)
       final messagesCountSnap = await _firestore
@@ -159,19 +208,22 @@ class AppBadgeService {
       int unreadAnnouncements = 0;
       try {
         final prefs = await SharedPreferences.getInstance();
-        final readList = prefs.getStringList('read_announcements') ?? [];
-        final dismissedList = prefs.getStringList('dismissed_announcements') ?? [];
+        final localRead = prefs.getStringList('read_announcements') ?? [];
+        final localDismissed = prefs.getStringList('dismissed_announcements') ?? [];
+        final readSet = {...localRead, ...FirestoreService.cachedReadAnnouncements};
+        final dismissedSet = {...localDismissed, ...FirestoreService.cachedDismissedAnnouncements};
+
         final annSnap = await _firestore
             .collection('globalAnnouncements')
             .where('active', isEqualTo: true)
-            .limit(10)
+            .limit(15)
             .get();
         final now = DateTime.now();
         for (final doc in annSnap.docs) {
           final id = doc.id;
           final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
-          if (dismissedList.contains(id) || dismissedList.contains(normalizedId)) continue;
-          if (readList.contains(id) || readList.contains(normalizedId)) continue;
+          if (dismissedSet.contains(id) || dismissedSet.contains(normalizedId)) continue;
+          if (readSet.contains(id) || readSet.contains(normalizedId)) continue;
           final exp = doc.data()['expiresAt'];
           if (exp is Timestamp && exp.toDate().isBefore(now)) continue;
           unreadAnnouncements++;

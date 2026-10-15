@@ -2333,10 +2333,7 @@ exports.onCouponUpdated = functions
 
       // Reddedilen kuponun küresel duyurusu varsa yayından kaldır
       try {
-        await admin.firestore().collection('globalAnnouncements').doc(`coupon_${kuponId}`).set({
-          active: false,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        await admin.firestore().collection('globalAnnouncements').doc(`coupon_${kuponId}`).delete();
       } catch (_) {}
     }
 
@@ -2387,6 +2384,69 @@ exports.onCouponUpdated = functions
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return null;
+    }
+
+    return null;
+  }));
+
+/**
+ * @function onCouponDeleted
+ * @category Realtime Event Trigger
+ * @description Kupon silindiğinde ilişkili küresel duyuruyu (globalAnnouncements),
+ * oylama alt koleksiyonunu ve varsa yazara ait yetim onay/red bildirimlerini temizler.
+ * @trigger Firestore: kuponlar/{kuponId} (onDelete)
+ * @schedule Anlık
+ * @resources 256MB RAM / 60s Timeout
+ */
+exports.onCouponDeleted = functions
+  .runWith({ timeoutSeconds: 60, memory: '256MB' })
+  .firestore
+  .document('kuponlar/{kuponId}')
+  .onDelete(wrapTrigger('onCouponDeleted', async (snap, context) => {
+    const kuponId = context.params.kuponId;
+    const kupon = snap ? snap.data() : null;
+    functions.logger.info(`🗑️ Kupon silindi, ilişkili veriler temizleniyor: ${kuponId}`);
+
+    // 1. globalAnnouncements/coupon_{kuponId} duyurusunu temizle
+    try {
+      await admin.firestore().collection('globalAnnouncements').doc(`coupon_${kuponId}`).delete();
+      functions.logger.info(`✅ globalAnnouncements/coupon_${kuponId} başarıyla silindi.`);
+    } catch (annErr) {
+      functions.logger.warn(`⚠️ Kupon küresel duyurusu silinirken hata: ${annErr.message}`);
+    }
+
+    // 2. kuponlar/{kuponId}/votes alt koleksiyonunu temizle
+    try {
+      const kuponRef = admin.firestore().collection('kuponlar').doc(kuponId);
+      if (typeof admin.firestore().recursiveDelete === 'function') {
+        await admin.firestore().recursiveDelete(kuponRef.collection('votes'));
+      } else {
+        const votesSnap = await kuponRef.collection('votes').limit(500).get();
+        if (!votesSnap.empty) {
+          const batch = admin.firestore().batch();
+          votesSnap.docs.forEach((doc) => batch.delete(doc.reference));
+          await batch.commit();
+        }
+      }
+      functions.logger.info(`✅ kuponlar/${kuponId}/votes başarıyla temizlendi.`);
+    } catch (voteErr) {
+      functions.logger.warn(`⚠️ Kupon votes alt koleksiyonu silinirken hata: ${voteErr.message}`);
+    }
+
+    // 3. Varsa kuponu paylaşan kişiye ait yetim bildirim dokümanlarını temizle
+    const paylasanId = kupon && kupon.paylasanKullaniciId ? String(kupon.paylasanKullaniciId).trim() : '';
+    if (paylasanId) {
+      try {
+        const userNotifs = admin.firestore().collection('users').doc(paylasanId).collection('notifications');
+        const batch = admin.firestore().batch();
+        batch.delete(userNotifs.doc(`coupon_status_approved_${kuponId}`));
+        batch.delete(userNotifs.doc(`coupon_status_rejected_${kuponId}`));
+        batch.delete(userNotifs.doc(`coupon_${kuponId}_${paylasanId}`));
+        await batch.commit();
+        functions.logger.info(`✅ Kupon yazarı (${paylasanId}) yetim bildirimleri temizlendi.`);
+      } catch (userNotifErr) {
+        functions.logger.warn(`⚠️ Kupon yazarı bildirimleri temizlenirken hata: ${userNotifErr.message}`);
+      }
     }
 
     return null;

@@ -845,27 +845,97 @@ class FirestoreService {
   // ===========================================================================
 
   static final StreamController<void> _announcementChangeController = StreamController<void>.broadcast();
-  Set<String>? _cachedReadAnnouncements;
-  Set<String>? _cachedDismissedAnnouncements;
+  static Set<String>? _cachedReadAnnouncements;
+  static Set<String>? _cachedDismissedAnnouncements;
+  static String? _hydratedUserId;
 
-  Future<Set<String>> _getReadAnnouncements() async {
+  static Set<String> get cachedReadAnnouncements => _cachedReadAnnouncements ?? {};
+  static Set<String> get cachedDismissedAnnouncements => _cachedDismissedAnnouncements ?? {};
+
+  /// Oturum kapatıldığında veya kullanıcı değiştiğinde statik önbelleği temizler
+  static void clearAnnouncementCache() {
+    _cachedReadAnnouncements = null;
+    _cachedDismissedAnnouncements = null;
+    _hydratedUserId = null;
+  }
+
+  /// Buluttaki okundu/silindi tercihlerini yerel diske aktarır (Reinstall dirilme kalkanı)
+  Future<void> syncAnnouncementPreferencesFromCloud(String userId) async {
+    if (userId.isEmpty || _hydratedUserId == userId) return;
+    try {
+      final doc = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notificationPreferences')
+          .doc('main')
+          .get();
+      if (!doc.exists) {
+        _hydratedUserId = userId;
+        return;
+      }
+      final data = doc.data();
+      if (data == null) {
+        _hydratedUserId = userId;
+        return;
+      }
+
+      final cloudRead = List<String>.from(data['readAnnouncementIds'] ?? []);
+      final cloudDismissed = List<String>.from(data['dismissedAnnouncementIds'] ?? []);
+
+      final prefs = await SharedPreferences.getInstance();
+      bool changed = false;
+
+      if (cloudRead.isNotEmpty) {
+        final localRead = prefs.getStringList('read_announcements') ?? [];
+        final mergedRead = {...localRead, ...cloudRead}.toList();
+        if (mergedRead.length != localRead.length) {
+          await prefs.setStringList('read_announcements', mergedRead);
+          _cachedReadAnnouncements = mergedRead.toSet();
+          changed = true;
+        }
+      }
+
+      if (cloudDismissed.isNotEmpty) {
+        final localDismissed = prefs.getStringList('dismissed_announcements') ?? [];
+        final mergedDismissed = {...localDismissed, ...cloudDismissed}.toList();
+        if (mergedDismissed.length != localDismissed.length) {
+          await prefs.setStringList('dismissed_announcements', mergedDismissed);
+          _cachedDismissedAnnouncements = mergedDismissed.toSet();
+          changed = true;
+        }
+      }
+
+      _hydratedUserId = userId;
+      if (changed) {
+        _announcementChangeController.add(null);
+      }
+    } catch (_) {}
+  }
+
+  Future<Set<String>> _getReadAnnouncements([String? userId]) async {
     if (_cachedReadAnnouncements != null) return _cachedReadAnnouncements!;
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('read_announcements') ?? [];
       _cachedReadAnnouncements = list.toSet();
+      if (list.isEmpty && userId != null && userId.isNotEmpty && _hydratedUserId != userId) {
+        unawaited(syncAnnouncementPreferencesFromCloud(userId));
+      }
       return _cachedReadAnnouncements!;
     } catch (_) {
       return {};
     }
   }
 
-  Future<Set<String>> _getDismissedAnnouncements() async {
+  Future<Set<String>> _getDismissedAnnouncements([String? userId]) async {
     if (_cachedDismissedAnnouncements != null) return _cachedDismissedAnnouncements!;
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('dismissed_announcements') ?? [];
       _cachedDismissedAnnouncements = list.toSet();
+      if (list.isEmpty && userId != null && userId.isNotEmpty && _hydratedUserId != userId) {
+        unawaited(syncAnnouncementPreferencesFromCloud(userId));
+      }
       return _cachedDismissedAnnouncements!;
     } catch (_) {
       return {};
@@ -887,8 +957,8 @@ class FirestoreService {
     Future<void> emitMerged() async {
       if (controller.isClosed) return;
       try {
-        final readSet = await _getReadAnnouncements();
-        final dismissedSet = await _getDismissedAnnouncements();
+        final readSet = await _getReadAnnouncements(userId);
+        final dismissedSet = await _getDismissedAnnouncements(userId);
         final now = DateTime.now();
 
         final filteredGlobals = latestGlobalNotifs.where((g) {
@@ -908,11 +978,35 @@ class FirestoreService {
           return copy;
         }).toList();
 
+        // Kişisel bildirimleri de dismissedSet ve readSet ile senkronize et
+        final filteredUsers = latestUserNotifs.where((u) {
+          final id = u['id'] as String? ?? '';
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          final announcementId = u['announcementId'] as String? ?? '';
+          if (dismissedSet.contains(id) ||
+              dismissedSet.contains(normalizedId) ||
+              (announcementId.isNotEmpty && (dismissedSet.contains(announcementId) || dismissedSet.contains('manual_$announcementId')))) {
+            return false;
+          }
+          return true;
+        }).map((u) {
+          final copy = Map<String, dynamic>.from(u);
+          final id = copy['id'] as String? ?? '';
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          final announcementId = copy['announcementId'] as String? ?? '';
+          if (readSet.contains(id) ||
+              readSet.contains(normalizedId) ||
+              (announcementId.isNotEmpty && (readSet.contains(announcementId) || readSet.contains('manual_$announcementId')))) {
+            copy['read'] = true;
+          }
+          return copy;
+        }).toList();
+
         // Tekrarlı ID'leri ele (hem globalAnnouncements hem kişisel doküman varsa)
         final seenIds = <String>{};
         final combined = <Map<String, dynamic>>[];
 
-        for (final item in [...filteredGlobals, ...latestUserNotifs]) {
+        for (final item in [...filteredGlobals, ...filteredUsers]) {
           final rawId = item['id'] as String? ?? '';
           final normalizedId = rawId.startsWith('manual_') ? rawId.substring(7) : rawId;
           final announcementId = item['announcementId'] as String? ?? normalizedId;
@@ -1048,59 +1142,100 @@ class FirestoreService {
   }
 
   Future<void> markNotificationAsRead(String userId, String notificationId) async {
-    final rawId = notificationId;
+    final rawId = notificationId.trim();
+    if (rawId.isEmpty || userId.isEmpty) return;
     final normalizedId = rawId.startsWith('manual_') ? rawId.substring(7) : rawId;
 
-    // 1. SharedPreferences'a ekle (Global duyurular için 0-maliyet okundu bilgisi)
+    // Evrensel ID Çözücü: Hem ham ID, hem normalizedId, hem de userId uzantılı varyasyonları topla
+    final targetDocIds = <String>{rawId, normalizedId};
+    if (rawId.endsWith('_$userId')) {
+      final baseAnnouncementId = rawId.substring(0, rawId.length - userId.length - 1);
+      if (baseAnnouncementId.isNotEmpty) {
+        targetDocIds.add(baseAnnouncementId);
+      }
+    } else {
+      targetDocIds.add('${rawId}_$userId');
+      targetDocIds.add('${normalizedId}_$userId');
+    }
+
+    // 1. SharedPreferences ve Statik Bellek Cache'e ekle (0-maliyet reaktif akış)
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('read_announcements') ?? [];
       bool changed = false;
-      if (!list.contains(rawId)) {
-        list.add(rawId);
-        changed = true;
-      }
-      if (!list.contains(normalizedId)) {
-        list.add(normalizedId);
-        changed = true;
+      for (final id in targetDocIds) {
+        if (!list.contains(id)) {
+          list.add(id);
+          changed = true;
+        }
+        _cachedReadAnnouncements?.add(id);
       }
       if (changed) {
         await prefs.setStringList('read_announcements', list);
       }
-      _cachedReadAnnouncements?.add(rawId);
-      _cachedReadAnnouncements?.add(normalizedId);
       _announcementChangeController.add(null);
     } catch (_) {}
 
-    // 2. Kişisel bildirim dokümanını güncelle
+    // 2. Kalıcı Bulut Senkronizasyonu (Reinstall dirilme kalkanı)
     try {
-      await firestore
-          .collection('users')
-          .doc(userId)
-          .collection('notifications')
-          .doc(rawId)
-          .update({'read': true});
+      final announcementTargets = targetDocIds
+          .where((id) => id.startsWith('coupon_') || id.startsWith('manual_') || id.startsWith('log_') || !id.contains('_$userId'))
+          .toList();
+      if (announcementTargets.isNotEmpty) {
+        firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notificationPreferences')
+            .doc('main')
+            .set({
+          'readAnnouncementIds': FieldValue.arrayUnion(announcementTargets),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((_) {});
+      }
     } catch (_) {}
 
-    if (rawId != normalizedId) {
-      try {
-        await firestore
+    // 3. Kişisel bildirim dokümanlarını Firestore'da paralel güncelle
+    try {
+      await Future.wait(
+        targetDocIds.map((docId) => firestore
             .collection('users')
             .doc(userId)
             .collection('notifications')
-            .doc(normalizedId)
-            .update({'read': true});
-      } catch (_) {}
-    }
+            .doc(docId)
+            .update({'read': true})
+            .catchError((_) {})),
+      );
+    } catch (_) {}
+
+    // 4. announcementId veya kuponId üzerinden eşleşen kişisel dokümanları güncelle
+    try {
+      final querySnap = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('announcementId', isEqualTo: rawId)
+          .where('read', isEqualTo: false)
+          .limit(5)
+          .get();
+      if (querySnap.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (final d in querySnap.docs) {
+          batch.update(d.reference, {'read': true});
+        }
+        await batch.commit();
+      }
+    } catch (_) {}
   }
 
   Future<void> markAllNotificationsAsRead(String userId) async {
-    // 1. Aktif duyuruları yerel okundu listesine ekle
+    if (userId.isEmpty) return;
+    // 1. Aktif duyuruları yerel okundu listesine ve statik cache'e ekle
+    final announcementIdsToAdd = <String>[];
     try {
       final globalSnap = await firestore
           .collection('globalAnnouncements')
           .where('active', isEqualTo: true)
-          .limit(20)
+          .limit(30)
           .get();
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('read_announcements') ?? [];
@@ -1109,12 +1244,29 @@ class FirestoreService {
         final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
         if (!list.contains(id)) list.add(id);
         if (!list.contains(normalizedId)) list.add(normalizedId);
+        announcementIdsToAdd.add(id);
+        announcementIdsToAdd.add(normalizedId);
         _cachedReadAnnouncements?.add(id);
         _cachedReadAnnouncements?.add(normalizedId);
       }
       await prefs.setStringList('read_announcements', list);
       _announcementChangeController.add(null);
     } catch (_) {}
+
+    // Bulut senkronizasyonu
+    if (announcementIdsToAdd.isNotEmpty) {
+      try {
+        firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notificationPreferences')
+            .doc('main')
+            .set({
+          'readAnnouncementIds': FieldValue.arrayUnion(announcementIdsToAdd),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((_) {});
+      } catch (_) {}
+    }
 
     // 2. Kişisel okunmamış bildirimleri Firestore'da güncelle
     final snapshot = await firestore
@@ -1139,59 +1291,106 @@ class FirestoreService {
   }
 
   Future<void> deleteNotification(String userId, String notificationId) async {
-    final rawId = notificationId;
+    final rawId = notificationId.trim();
+    if (rawId.isEmpty || userId.isEmpty) return;
     final normalizedId = rawId.startsWith('manual_') ? rawId.substring(7) : rawId;
 
-    // 1. SharedPreferences'a ekle (Global duyurular için 0-maliyet silindi bilgisi)
+    // Evrensel ID Çözücü
+    final targetDocIds = <String>{rawId, normalizedId};
+    if (rawId.endsWith('_$userId')) {
+      final baseAnnouncementId = rawId.substring(0, rawId.length - userId.length - 1);
+      if (baseAnnouncementId.isNotEmpty) {
+        targetDocIds.add(baseAnnouncementId);
+      }
+    } else {
+      targetDocIds.add('${rawId}_$userId');
+      targetDocIds.add('${normalizedId}_$userId');
+    }
+
+    // 1. SharedPreferences ve Statik Cache'e ekle
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('dismissed_announcements') ?? [];
       bool changed = false;
-      if (!list.contains(rawId)) {
-        list.add(rawId);
-        changed = true;
-      }
-      if (!list.contains(normalizedId)) {
-        list.add(normalizedId);
-        changed = true;
+      for (final id in targetDocIds) {
+        if (!list.contains(id)) {
+          list.add(id);
+          changed = true;
+        }
+        _cachedDismissedAnnouncements?.add(id);
       }
       if (changed) {
         await prefs.setStringList('dismissed_announcements', list);
       }
-      _cachedDismissedAnnouncements?.add(rawId);
-      _cachedDismissedAnnouncements?.add(normalizedId);
       _announcementChangeController.add(null);
     } catch (_) {}
 
-    // 2. Kişisel bildirim dokümanını sil
+    // 2. Kalıcı Bulut Senkronizasyonu (Reinstall dirilme kalkanı)
     try {
-      await firestore
-          .collection('users')
-          .doc(userId)
-          .collection('notifications')
-          .doc(rawId)
-          .delete();
+      final announcementTargets = targetDocIds
+          .where((id) => id.startsWith('coupon_') || id.startsWith('manual_') || id.startsWith('log_') || !id.contains('_$userId'))
+          .toList();
+      if (announcementTargets.isNotEmpty) {
+        firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notificationPreferences')
+            .doc('main')
+            .set({
+          'dismissedAnnouncementIds': FieldValue.arrayUnion(announcementTargets),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((_) {});
+      }
     } catch (_) {}
 
-    if (rawId != normalizedId) {
-      try {
-        await firestore
+    // 3. Kişisel bildirim dokümanlarını paralel sil
+    try {
+      await Future.wait(
+        targetDocIds.map((docId) => firestore
             .collection('users')
             .doc(userId)
             .collection('notifications')
-            .doc(normalizedId)
-            .delete();
+            .doc(docId)
+            .delete()
+            .catchError((_) {})),
+      );
+    } catch (_) {}
+
+    // 4. announcementId üzerinden eşleşen kişisel dokümanları da sil
+    try {
+      final querySnap = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('announcementId', isEqualTo: rawId)
+          .limit(5)
+          .get();
+      if (querySnap.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (final d in querySnap.docs) {
+          batch.delete(d.reference);
+        }
+        await batch.commit();
+      }
+    } catch (_) {}
+
+    // 5. Eğer admin ise ve küresel duyuru siliniyorsa (örn: kupon duyurusu), küresel koleksiyondan da temizlemeyi dene
+    if (rawId.startsWith('coupon_')) {
+      try {
+        firestore.collection('globalAnnouncements').doc(rawId).delete().catchError((_) {});
       } catch (_) {}
     }
   }
 
   Future<void> deleteAllNotifications(String userId) async {
-    // 1. Aktif duyuruları yerel gizlenen listesine ekle
+    if (userId.isEmpty) return;
+    // 1. Aktif duyuruları yerel gizlenen listesine ve statik cache'e ekle
+    final announcementIdsToAdd = <String>[];
     try {
       final globalSnap = await firestore
           .collection('globalAnnouncements')
           .where('active', isEqualTo: true)
-          .limit(20)
+          .limit(30)
           .get();
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('dismissed_announcements') ?? [];
@@ -1200,12 +1399,29 @@ class FirestoreService {
         final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
         if (!list.contains(id)) list.add(id);
         if (!list.contains(normalizedId)) list.add(normalizedId);
+        announcementIdsToAdd.add(id);
+        announcementIdsToAdd.add(normalizedId);
         _cachedDismissedAnnouncements?.add(id);
         _cachedDismissedAnnouncements?.add(normalizedId);
       }
       await prefs.setStringList('dismissed_announcements', list);
       _announcementChangeController.add(null);
     } catch (_) {}
+
+    // Bulut senkronizasyonu
+    if (announcementIdsToAdd.isNotEmpty) {
+      try {
+        firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notificationPreferences')
+            .doc('main')
+            .set({
+          'dismissedAnnouncementIds': FieldValue.arrayUnion(announcementIdsToAdd),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((_) {});
+      } catch (_) {}
+    }
 
     // 2. Kişisel bildirimleri Firestore'da sil
     final snapshot = await firestore

@@ -392,88 +392,92 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                               const SizedBox(height: 7.0),
 
                               // 1.3 Puan, Sosyal Kanıt & Mağaza Rozetleri (Sabit 18px Yükseklik)
+                              // OverflowBox + ClipRect çifti: İç Row ne kadar büyürse büyüsün 18px
+                              // yükseklik sınırına saygı duyar; sağ kenar taşması tamamen önlenir.
                               SizedBox(
                                 height: 18,
                                 child: Row(
                                   children: [
                                     Expanded(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (deal.hasMigrosPromoLabel) ...[
-                                            // Migros kampanyalı ise: Kategori ve sade ikon yerine Money kampanya etiketi
-                                            Flexible(
-                                              child: buildMigrosPromoBadge(
-                                                label: deal.priceLabel!.trim(),
-                                                isDark: isDark,
+                                      child: ClipRect(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (deal.hasMigrosPromoLabel) ...[
+                                              // Migros kampanyalı: Money kampanya etiketi
+                                              Flexible(
+                                                child: buildMigrosPromoBadge(
+                                                  label: deal.priceLabel!.trim(),
+                                                  isDark: isDark,
+                                                ),
                                               ),
-                                            ),
-                                          ] else if (deal.ratingValue != null) ...[
-                                            const Icon(
-                                              Icons.star_rounded,
-                                              size: 13.5,
-                                              color: Color(0xFFF59E0B),
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              deal.ratingValue!.toStringAsFixed(1),
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w800,
-                                                color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
-                                                letterSpacing: -0.1,
+                                            ] else if (deal.ratingValue != null) ...[
+                                              const Icon(
+                                                Icons.star_rounded,
+                                                size: 13.5,
+                                                color: Color(0xFFF59E0B),
                                               ),
-                                            ),
-                                            if (deal.ratingCount != null) ...[
-                                              const SizedBox(width: 2.5),
+                                              const SizedBox(width: 2),
+                                              Text(
+                                                deal.ratingValue!.toStringAsFixed(1),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
+                                                  letterSpacing: -0.1,
+                                                ),
+                                              ),
+                                              if (deal.ratingCount != null) ...[
+                                                const SizedBox(width: 2.5),
+                                                Flexible(
+                                                  child: Text(
+                                                    '(${deal.ratingCount})',
+                                                    style: TextStyle(
+                                                      fontSize: 8.5,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                              if (deal.isAmazonWarehouse) ...[
+                                                const SizedBox(width: 3),
+                                                _buildWarehouseBadge(),
+                                              ],
+                                              if (StorePriceBadge.hasBadge(deal: deal)) ...[
+                                                const SizedBox(width: 3),
+                                                StorePriceBadge(deal: deal, compact: true),
+                                              ],
+                                            ] else ...[
+                                              // Puan yoksa: zarif kategori etiketi
                                               Flexible(
                                                 child: Text(
-                                                  '(${deal.ratingCount})',
-                                                  style: TextStyle(
-                                                    fontSize: 8.5,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                                  ),
+                                                  getCategoryDisplayName(deal.category),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                                  ),
                                                 ),
                                               ),
-                                            ],
-                                            if (deal.isAmazonWarehouse) ...[
-                                              const SizedBox(width: 3),
-                                              _buildWarehouseBadge(),
-                                            ],
-                                            if (StorePriceBadge.hasBadge(deal: deal)) ...[
-                                              const SizedBox(width: 3),
-                                              StorePriceBadge(deal: deal, compact: true),
-                                            ],
-                                          ] else ...[
-                                            // Puan yoksa: zarif kategori etiketi (hizalama asla şaşmaz)
-                                            Flexible(
-                                              child: Text(
-                                                getCategoryDisplayName(deal.category),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 9.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                                ),
-                                              ),
-                                            ),
-                                            if (deal.isAmazonWarehouse) ...[
-                                              const SizedBox(width: 3),
-                                              _buildWarehouseBadge(),
-                                            ],
-                                            if (StorePriceBadge.hasBadge(deal: deal)) ...[
-                                              const SizedBox(width: 3),
-                                              StorePriceBadge(deal: deal, compact: true),
+                                              if (deal.isAmazonWarehouse) ...[
+                                                const SizedBox(width: 3),
+                                                _buildWarehouseBadge(),
+                                              ],
+                                              if (StorePriceBadge.hasBadge(deal: deal)) ...[
+                                                const SizedBox(width: 3),
+                                                StorePriceBadge(deal: deal, compact: true),
+                                              ],
                                             ],
                                           ],
-                                        ],
+                                        ),
                                       ),
                                     ),
-                                    // Yorum Sayısı Rozeti (Daima görünür)
+                                    // Yorum Sayısı Rozeti (Daima görünür, flex dışında sabit)
                                     buildDealCommentBadge(
                                       count: deal.commentCount,
                                       isDark: isDark,

@@ -493,6 +493,12 @@ Kullanıcıların Bildirim Merkezi (`users/{userId}/notifications`) kutusunda at
 2. **Web Admin Manuel Temizlik (`purgeOldNotificationsManual` / `purgeOldDealsManual`):** Admin panelinden ilgili temizlik butonuna tıklandığında sunucu tarafında Admin SDK yetkisiyle temizlenir (aynı 10.000 tavanı).
 3. **Maliyet & Performans Avantajı:** İstemci tarafında sayfalama hızlanır, Firestore okuma/yazma maliyeti minimize edilir.
 
+### 12.1 Kupon Silme, Kalıcı Bulut Senkronizasyonu & Kendi Kendini Onaran Rozet (Self-Healing Badge) Mimarisi
+* **onCouponDeleted Trigger:** Kupon veritabanından silindiğinde `globalAnnouncements/coupon_{kuponId}` dokümanı kalıcı olarak silinir, `kuponlar/{kuponId}/votes` alt koleksiyonu temizlenir ve kupon yazarına ait onay/red bildirimleri anında tasfiye edilir.
+* **Kalıcı Bulut Hidratasyonu (`notificationPreferences/main`):** Bildirim okundu/silindi durumu yalnızca yerel bellekte değil, Firestore `users/{uid}/notificationPreferences/main` belgesinde `FieldValue.arrayUnion` ile saklanır. Uygulama silinip baştan yüklense bile tercihler buluttan otomatik çekilir (Reinstall dirilme kalkanı).
+* **Evrensel ID Çözücü:** Ham ID, normalize edilmiş ID, `${id}_${userId}` ve `announcementId` varyasyonları tek seferde paralel (`Future.wait`) çözümlenir.
+* **Kendi Kendini Onaran Rozet (Self-Healing Badge):** `AppBadgeService`, sayaç 1-10 aralığında iken yerel `readSet` ve `dismissedSet` ile mutabakat yapar; yerelde okunan/silinen yetim bildirimleri sayacı 0'a düşürerek dengeler ve Firestore kaydını da arka planda kalıcı olarak onarır.
+
 ---
 
 ## 13. 💻 Web Admin Paneli Entegrasyonu
@@ -515,9 +521,16 @@ Flutter birim testleri `flutter test` ile çalışır. `functions/tests/*.js` do
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
+| **`test/announcement_cloud_sync_and_dedup_test.dart`** | Bildirim ve küresel duyuru bulut senkronizasyonu, evrensel ID çözücü, deduplication ve yerel/bulut filtreleme testleri (6 Test) | `flutter test test/announcement_cloud_sync_and_dedup_test.dart` |
+| **`functions/tests/test_coupon_deletion_contract.js`** | Kupon silme ve red durumlarında küresel duyuru kalıcı silinmesi ve onCouponDeleted trigger sözleşmesi (3 Test) | `node functions/tests/test_coupon_deletion_contract.js` |
+| **`test/notification_routing_test.dart`** | Bildirim tıklama, yönlendirme ve Chat-Hijacking koruma sözleşmesi (30 Test) | `flutter test test/notification_routing_test.dart` |
 | **`test/notification_ui_ux_test.dart`** | UI/UX, yönlendirme, başlık temizleme, fallback, karşılıklı dışlayıcı durum çözümleme ve In-App Banner rozet birim testleri (13 Test) | `flutter test test/notification_ui_ux_test.dart` |
 | **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (20 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation (3 Test) | `flutter test test/notification_logic_test.dart` |
+| **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
+| **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
+| **`functions/tests/test_all_notification_scenarios.js`** | Uçtan uca senaryo script'i: senaryoları ve varyasyonlarını gerçek Firestore üzerinde dener | `node functions/tests/test_all_notification_scenarios.js` |
+| **`functions/tests/test_emergency_controls.js`** | 6 Acil Durum Kontrolü: Global bildirim şalteri, fırsat ve yorum acil kapatma, bot kontrolleri | `node functions/tests/test_emergency_controls.js` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
 | **`functions/tests/test_all_notification_scenarios.js`** | Uçtan uca senaryo script'i: senaryoları ve varyasyonlarını gerçek Firestore üzerinde dener | `node functions/tests/test_all_notification_scenarios.js` |

@@ -129,14 +129,24 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         );
 
         if (mounted) {
-          setState(() {
-            _dealsList = serverResult.deals;
-            _lastDocument = serverResult.lastDocument;
-            _hasMore = serverResult.hasMore;
-            _isLoading = false;
-            _isFirstLoad = false;
-            _errorMessage = null;
-          });
+          if (!serverResult.isError) {
+            setState(() {
+              _dealsList = serverResult.deals;
+              _lastDocument = serverResult.lastDocument;
+              _hasMore = serverResult.hasMore;
+              _isLoading = false;
+              _isFirstLoad = false;
+              _errorMessage = null;
+            });
+          } else {
+            if (_dealsList.isEmpty) {
+              setState(() {
+                _errorMessage = serverResult.errorMessage ?? 'Popüler fırsatlar yüklenemedi';
+                _isLoading = false;
+                _isFirstLoad = false;
+              });
+            }
+          }
         }
         return;
       }
@@ -156,7 +166,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       bool serverLoaded = false;
       try {
         final serverResult = await serverFuture.timeout(_serverTimeout);
-        if (mounted) {
+        if (mounted && !serverResult.isError) {
           serverLoaded = true;
           setState(() {
             _dealsList = serverResult.deals;
@@ -195,14 +205,22 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         if (!cacheLoaded && _dealsList.isEmpty && mounted) {
           serverFuture.then((res) {
             if (mounted) {
-              setState(() {
-                _dealsList = res.deals;
-                _lastDocument = res.lastDocument;
-                _hasMore = res.hasMore;
-                _isLoading = false;
-                _isFirstLoad = false;
-                _errorMessage = null;
-              });
+              if (res.isError && _dealsList.isEmpty) {
+                setState(() {
+                  _isLoading = false;
+                  _isFirstLoad = false;
+                  _errorMessage = res.errorMessage ?? 'Popüler fırsatlar yüklenemedi';
+                });
+              } else {
+                setState(() {
+                  _dealsList = res.deals;
+                  _lastDocument = res.lastDocument;
+                  _hasMore = res.hasMore;
+                  _isLoading = false;
+                  _isFirstLoad = false;
+                  _errorMessage = null;
+                });
+              }
             }
           }).catchError((err) {
             if (mounted && _dealsList.isEmpty) {
@@ -239,7 +257,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   void _attachBackgroundServerListener(Future<DealsPageResult> serverFuture) {
     serverFuture.then((res) {
       if (!mounted) return;
-      if (res.deals.isEmpty) return;
+      if (res.isError || res.deals.isEmpty) return;
 
       // Kullanıcı listenin başındaysa pürüzsüzce güncelle
       final isAtTop = !_scrollController.hasClients || _scrollController.offset <= 120;
@@ -277,15 +295,21 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       );
 
       if (mounted) {
-        final existingIds = _dealsList.map((d) => d.id).toSet();
-        final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
+        if (!result.isError) {
+          final existingIds = _dealsList.map((d) => d.id).toSet();
+          final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
 
-        setState(() {
-          _dealsList.addAll(newDeals);
-          _lastDocument = result.lastDocument;
-          _hasMore = result.hasMore;
-          _isLoading = false;
-        });
+          setState(() {
+            _dealsList.addAll(newDeals);
+            _lastDocument = result.lastDocument;
+            _hasMore = result.hasMore && newDeals.isNotEmpty;
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     } catch (_) {
       if (mounted) {

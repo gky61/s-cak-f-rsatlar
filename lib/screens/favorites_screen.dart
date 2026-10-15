@@ -198,14 +198,24 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         );
 
         if (mounted) {
-          setState(() {
-            _followedDealsList = serverResult.deals;
-            _lastFollowedDocument = serverResult.lastDocument;
-            _hasMoreFollowed = serverResult.hasMore;
-            _isLoadingFollowed = false;
-            _isFirstLoadFollowed = false;
-            _followedErrorMessage = null;
-          });
+          if (!serverResult.isError) {
+            setState(() {
+              _followedDealsList = serverResult.deals;
+              _lastFollowedDocument = serverResult.lastDocument;
+              _hasMoreFollowed = serverResult.hasMore;
+              _isLoadingFollowed = false;
+              _isFirstLoadFollowed = false;
+              _followedErrorMessage = null;
+            });
+          } else {
+            if (_followedDealsList.isEmpty) {
+              setState(() {
+                _followedErrorMessage = serverResult.errorMessage ?? 'Fırsatlar yüklenemedi';
+                _isLoadingFollowed = false;
+                _isFirstLoadFollowed = false;
+              });
+            }
+          }
         }
         return;
       }
@@ -226,7 +236,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       bool serverLoaded = false;
       try {
         final serverResult = await serverFuture.timeout(_followedServerTimeout);
-        if (mounted) {
+        if (mounted && !serverResult.isError) {
           serverLoaded = true;
           setState(() {
             _followedDealsList = serverResult.deals;
@@ -266,14 +276,22 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         if (!cacheLoaded && _followedDealsList.isEmpty && mounted) {
           serverFuture.then((res) {
             if (mounted) {
-              setState(() {
-                _followedDealsList = res.deals;
-                _lastFollowedDocument = res.lastDocument;
-                _hasMoreFollowed = res.hasMore;
-                _isLoadingFollowed = false;
-                _isFirstLoadFollowed = false;
-                _followedErrorMessage = null;
-              });
+              if (res.isError && _followedDealsList.isEmpty) {
+                setState(() {
+                  _isLoadingFollowed = false;
+                  _isFirstLoadFollowed = false;
+                  _followedErrorMessage = res.errorMessage ?? 'Fırsatlar yüklenemedi';
+                });
+              } else {
+                setState(() {
+                  _followedDealsList = res.deals;
+                  _lastFollowedDocument = res.lastDocument;
+                  _hasMoreFollowed = res.hasMore;
+                  _isLoadingFollowed = false;
+                  _isFirstLoadFollowed = false;
+                  _followedErrorMessage = null;
+                });
+              }
             }
           }).catchError((err) {
             if (mounted && _followedDealsList.isEmpty) {
@@ -310,7 +328,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   void _attachBackgroundFollowedServerListener(Future<DealsPageResult> serverFuture) {
     serverFuture.then((res) {
       if (!mounted) return;
-      if (res.deals.isEmpty) return;
+      if (res.isError || res.deals.isEmpty) return;
 
       // Kullanıcı listenin başındaysa pürüzsüzce güncelle
       final isAtTop = !_followedCategoriesScrollController.hasClients ||
@@ -351,15 +369,21 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       );
 
       if (mounted) {
-        final existingIds = _followedDealsList.map((d) => d.id).toSet();
-        final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
+        if (!result.isError) {
+          final existingIds = _followedDealsList.map((d) => d.id).toSet();
+          final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
 
-        setState(() {
-          _followedDealsList.addAll(newDeals);
-          _lastFollowedDocument = result.lastDocument;
-          _hasMoreFollowed = result.hasMore && newDeals.isNotEmpty;
-          _isLoadingFollowed = false;
-        });
+          setState(() {
+            _followedDealsList.addAll(newDeals);
+            _lastFollowedDocument = result.lastDocument;
+            _hasMoreFollowed = result.hasMore && newDeals.isNotEmpty;
+            _isLoadingFollowed = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingFollowed = false;
+          });
+        }
       }
     } catch (_) {
       if (mounted) {

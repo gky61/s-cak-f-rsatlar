@@ -16,6 +16,7 @@ class ConnectivityService {
   final Connectivity _connectivity = Connectivity();
   final StreamController<bool> _connectionStatusController = StreamController<bool>.broadcast();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
+  Timer? _pendingOfflineTimer;
   bool _initialized = false;
   
   bool _isConnected = true;
@@ -65,14 +66,57 @@ class ConnectivityService {
   }
 
   void _updateConnectionStatus(List<ConnectivityResult> result) {
-    final wasConnected = _isConnected;
-    _isConnected = result.isNotEmpty && !result.contains(ConnectivityResult.none);
-    
-    if (wasConnected != _isConnected) {
-      _log('📶 Bağlantı durumu: ${_isConnected ? "Çevrimiçi" : "Çevrimdışı"}');
-      if (!_connectionStatusController.isClosed) {
-        _connectionStatusController.add(_isConnected);
+    final hasActiveNetwork = result.isNotEmpty && !result.contains(ConnectivityResult.none);
+
+    if (hasActiveNetwork) {
+      // 1. Ağ bağlantısı tespit edildi:
+      // Olası cold-start veya ağ geçişi sırasındaki bekleyen sahte çevrimdışı alarmını iptal et
+      _pendingOfflineTimer?.cancel();
+      _pendingOfflineTimer = null;
+
+      final wasConnected = _isConnected;
+      _isConnected = true;
+
+      if (!wasConnected) {
+        _log('📶 Bağlantı durumu: Çevrimiçi');
+        if (!_connectionStatusController.isClosed) {
+          _connectionStatusController.add(true);
+        }
       }
+    } else {
+      // 2. Ağ yok (none) bildirildi:
+      // Cold-start başlangıç ısınması (Android NetworkCapabilities warmup lag) veya anlık baz istasyonu/Wi-Fi
+      // geçişlerindeki sahte alarmları önlemek için 1500ms'lik Grace Period işletilir.
+      if (_pendingOfflineTimer != null && _pendingOfflineTimer!.isActive) {
+        return;
+      }
+
+      Timer? timer;
+      timer = Timer(const Duration(milliseconds: 1500), () async {
+        if (_pendingOfflineTimer != timer) return;
+        _pendingOfflineTimer = null;
+        try {
+          // 1500ms sonra son durumu teyit et
+          final recheck = await _connectivity.checkConnectivity();
+          if (_pendingOfflineTimer != null) return;
+          final stillNoNetwork = recheck.isEmpty || recheck.contains(ConnectivityResult.none);
+
+          if (stillNoNetwork) {
+            final wasConnected = _isConnected;
+            _isConnected = false;
+
+            if (wasConnected) {
+              _log('📶 Bağlantı durumu: Doğrulanmış Çevrimdışı');
+              if (!_connectionStatusController.isClosed) {
+                _connectionStatusController.add(false);
+              }
+            }
+          }
+        } catch (_) {
+          // Hata durumunda durum değiştirme
+        }
+      });
+      _pendingOfflineTimer = timer;
     }
   }
 
@@ -83,6 +127,8 @@ class ConnectivityService {
   }
 
   void dispose() {
+    _pendingOfflineTimer?.cancel();
+    _pendingOfflineTimer = null;
     _subscription?.cancel();
     _subscription = null;
     _initialized = false;

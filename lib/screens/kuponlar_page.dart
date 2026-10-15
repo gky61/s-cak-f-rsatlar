@@ -45,8 +45,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   final Set<String> _hiddenKuponIds = {};
   final Set<String> _animatingOutKuponIds = {};
   final Set<String> _recentlyRestoredKuponIds = {};
-  final Set<String> _recentlyUnlockedKuponIds = {};
-  final Map<String, Timer> _unlockedEffectTimers = {};
   final Map<String, Timer> _hideTimers = {};
   final Map<String, String?> _userVotes = {};
   final Map<String, int> _localHotCounts = {};
@@ -96,7 +94,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     NotificationService.isCouponsScreenActive = true;
     if (widget.highlightKuponId != null && widget.highlightKuponId!.trim().isNotEmpty) {
       _highlightedKuponId = widget.highlightKuponId!.trim();
-      _highlightTimer = Timer(const Duration(milliseconds: 3600), () {
+      _highlightTimer = Timer(const Duration(milliseconds: 2400), () {
         if (mounted) {
           setState(() {
             _highlightedKuponId = null;
@@ -157,10 +155,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       timer.cancel();
     }
     _hideTimers.clear();
-    for (final timer in _unlockedEffectTimers.values) {
-      timer.cancel();
-    }
-    _unlockedEffectTimers.clear();
     for (final timer in _couponVoteDebounceTimers.values) {
       timer.cancel();
     }
@@ -414,23 +408,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         });
       }
     }
-  }
-
-  /// Yeni açılan kuponu Botkolik çerçeve ışıma efekti için 3.5 saniye boyunca işaretler
-  void _markCouponRecentlyUnlocked(String kuponId) {
-    _unlockedEffectTimers[kuponId]?.cancel();
-    if (mounted) {
-      setState(() {
-        _recentlyUnlockedKuponIds.add(kuponId);
-      });
-    }
-    _unlockedEffectTimers[kuponId] = Timer(const Duration(milliseconds: 3500), () {
-      if (mounted) {
-        setState(() {
-          _recentlyUnlockedKuponIds.remove(kuponId);
-        });
-      }
-    });
   }
 
   void _showToast({
@@ -832,7 +809,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     if (creditService.remainingCredits > 0) {
       final success = await creditService.useCreditForCoupon(kupon.id);
       if (success) {
-        _markCouponRecentlyUnlocked(kupon.id);
         _copyToClipboard(
           kupon.id,
           kupon.kuponKodu,
@@ -1308,7 +1284,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                                       onDismissed: () async {
                                         if (userEarnedReward && mounted) {
                                           await CouponCreditService.instance.unlockCouponForGuest(kupon.id);
-                                          _markCouponRecentlyUnlocked(kupon.id);
                                           _showToast(
                                             message: '🎉 Kupon açıldı! Kodu kopyalamak için üzerine dokunabilirsin.',
                                             icon: Icons.lock_open_rounded,
@@ -1899,7 +1874,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
                       final success = await creditService.useCreditForCoupon(kupon.id);
                       if (success && mounted) {
-                        _markCouponRecentlyUnlocked(kupon.id);
                         _copyToClipboard(
                           kupon.id,
                           kupon.kuponKodu,
@@ -2359,8 +2333,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     final canManage = currentUser != null && (kupon.paylasanKullaniciId == currentUser.uid || _isAdmin);
     final hasUsername = kupon.kaynakTipi == 'topluluk' && kupon.paylasanKullaniciAdi.isNotEmpty;
     final isHighlighted = _highlightedKuponId != null && _highlightedKuponId == kupon.id;
-    final isRecentlyUnlocked = _recentlyUnlockedKuponIds.contains(kupon.id);
-    final isRadarGlowActive = isRecentlyUnlocked || isHighlighted;
+    final isGlowActive = isRecentlyRestored || isHighlighted;
 
     final cardContent = Opacity(
       opacity: (isInvalid || isExpired) ? 0.55 : 1.0,
@@ -2370,26 +2343,22 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(18),
-          boxShadow: isRadarGlowActive
-              ? null
-              : [
-                  BoxShadow(
-                    color: isRecentlyRestored
-                        ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
-                        : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
-                    blurRadius: isRecentlyRestored ? 16 : 10,
-                    spreadRadius: isRecentlyRestored ? 1.5 : 0,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-          border: isRadarGlowActive
-              ? Border.all(color: Colors.transparent, width: 1.2)
-              : Border.all(
-                  color: isRecentlyRestored
-                      ? AppTheme.primary
-                      : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
-                  width: isRecentlyRestored ? 1.8 : 1.2,
-                ),
+          boxShadow: [
+            BoxShadow(
+              color: isGlowActive
+                  ? AppTheme.primary.withValues(alpha: isDark ? 0.45 : 0.25)
+                  : Colors.black.withValues(alpha: isDark ? 0.35 : 0.03),
+              blurRadius: isGlowActive ? 16 : 10,
+              spreadRadius: isGlowActive ? 1.5 : 0,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          border: Border.all(
+            color: isGlowActive
+                ? AppTheme.primary
+                : (isDark ? AppTheme.darkBorder : const Color(0xFFE2E8F0)),
+            width: isGlowActive ? 1.8 : 1.2,
+          ),
         ),
         padding: const EdgeInsets.all(13),
         child: Column(
@@ -2987,17 +2956,6 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
         ),
       ),
     );
-
-    if (isRecentlyUnlocked || isHighlighted) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _NewlyUnlockedCardGlowWrapper(
-          key: ValueKey('card_glow_${kupon.id}_${isHighlighted ? "highlight" : "unlocked"}'),
-          isDark: isDark,
-          child: cardContent,
-        ),
-      );
-    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -4540,134 +4498,5 @@ class _RadarGradientBorderPainter extends CustomPainter {
   }
 }
 
-/// Yeni açılan veya bildirimden vurgulanan kupon kartını Botkolik Radar tarzı dönen degrade çerçeve ve ışıma ile 3.5 saniye canlandırır
-class _NewlyUnlockedCardGlowWrapper extends StatefulWidget {
-  final Widget child;
-  final bool isDark;
 
-  const _NewlyUnlockedCardGlowWrapper({
-    super.key,
-    required this.child,
-    required this.isDark,
-  });
-
-  @override
-  State<_NewlyUnlockedCardGlowWrapper> createState() =>
-      _NewlyUnlockedCardGlowWrapperState();
-}
-
-class _NewlyUnlockedCardGlowWrapperState
-    extends State<_NewlyUnlockedCardGlowWrapper>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _glowAnimation;
-  late final Animation<double> _shimmerAngleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3500),
-    );
-
-    _glowAnimation = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 15,
-      ),
-      TweenSequenceItem(
-        tween: ConstantTween<double>(1.0),
-        weight: 45,
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.easeInOutCubic)),
-        weight: 40,
-      ),
-    ]).animate(_controller);
-
-    _shimmerAngleAnimation = Tween<double>(begin: 0.0, end: 1.8).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
-    );
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = widget.isDark;
-
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final glow = _glowAnimation.value;
-        final angle = _shimmerAngleAnimation.value;
-
-        final gradientColors = isDark
-            ? [
-                const Color(0xFFFF6B35),
-                const Color(0xFFFBBF24),
-                const Color(0xFF38BDF8),
-                const Color(0xFFFF6B35),
-              ]
-            : [
-                const Color(0xFFFF4500),
-                const Color(0xFFF59E0B),
-                const Color(0xFF0284C7),
-                const Color(0xFFFF4500),
-              ];
-
-        final settledBorderColor = isDark
-            ? AppTheme.darkBorder
-            : const Color(0xFFE2E8F0);
-
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              if (glow > 0.01) ...[
-                BoxShadow(
-                  color: (isDark
-                          ? const Color(0xFFFF6B35)
-                          : const Color(0xFFFF5722))
-                      .withValues(alpha: (isDark ? 0.35 : 0.30) * glow),
-                  blurRadius: (isDark ? 16.0 : 18.0) * glow,
-                  spreadRadius: (isDark ? 1.5 : 2.0) * glow,
-                  offset: const Offset(0, 2),
-                ),
-                BoxShadow(
-                  color: (isDark
-                          ? const Color(0xFF38BDF8)
-                          : const Color(0xFF0284C7))
-                      .withValues(alpha: (isDark ? 0.20 : 0.22) * glow),
-                  blurRadius: 22 * glow,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ],
-          ),
-          child: CustomPaint(
-            painter: _RadarGradientBorderPainter(
-              borderRadius: 18,
-              borderWidth: 1.4 + (1.2 * glow),
-              gradientColors: gradientColors,
-              glowProgress: glow,
-              rotationTurns: angle,
-              settledBorderColor: settledBorderColor,
-            ),
-            child: widget.child,
-          ),
-        );
-      },
-    );
-  }
-}
 

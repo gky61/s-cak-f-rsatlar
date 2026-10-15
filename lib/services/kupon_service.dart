@@ -255,7 +255,13 @@ class KuponService {
 
   // Kupon silme
   Future<void> deleteKupon(String kuponId) async {
-    await _firestore.collection('kuponlar').doc(kuponId).delete();
+    final cleanId = kuponId.trim();
+    if (cleanId.isEmpty) return;
+    await _firestore.collection('kuponlar').doc(cleanId).delete();
+    // İstemci seviyesinde küresel duyuruyu da anında silmeyi dene (Backend onCouponDeleted ile çift kalkan)
+    try {
+      await _firestore.collection('globalAnnouncements').doc('coupon_$cleanId').delete();
+    } catch (_) {}
   }
 
   // Kupona oy verme işlemi (FS-08: Kilitsiz Atomik Pipeline & Alt Doküman İzolasyonu)

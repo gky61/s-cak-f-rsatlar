@@ -28,12 +28,16 @@ class DealsPageResult {
   final DocumentSnapshot? lastDocument;
   final bool hasMore;
   final bool isFromCache;
+  final bool isError;
+  final String? errorMessage;
 
   const DealsPageResult({
     required this.deals,
     this.lastDocument,
     this.hasMore = false,
     this.isFromCache = false,
+    this.isError = false,
+    this.errorMessage,
   });
 }
 
@@ -190,18 +194,23 @@ class DealService {
         isFromCache: isFromCache,
       );
     } catch (e, stack) {
-      _log('Pagination hatası: $e');
-      SystemLogService.instance.logError(
-        category: 'deal_pagination',
-        errorType: 'PaginationException',
-        message: 'Fırsatlar sayfalanırken hata oluştu: $e',
-        stack: stack,
-        severity: SystemErrorSeverity.warning,
-      );
+      final isCacheMiss = source == Source.cache && e.toString().contains('unavailable');
+      if (!isCacheMiss) {
+        _log('Pagination hatası: $e');
+        SystemLogService.instance.logError(
+          category: 'deal_pagination',
+          errorType: 'PaginationException',
+          message: 'Fırsatlar sayfalanırken hata oluştu: $e',
+          stack: stack,
+          severity: SystemErrorSeverity.warning,
+        );
+      }
       return DealsPageResult(
         deals: [],
         lastDocument: lastDocument,
         hasMore: false,
+        isError: !isCacheMiss,
+        errorMessage: isCacheMiss ? null : e.toString(),
       );
     }
   }
@@ -262,11 +271,16 @@ class DealService {
         isFromCache: isFromCache,
       );
     } catch (e) {
-      _log('getPopularDealsPaginated hatası: $e');
+      final isCacheMiss = source == Source.cache && e.toString().contains('unavailable');
+      if (!isCacheMiss) {
+        _log('getPopularDealsPaginated hatası: $e');
+      }
       return DealsPageResult(
         deals: [],
         lastDocument: lastDocument,
         hasMore: false,
+        isError: !isCacheMiss,
+        errorMessage: isCacheMiss ? null : e.toString(),
       );
     }
   }
@@ -364,11 +378,16 @@ class DealService {
         isFromCache: isFromCache,
       );
     } catch (e) {
-      _log('getFollowedCategoriesDealsPaginated hatası: $e');
+      final isCacheMiss = source == Source.cache && e.toString().contains('unavailable');
+      if (!isCacheMiss) {
+        _log('getFollowedCategoriesDealsPaginated hatası: $e');
+      }
       return DealsPageResult(
         deals: [],
         lastDocument: lastDocument,
         hasMore: false,
+        isError: !isCacheMiss,
+        errorMessage: isCacheMiss ? null : e.toString(),
       );
     }
   }

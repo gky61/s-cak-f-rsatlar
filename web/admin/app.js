@@ -13567,6 +13567,7 @@ function deleteCoupon(id) {
     if (confirm("Bu kuponu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) {
         db.collection('kuponlar').doc(id).delete()
             .then(() => {
+                db.collection('globalAnnouncements').doc('coupon_' + id).delete().catch(() => {});
                 showSuccess("Kupon başarıyla silindi!");
             })
             .catch(error => {

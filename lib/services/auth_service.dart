@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, defaultTargetP
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart';
 import 'app_badge_service.dart';
+import 'firestore_service.dart';
 import 'analytics_service.dart';
 import '../models/user.dart' as app_user;
 import '../firebase_options.dart';
@@ -613,6 +615,11 @@ class AuthService {
       } catch (analyticsErr) {
         _log('⚠️ Login sonrası Analytics setUser hatası: $analyticsErr');
       }
+
+      // Buluttaki bildirim tercihlerini (okundu/silindi listeleri) arka planda hydrate et (Reinstall dirilme kalkanı)
+      try {
+        unawaited(FirestoreService().syncAnnouncementPreferencesFromCloud(firebaseUser.uid));
+      } catch (_) {}
       
       return appUser;
     } catch (e) {
@@ -976,6 +983,7 @@ class AuthService {
       try {
         AppBadgeService.instance.stopRealtimeBadgeSync();
         await AppBadgeService.instance.clearBadge();
+        FirestoreService.clearAnnouncementCache();
       } catch (e) {
         _log('AppBadgeService clear error: $e');
       }
