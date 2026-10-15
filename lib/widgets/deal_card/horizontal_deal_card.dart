@@ -46,7 +46,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
           FormattedPriceText(
             value: deal.price,
             style: TextStyle(
-              fontSize: 17,
+              fontSize: 17.5,
               fontWeight: FontWeight.w900,
               color: isExpired ? const Color(0xFFDC2626) : AppTheme.primary,
               letterSpacing: -0.5,
@@ -59,7 +59,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
             FormattedPriceText(
               value: deal.originalPrice,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w500,
                 color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
                 decoration: TextDecoration.lineThrough,
@@ -87,13 +87,14 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
             : (deal.isEditorPick 
                 ? AppTheme.primary 
                 : (isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1))));
-    final borderWidth = (deal.isRejected || deal.isApproved == false || deal.isEditorPick) ? 2.0 : 1.5;    final inceleButton = ElevatedButton(
+    final borderWidth = (deal.isRejected || deal.isApproved == false || deal.isEditorPick) ? 2.0 : 1.5;
+    final inceleButton = ElevatedButton(
       onPressed: () => openProductLink(context, deal.link, deal.store, deal),
       style: ElevatedButton.styleFrom(
         backgroundColor: isExpired ? const Color(0xFF64748B) : AppTheme.primary,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-        minimumSize: const Size(0, 26),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5.5),
+        minimumSize: const Size(0, 28),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999), // rounded-full
         ),
@@ -107,15 +108,15 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
             isExpired ? 'Şansını Dene' : 'İncele',
             style: const TextStyle(
               fontWeight: FontWeight.w700,
-              fontSize: 11,
+              fontSize: 11.5,
               letterSpacing: -0.2,
               color: Colors.white,
             ),
           ),
-          const SizedBox(width: 3),
+          const SizedBox(width: 3.5),
           const Icon(
             Icons.arrow_outward_rounded,
-            size: 12.5,
+            size: 13,
             color: Colors.white,
           ),
         ],
@@ -187,15 +188,15 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
               });
             },
             child: Padding(
-              padding: const EdgeInsets.all(11),
+              padding: const EdgeInsets.all(12),
               child: IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Sol tarafta görsel - Esnek ve yüksek kaliteli (min. 148px)
+                    // Sol tarafta görsel - Esnek ve yüksek kaliteli (min. 144px)
                     Container(
-                      width: 135,
-                      constraints: const BoxConstraints(minHeight: 148),
+                      width: 124,
+                      constraints: const BoxConstraints(minHeight: 144),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         color: Colors.white, // Beyaz arka plan
@@ -319,11 +320,24 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                 right: 6,
                                 child: buildEditorChoiceStarBadge(isDark: isDark),
                               ),
+
+                            // ─── CANLI TERMOMETRE ROZETİ (Görsel Sağ Alt) ─────────────────
+                            if ((deal.hotVotes + deal.coldVotes) > 0)
+                              Positioned(
+                                bottom: 6,
+                                right: 6,
+                                child: DealCardThermometerPill(
+                                  deal: deal,
+                                  isDark: isDark,
+                                  compact: true,
+                                  onImage: true,
+                                ),
+                              ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 11),
+                    const SizedBox(width: 12),
                     // Sağ tarafta içerik - Asla taşma yapmayan esnek ve ferah mimari
                     Expanded(
                       child: Column(
@@ -359,8 +373,8 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                       mainAxisSize: MainAxisSize.min,
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        buildStoreLogo(deal.store, size: 13.5, borderRadius: 3.5),
-                                        const SizedBox(width: 3.5),
+                                        buildStoreLogo(deal.store, size: 14, borderRadius: 3),
+                                        const SizedBox(width: 4),
                                         Flexible(
                                           child: Text(
                                             deal.store.isEmpty ? 'Bilinmeyen' : deal.store,
@@ -374,7 +388,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                           ),
                                         ),
                                         if (deal.isAmazonWarehouse) ...[
-                                          const SizedBox(width: 3),
+                                          const SizedBox(width: 3.5),
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                             decoration: BoxDecoration(
@@ -412,114 +426,70 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 2.0),
-                              // 2. Başlık Satırı (Maksimum 2 satır, temiz ve okunaklı)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 0.5, bottom: 1.5),
-                                child: Text(
-                                  deal.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12.0,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.20,
-                                    letterSpacing: -0.2,
-                                    color: (isExpired || deal.expiredVotes >= 15)
-                                        ? const Color(0xFFDC2626) 
-                                        : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
-                                    decoration: (isExpired || deal.expiredVotes >= 15)
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    decorationColor: const Color(0xFFDC2626),
-                                    decorationThickness: 1.5,
-                                  ),
+                              const SizedBox(height: 5.5),
+                              // 2. Başlık Satırı (Maksimum 2 satır, temiz ve nefes alan okunaklı tipografi)
+                              Text(
+                                deal.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.25,
+                                  letterSpacing: -0.2,
+                                  color: (isExpired || deal.expiredVotes >= 15)
+                                      ? const Color(0xFFDC2626) 
+                                      : (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A)),
+                                  decoration: (isExpired || deal.expiredVotes >= 15)
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  decorationColor: const Color(0xFFDC2626),
+                                  decorationThickness: 1.5,
                                 ),
                               ),
-                              const SizedBox(height: 2.0),
-                              // 3. Değerlendirme & Termometre Satırı (Mağaza Puanı / Migros İçin Zaman + Canlı Termometre)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  // Sol: Mağaza Puanı veya Migros için Paylaşım Zamanı
-                                  if (deal.ratingValue != null)
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.star_rounded,
-                                          size: 13.5,
-                                          color: Color(0xFFF59E0B),
-                                        ),
-                                        const SizedBox(width: 2.0),
-                                        Text(
-                                          deal.ratingValue!.toStringAsFixed(1),
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
-                                            letterSpacing: -0.1,
+                              const SizedBox(height: 6.0),
+                              // 3. Değerlendirme Satırı (Mağaza Puanı veya Migros Kampanya Rozeti)
+                              if (deal.ratingValue != null || deal.hasMigrosPromoLabel) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    if (deal.ratingValue != null)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            size: 13.5,
+                                            color: Color(0xFFF59E0B),
                                           ),
-                                        ),
-                                        if (deal.ratingCount != null) ...[
-                                          const SizedBox(width: 2),
+                                          const SizedBox(width: 2.0),
                                           Text(
-                                            '(${deal.ratingCount})',
+                                            deal.ratingValue!.toStringAsFixed(1),
                                             style: TextStyle(
-                                              fontSize: 8.5,
-                                              fontWeight: FontWeight.w500,
-                                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
+                                              letterSpacing: -0.1,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
+                                          if (deal.ratingCount != null) ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              '(${deal.ratingCount})',
+                                              style: TextStyle(
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
                                         ],
-                                      ],
-                                    )
-                                  else if (deal.isMigros)
-                                    // Migros ürünlerinde puan olmadığından zaman üste kaydırılır
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.access_time_rounded,
-                                          size: 10.5,
-                                          color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                                        ),
-                                        const SizedBox(width: 3.5),
-                                        Text(
-                                          formatRelativeTimeCompact(deal.createdAt),
-                                          style: TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w500,
-                                            color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  else
-                                    const SizedBox.shrink(),
-
-                                  // Sağ: Grid View'daki Termometre Kapsülü (HUD Pill)
-                                  DealCardThermometerPill(
-                                    deal: deal,
-                                    isDark: isDark,
-                                    compact: true,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2.0),
-                              // 4. Zaman & Yorum Satırı (Migros için Kampanya Rozeti / Diğerleri için Zaman)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  // Sol: Migros Kampanya Rozeti veya Normal Mağazalar İçin Paylaşım Zamanı
-                                  if (deal.hasMigrosPromoLabel)
-                                    Flexible(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(right: 6.0),
+                                      )
+                                    else if (deal.hasMigrosPromoLabel)
+                                      Flexible(
                                         child: buildMigrosPromoBadge(
                                           label: deal.priceLabel!.trim(),
                                           isDark: isDark,
@@ -528,31 +498,34 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                                           padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
                                         ),
                                       ),
-                                    )
-                                  else if (!deal.isMigros)
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.access_time_rounded,
-                                          size: 10.5,
+                                  ],
+                                ),
+                                const SizedBox(height: 5.5),
+                              ],
+                              // 4. Zaman & Yorum Satırı
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.access_time_rounded,
+                                        size: 11,
+                                        color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                                      ),
+                                      const SizedBox(width: 3.5),
+                                      Text(
+                                        formatRelativeTimeCompact(deal.createdAt),
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w500,
                                           color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
                                         ),
-                                        const SizedBox(width: 3.5),
-                                        Text(
-                                          formatRelativeTimeCompact(deal.createdAt),
-                                          style: TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w500,
-                                            color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  else
-                                    const SizedBox.shrink(),
-
-                                  // Sağ: Yorum Rozeti
+                                      ),
+                                    ],
+                                  ),
                                   buildDealCommentBadge(
                                     count: deal.commentCount,
                                     isDark: isDark,
@@ -561,7 +534,7 @@ class _HorizontalDealCardState extends State<HorizontalDealCard> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 2.5),
+                          const SizedBox(height: 4.0),
                           // 5. Alt Bölüm: Fiyat ve İncele Butonu
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

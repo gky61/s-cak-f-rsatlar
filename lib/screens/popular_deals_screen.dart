@@ -903,13 +903,10 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                 for (int i = 0; i < adPositions.length; i++) {
                   final adPosition = adPositions[i];
                   if (index == adPosition) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: AdDealCard(
-                        key: ValueKey('ad_card_popular_horizontal_$i'),
-                        viewMode: CardViewMode.horizontal,
-                        placement: 'popular',
-                      ),
+                    return AdDealCard(
+                      key: ValueKey('ad_card_popular_horizontal_$i'),
+                      viewMode: CardViewMode.horizontal,
+                      placement: 'popular',
                     );
                   }
                   if (index > adPosition) {
@@ -922,16 +919,13 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                   return const SizedBox.shrink();
                 }
                 final deal = deals[actualIndex];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: RepaintBoundary(
-                    key: ValueKey('pop_deal_list_boundary_${deal.id}'),
-                    child: DealCard(
-                      key: ValueKey('pop_deal_${deal.id}_h'),
-                      deal: deal,
-                      viewMode: CardViewMode.horizontal,
-                      onTap: () => _openDealDetail(context, deal),
-                    ),
+                return RepaintBoundary(
+                  key: ValueKey('pop_deal_list_boundary_${deal.id}'),
+                  child: DealCard(
+                    key: ValueKey('pop_deal_${deal.id}_h'),
+                    deal: deal,
+                    viewMode: CardViewMode.horizontal,
+                    onTap: () => _openDealDetail(context, deal),
                   ),
                 );
               },

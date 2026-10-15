@@ -10,12 +10,14 @@ class DealCardThermometerPill extends StatefulWidget {
   final Deal deal;
   final bool isDark;
   final bool compact;
+  final bool onImage;
 
   const DealCardThermometerPill({
     super.key,
     required this.deal,
     required this.isDark,
     this.compact = false,
+    this.onImage = false,
   });
 
   @override
@@ -117,14 +119,21 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
           glowColor = const Color(0xFF06B6D4);
         }
 
-        // Cam efektli zemin ve sınır renkleri
-        final Color pillBackground = isDark
-            ? const Color(0xFF0C0E14).withValues(alpha: 0.84)
-            : Colors.white.withValues(alpha: 0.90);
+        final bool isOnImage = widget.onImage;
 
-        final Color pillBorderColor = isDark
-            ? primaryAccent.withValues(alpha: 0.38)
-            : primaryAccent.withValues(alpha: 0.30);
+        // Cam efektli zemin ve sınır renkleri
+        // Görsel üzerindeyken (onImage) yüksek kontrastlı lüks obsidyen cam efekti uygulanır
+        final Color pillBackground = isOnImage
+            ? const Color(0xFF0F172A).withValues(alpha: 0.85)
+            : (isDark
+                ? const Color(0xFF0C0E14).withValues(alpha: 0.84)
+                : Colors.white.withValues(alpha: 0.90));
+
+        final Color pillBorderColor = isOnImage
+            ? primaryAccent.withValues(alpha: 0.45)
+            : (isDark
+                ? primaryAccent.withValues(alpha: 0.38)
+                : primaryAccent.withValues(alpha: 0.30));
 
         return AnimatedBuilder(
           animation: _pulseController,
@@ -154,7 +163,9 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                         // Nefes alan renkli termal aura
                         BoxShadow(
                           color: glowColor.withValues(
-                            alpha: isDark ? (0.22 + 0.14 * pulse) : (0.14 + 0.10 * pulse),
+                            alpha: (isOnImage || isDark)
+                                ? (0.24 + 0.14 * pulse)
+                                : (0.14 + 0.10 * pulse),
                           ),
                           blurRadius: 7 + (3 * pulse),
                           spreadRadius: 0.2,
@@ -162,7 +173,9 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                         ),
                         // Kontrast derinlik gölgesi
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+                          color: Colors.black.withValues(
+                            alpha: (isOnImage || isDark) ? 0.35 : 0.08,
+                          ),
                           blurRadius: 4,
                           offset: const Offset(0, 1),
                         ),
@@ -224,7 +237,7 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                       Text(
                                         PriceFormatUtil.format(hotVotes, includeSymbol: false),
                                         style: TextStyle(
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                          color: (isOnImage || isDark) ? Colors.white : const Color(0xFF0F172A),
                                           fontSize: widget.compact ? 8.5 : 9.5,
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: -0.2,
@@ -237,7 +250,7 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                     width: 1,
                                     height: widget.compact ? 7 : 8,
                                     margin: EdgeInsets.symmetric(horizontal: widget.compact ? 3.5 : 5),
-                                    color: isDark
+                                    color: (isOnImage || isDark)
                                         ? Colors.white.withValues(alpha: 0.20)
                                         : Colors.black.withValues(alpha: 0.15),
                                   ),
@@ -254,7 +267,7 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                       Text(
                                         PriceFormatUtil.format(coldVotes, includeSymbol: false),
                                         style: TextStyle(
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                          color: (isOnImage || isDark) ? Colors.white : const Color(0xFF0F172A),
                                           fontSize: widget.compact ? 8.5 : 9.5,
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: -0.2,
@@ -307,7 +320,7 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                       Text(
                                         '$hotPercentage',
                                         style: TextStyle(
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                          color: (isOnImage || isDark) ? Colors.white : const Color(0xFF0F172A),
                                           fontSize: widget.compact ? 9.5 : 10.5,
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: -0.4,
@@ -333,12 +346,12 @@ class _DealCardThermometerPillState extends State<DealCardThermometerPill>
                                     height: widget.compact ? 3 : 3.5,
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(999),
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.12)
+                                      color: (isOnImage || isDark)
+                                          ? Colors.white.withValues(alpha: 0.16)
                                           : Colors.black.withValues(alpha: 0.08),
                                       border: Border.all(
-                                        color: isDark
-                                            ? Colors.white.withValues(alpha: 0.06)
+                                        color: (isOnImage || isDark)
+                                            ? Colors.white.withValues(alpha: 0.08)
                                             : Colors.black.withValues(alpha: 0.04),
                                         width: 0.5,
                                       ),

@@ -33,15 +33,15 @@ class DealCardSkeleton extends StatelessWidget {
         border: Border.all(
           color: borderColor,
           width: 1.5,
-          ),
+        ),
       ),
       child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           // Görsel Skeleton
-              Shimmer.fromColors(
-                baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+          Shimmer.fromColors(
+            baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+            highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
             child: SizedBox(
               height: 142,
               width: double.infinity,
@@ -52,15 +52,15 @@ class DealCardSkeleton extends StatelessWidget {
                 ),
               ),
             ),
-              ),
+          ),
           // İçerik Skeleton
-              Expanded(
+          Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
+              padding: const EdgeInsets.fromLTRB(11, 8.5, 11, 8.5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   // Mağaza
                   Shimmer.fromColors(
                     baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
@@ -74,52 +74,52 @@ class DealCardSkeleton extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Başlık
+                  // Başlık (Sabit 34px yükseklik cetveli)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Shimmer.fromColors(
-                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          child: Container(
+                    children: [
+                      Shimmer.fromColors(
+                        baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                        highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                        child: Container(
                           width: double.infinity,
-                          height: 10,
-                            decoration: BoxDecoration(
+                          height: 11,
+                          decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Shimmer.fromColors(
                         baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                         highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                         child: Container(
                           width: 80,
-                          height: 10,
+                          height: 11,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(4),
-                            ),
                           ),
                         ),
+                      ),
                     ],
                   ),
-                  // Fiyat
-                        Shimmer.fromColors(
-                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          child: Container(
-                      width: 50,
-                      height: 12,
-                            decoration: BoxDecoration(
+                  // Fiyat & Rozet
+                  Shimmer.fromColors(
+                    baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                    highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                    child: Container(
+                      width: 55,
+                      height: 14,
+                      decoration: BoxDecoration(
                         color: Colors.white,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                      ],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -132,7 +132,9 @@ class DealCardSkeleton extends StatelessWidget {
     final borderColor = isDark ? const Color(0xFF3A3A3C) : const Color(0xFFCBD5E1);
 
     return Container(
-      height: 140,
+      margin: const EdgeInsets.only(bottom: 12),
+      constraints: const BoxConstraints(minHeight: 144),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cardBackgroundColor,
         borderRadius: BorderRadius.circular(16),
@@ -142,119 +144,149 @@ class DealCardSkeleton extends StatelessWidget {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Görsel Skeleton
           Shimmer.fromColors(
             baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
             highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
             child: Container(
-              width: 112,
-              height: 112,
-              margin: const EdgeInsets.all(12),
+              width: 124,
+              height: 120,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
+          const SizedBox(width: 12),
           // İçerik Skeleton
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Kategori & Mağaza
-                  Row(
-                    children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Kategori & Mağaza
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
                     Shimmer.fromColors(
                       baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                       highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                       child: Container(
-                          width: 60,
-                          height: 10,
+                        width: 60,
+                        height: 10,
                         decoration: BoxDecoration(
-                            color: Colors.white,
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(4),
-                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                    ),
                     Shimmer.fromColors(
                       baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
                       highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
                       child: Container(
-                          width: 50,
-                          height: 10,
+                        width: 50,
+                        height: 10,
                         decoration: BoxDecoration(
-                            color: Colors.white,
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                      ),
-                    ],
-                    ),
-                  const SizedBox(height: 12),
-                  // Başlık
-                  Shimmer.fromColors(
-                    baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                    highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                    child: Container(
-                      width: double.infinity,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                        Shimmer.fromColors(
-                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          child: Container(
-                      width: 150,
-                      height: 14,
-                            decoration: BoxDecoration(
-                        color: Colors.white,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                  // Fiyat & Buton
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                        Shimmer.fromColors(
-                          baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                          highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                          child: Container(
-                          width: 80,
-                            height: 20,
-                            decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                      Shimmer.fromColors(
-                        baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
-                        highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
-                        child: Container(
-                          width: 70,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 6),
+                // Başlık
+                Shimmer.fromColors(
+                  baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                  highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                  child: Container(
+                    width: double.infinity,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Shimmer.fromColors(
+                  baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                  highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                  child: Container(
+                    width: 140,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Puan & Zaman/Yorum
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Shimmer.fromColors(
+                      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                      child: Container(
+                        width: 50,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    Shimmer.fromColors(
+                      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                      child: Container(
+                        width: 45,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Fiyat & Buton
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Shimmer.fromColors(
+                      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                      child: Container(
+                        width: 75,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    Shimmer.fromColors(
+                      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
+                      child: Container(
+                        width: 65,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),

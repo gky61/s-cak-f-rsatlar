@@ -2298,30 +2298,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             }
 
-            return ListView.separated(
+            return ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: deals.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final deal = deals[index];
-                return Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: DealCard(
-                    deal: deal,
-                    viewMode: CardViewMode.horizontal,
-                    onTap: () => _openDealDetail(context, deal),
-                  ),
+                return DealCard(
+                  deal: deal,
+                  viewMode: CardViewMode.horizontal,
+                  onTap: () => _openDealDetail(context, deal),
                 );
               },
             );

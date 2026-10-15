@@ -1399,13 +1399,10 @@ class _BotkolikProfileScreenState extends State<BotkolikProfileScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final deal = deals[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: DealCard(
-                    deal: deal,
-                    viewMode: CardViewMode.horizontal,
-                    onTap: () => _openDealDetail(context, deal),
-                  ),
+                return DealCard(
+                  deal: deal,
+                  viewMode: CardViewMode.horizontal,
+                  onTap: () => _openDealDetail(context, deal),
                 );
               },
               childCount: deals.length,

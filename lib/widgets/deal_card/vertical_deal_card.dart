@@ -33,49 +33,56 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
   
   Deal get deal => widget.deal;
 
-  Widget _buildPriceAndBadgeSection(bool isDark, bool isExpired) {
+  Widget _buildPriceSection(bool isDark, bool isExpired) {
     if (deal.hidePrice) return const SizedBox.shrink();
     final hasOriginalPrice = deal.originalPrice != null && deal.originalPrice! > deal.price;
 
-    return Padding(
-      padding: const EdgeInsets.only(right: 48), // Sağ alttaki termometre hapına asla çarpmaz ve taşma yapmaz
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            // Güncel İndirimli Fiyat
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          // Güncel İndirimli Fiyat
+          FormattedPriceText(
+            value: deal.price,
+            style: TextStyle(
+              fontSize: 15.0,
+              fontWeight: FontWeight.w900,
+              color: isExpired ? const Color(0xFFDC2626) : AppTheme.primary,
+              letterSpacing: -0.4,
+              height: 1.0,
+            ),
+          ),
+          if (hasOriginalPrice) ...[
+            const SizedBox(width: 4.5),
+            // İndirimsiz / Liste Fiyatı (Zarif üstü çizili gri ton)
             FormattedPriceText(
-              value: deal.price,
+              value: deal.originalPrice,
               style: TextStyle(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w900,
-                color: isExpired ? const Color(0xFFDC2626) : AppTheme.primary,
-                letterSpacing: -0.4,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+                color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                decoration: TextDecoration.lineThrough,
+                decorationColor: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
+                decorationThickness: 1.3,
                 height: 1.0,
               ),
             ),
-            if (hasOriginalPrice) ...[
-              const SizedBox(width: 4.5),
-              // İndirimsiz / Liste Fiyatı (Zarif üstü çizili gri ton)
-              FormattedPriceText(
-                value: deal.originalPrice,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                  decoration: TextDecoration.lineThrough,
-                  decorationColor: isDark ? const Color(0xFF71717A) : const Color(0xFF94A3B8),
-                  decorationThickness: 1.3,
-                  height: 1.0,
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomBar(bool isDark, bool isExpired) {
+    return SizedBox(
+      height: 24,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: _buildPriceSection(isDark, isExpired),
       ),
     );
   }
@@ -286,6 +293,19 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                             child: buildEditorChoiceStarBadge(isDark: isDark),
                           ),
 
+                        // ─── CANLI TERMOMETRE ROZETİ (Görsel Sağ Alt) ─────────────────
+                        if ((deal.hotVotes + deal.coldVotes) > 0)
+                          Positioned(
+                            bottom: 6,
+                            right: 6,
+                            child: DealCardThermometerPill(
+                              deal: deal,
+                              isDark: isDark,
+                              compact: true,
+                              onImage: true,
+                            ),
+                          ),
+
                         // Resim ile alt gövde arasındaki ince sınır
                         Positioned(
                           bottom: 0,
@@ -303,11 +323,8 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                   // ─── ALT İÇERİK GÖVDESİ (SİMETRİK VE CETVEL HİZALI) ────────
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(9, 5.5, 9, 5.5),
-                      child: Stack(
-                        children: [
-                          // 1. ÜST & ORTA İÇERİK (HİZALI AKIŞ)
-                          Column(
+                      padding: const EdgeInsets.fromLTRB(11, 8.5, 11, 8.5),
+                      child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // 1.1 Mağaza Logosu, Adı, Zaman ve Avatar
@@ -348,19 +365,19 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ],
                               ),
-                              const SizedBox(height: 3.0),
+                              const SizedBox(height: 7.0),
 
-                              // 1.2 Başlık (Sabit 29px Yükseklik - Cetvel Hizası)
+                              // 1.2 Başlık (Sabit 34px Yükseklik - Cetvel Hizası, nefes alan tipografi)
                               SizedBox(
-                                height: 29,
+                                height: 34,
                                 child: Text(
                                   deal.title,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 11.5,
+                                    fontSize: 12.0,
                                     fontWeight: FontWeight.w600,
-                                    height: 1.20,
+                                    height: 1.25,
                                     letterSpacing: -0.2,
                                     color: (isExpired || deal.expiredVotes >= 15)
                                         ? const Color(0xFFDC2626) 
@@ -372,11 +389,11 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 2.5),
+                              const SizedBox(height: 7.0),
 
-                              // 1.3 Puan, Sosyal Kanıt & Mağaza Rozetleri (Sabit 16px Yükseklik)
+                              // 1.3 Puan, Sosyal Kanıt & Mağaza Rozetleri (Sabit 18px Yükseklik)
                               SizedBox(
-                                height: 16,
+                                height: 18,
                                 child: Row(
                                   children: [
                                     Expanded(
@@ -464,25 +481,12 @@ class _VerticalDealCardState extends State<VerticalDealCard> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 3.5),
+                              const Spacer(),
 
-                              // 1.4 FİYAT (Puanın hemen altında, göz önünde ve cetvel hizasında!)
-                              _buildPriceAndBadgeSection(isDark, isExpired),
+                              // 1.4 FİYAT VE CANLI TERMOMETRE (Cetvel hizalı alt taban)
+                              _buildBottomBar(isDark, isExpired),
                             ],
                           ),
-
-                          // 2. SAĞ ALT KÖŞEDE CANLI TERMOMETRE KAPSÜLÜ (SABİT VE CETVEL HİZALI)
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: DealCardThermometerPill(
-                              deal: deal,
-                              isDark: isDark,
-                              compact: true,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ],
