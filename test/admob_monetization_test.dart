@@ -174,6 +174,10 @@ void main() {
           reason: 'AppDelegate.swift must register firsatkolik_native_ad_factory');
       expect(appDelegateCode.contains('mediaContainer.widthAnchor.constraint(equalToConstant: 120)'), isTrue,
           reason: 'Media container must strictly enforce 120x120pt to satisfy video validator');
+      expect(appDelegateCode.contains('nativeAdView.mediaView = mediaView'), isTrue,
+          reason: 'AppDelegate.swift must register mediaView with nativeAdView for video policy compliance');
+      expect(appDelegateCode.contains('let hasMedia = mediaContent.hasVideoContent'), isTrue,
+          reason: 'AppDelegate.swift must verify media assets to gracefully toggle between MediaView and iconImageView');
 
       final bridgingHeaderCode = File('ios/Runner/Runner-Bridging-Header.h').readAsStringSync();
       expect(bridgingHeaderCode.contains('FLTGoogleMobileAdsPlugin.h'), isTrue,
@@ -288,6 +292,33 @@ void main() {
       expect(infoPlist.contains('Size özel indirim ve fırsat bildirimleri'), isFalse,
           reason: 'Must not confuse notifications with tracking permission in ATT description');
       expect(infoPlist.contains('İlginizi çeken fırsat ve indirimleri size özel sunabilmek'), isTrue);
+    });
+
+    test('20. Faz 3.6: Android enterprise FirsatKolikNativeAdFactory & MediaView permanently eliminates validator issues', () {
+      final nativeWidgetCode = File('lib/widgets/ad_native_widget.dart').readAsStringSync();
+      expect(nativeWidgetCode.contains("'firsatkolik_native_ad_factory'"), isTrue,
+          reason: 'ad_native_widget must route both Android and iOS native ads to firsatkolik_native_ad_factory');
+
+      final mainActivityCode = File('android/app/src/main/kotlin/com/sicakfirsatlar/sicak_firsatlar/MainActivity.kt').readAsStringSync();
+      expect(mainActivityCode.contains('FirsatKolikNativeAdFactory'), isTrue,
+          reason: 'MainActivity.kt must register FirsatKolikNativeAdFactory');
+      expect(mainActivityCode.contains('firsatkolik_native_ad_factory'), isTrue);
+
+      final factoryFile = File('android/app/src/main/kotlin/com/sicakfirsatlar/sicak_firsatlar/FirsatKolikNativeAdFactory.kt');
+      expect(factoryFile.existsSync(), isTrue);
+      final factoryCode = factoryFile.readAsStringSync();
+      expect(factoryCode.contains('adView.mediaView = mediaView'), isTrue,
+          reason: 'FirsatKolikNativeAdFactory must explicitly register MediaView to satisfy Google Native Ad policy');
+
+      final layoutFile = File('android/app/src/main/res/layout/firsatkolik_native_ad.xml');
+      expect(layoutFile.existsSync(), isTrue);
+      final layoutCode = layoutFile.readAsStringSync();
+      expect(layoutCode.contains('com.google.android.gms.ads.nativead.MediaView'), isTrue,
+          reason: 'firsatkolik_native_ad.xml must define a MediaView for video and rich image creatives');
+
+      final proguardFile = File('android/app/proguard-rules.pro').readAsStringSync();
+      expect(proguardFile.contains('FirsatKolikNativeAdFactory'), isTrue,
+          reason: 'proguard-rules.pro must preserve FirsatKolikNativeAdFactory from R8 obfuscation');
     });
   });
 }

@@ -94,7 +94,8 @@ class AdManagerService extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      if (kDebugMode) {
+      final isDevEnvironment = kDebugMode || !DefaultFirebaseOptions.isProductionFlavor;
+      if (isDevEnvironment) {
         final configuration = RequestConfiguration(
           testDeviceIds: const <String>[
             '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Android Test Telefonu
@@ -102,7 +103,7 @@ class AdManagerService extends ChangeNotifier {
           ],
         );
         await MobileAds.instance.updateRequestConfiguration(configuration);
-        _log('✅ Test cihazları yapılandırıldı');
+        _log('✅ Test ortamı (Dev/Debug) test cihazları yapılandırıldı');
       }
 
       final initStatus = await MobileAds.instance.initialize();
@@ -604,6 +605,22 @@ class AdManagerService extends ChangeNotifier {
       _log('🔗 [FIRESTORE-SYNC] settings/admob canlı dinleyici başlatıldı');
     } catch (e) {
       _log('⚠️ [FIRESTORE-SYNC] Dinleyici başlatma hatası: $e');
+    }
+  }
+
+  /// Google Ad Inspector: Test ve QA ortamında cihaz üzerinde canlı reklam durumunu,
+  /// arabuluculuk (mediation) şelalesini ve bağdaştırıcı (adapter) durumlarını incelemeyi sağlar.
+  void openAdInspector() {
+    try {
+      MobileAds.instance.openAdInspector((error) {
+        if (error != null) {
+          _log('⚠️ Ad Inspector açılırken hata: [${error.code}] ${error.message}');
+        } else {
+          _log('🔍 Ad Inspector başarıyla açıldı');
+        }
+      });
+    } catch (e) {
+      _log('⚠️ Ad Inspector açılamadı: $e');
     }
   }
 

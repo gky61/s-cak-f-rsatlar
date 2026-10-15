@@ -9,6 +9,10 @@
 # Google Mobile Ads (AdMob)
 -keep class com.google.android.gms.ads.** { *; }
 -dontwarn com.google.android.gms.ads.**
+-keep class io.flutter.plugins.googlemobileads.** { *; }
+-keep public class com.sicakfirsatlar.sicak_firsatlar.FirsatKolikNativeAdFactory { *; }
+-keep public class * implements io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin$NativeAdFactory { *; }
 
 # Generic attributes to preserve signature information
 -keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses
+

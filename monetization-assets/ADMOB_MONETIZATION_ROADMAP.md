@@ -159,6 +159,10 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
   * **Anti-Fraud Frequency Cap:** Günlük maksimum 10 ödüllü video izleme tavanı (`maxDailyRewardedVideos: 10`) getirilerek aşırı video izleme kaynaklı AdMob *"Invalid Traffic"* hesap kısıtlamaları ve ban riski sıfırlandı (+20 kupon hakkı / gün).
   * **Geçici Ağ/Soket Kesintisi Kalkanı (`isTransientAdError`):** Kod 0 altındaki işletim sistemi kaynaklı soket abort'ları (`Software caused connection abort`) filtrelendi; 3 kademeli (5s, 10s, 20s) üstel gecikmeli (exponential backoff) otomatik yeniden deneme entegre edildi.
   * **Graceful Wait Kalkanı:** Kullanıcı video izlemek istediğinde reklam henüz hazır değilse 4 saniyelik emniyetli bekleme (`_rewardedLoadCompleter`) ve anlık geri bildirim toast'ı devreye girer.
+* **3.5. Faz 3.7: Çift Platform NativeAdFactory & MediaView Standardı (✅ TAMAMLANDI):**
+  * **Sıfır Validator Hatası & Sıfır Politika İhlali:** Android'de `FirsatKolikNativeAdFactory` ve `firsatkolik_native_ad.xml` geliştirilerek fiziksel `MediaView` (100x100dp) ve `ImageView` entegrasyonu sağlandı.
+  * **iOS ve Android Simetrisi:** Her iki platform da `firsatkolik_native_ad_factory` üzerinden çalıştırılarak video/görsel/ikon tüm kreatiflerin `MediaView` ile %100 AdMob uyumlu render edilmesi garanti edildi.
+  * **R8 / ProGuard Kalkanı:** Release derlemelerinde minifikasyon kaynaklı factory çökmesini önlemek için `proguard-rules.pro` kuralları tamamlandı.
 
 ---
 

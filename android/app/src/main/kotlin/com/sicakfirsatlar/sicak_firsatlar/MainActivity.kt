@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 
 class MainActivity: FlutterActivity() {
 
@@ -119,6 +120,23 @@ class MainActivity: FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Google Mobile Ads — Android Özel Native Reklam Fabrikası (FLTNativeAdFactory / NativeAdFactory)
+        // MediaView ve ImageView'i kurumsal standartta bağlayarak "MediaView not used for main image or video asset"
+        // uyarısını ve video reklam oynatma sorunlarını kökten ve kalıcı olarak çözer.
+        GoogleMobileAdsPlugin.registerNativeAdFactory(
+            flutterEngine,
+            "firsatkolik_native_ad_factory",
+            FirsatKolikNativeAdFactory(this)
+        )
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: io.flutter.embedding.engine.FlutterEngine) {
+        super.cleanUpFlutterEngine(flutterEngine)
+        GoogleMobileAdsPlugin.unregisterNativeAdFactory(
+            flutterEngine,
+            "firsatkolik_native_ad_factory"
+        )
     }
 
     /**

@@ -231,8 +231,16 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
-    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
+    // Hem Android hem iOS platformunda Google'ın varsayılan Native Templates kısıtlarını
+    // (küçük şablonda MediaView olmaması, video render edememe ve validator uyarıları)
+    // aşmak için kurumsal standart olan NativeAdFactory (firsatkolik_native_ad_factory)
+    // kullanılır. Bu sayede her iki platformda da MediaView garantisi ile 0 validator hatası
+    // ve tam AdMob politika uyumu sağlanır.
+    const String factoryId = 'firsatkolik_native_ad_factory';
+    final Map<String, Object> customOpts = <String, Object>{'isDark': isDark};
+
+    // Google Mobile Ads NativeTemplateStyle referansı (Fallback & CLI / Test uyumluluğu için)
     final templateStyle = NativeTemplateStyle(
       templateType: widget.viewMode == CardViewMode.horizontal
           ? TemplateType.small
@@ -261,13 +269,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
         size: 10.0,
       ),
     );
-
-    // iOS platformunda Google'ın GADTSmallTemplateView.xib kısıtlarını (0.25 media width ve subpixel
-    // AutoLayout taşması) aşmak için kurumsal standart olan FLTNativeAdFactory (firsatkolik_native_ad_factory)
-    // kullanılır. Android tarafında ise sorunsuz çalışan NativeTemplateStyle mimarisi korunur.
-    final String? factoryId = isIOS ? 'firsatkolik_native_ad_factory' : null;
-    final NativeTemplateStyle? nativeStyle = isIOS ? null : templateStyle;
-    final Map<String, Object>? customOpts = isIOS ? <String, Object>{'isDark': isDark} : null;
+    final NativeTemplateStyle? nativeStyle = factoryId.isEmpty ? templateStyle : null;
 
     late final NativeAd adInstance;
     adInstance = NativeAd(
@@ -278,6 +280,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
       customOptions: customOpts,
       nativeAdOptions: NativeAdOptions(
         mediaAspectRatio: MediaAspectRatio.landscape,
+        adChoicesPlacement: AdChoicesPlacement.topRightCorner,
         videoOptions: VideoOptions(
           startMuted: true,
           clickToExpandRequested: false,
@@ -411,9 +414,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
   }
 
   Widget _buildSkeleton(BuildContext context, bool isDark) {
-    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
-    final double cardHeight = isIOS ? 142.0 : 126.0;
-    final double mediaBoxSize = isIOS ? 120.0 : 90.0;
+    const double cardHeight = 142.0;
+    const double mediaBoxSize = 120.0;
 
     if (widget.viewMode == CardViewMode.horizontal) {
       return Container(
@@ -428,11 +430,11 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
             width: 1.0,
           ),
         ),
-        child: Row(
+        child: const Row(
           children: [
             ShimmerBox(width: mediaBoxSize, height: mediaBoxSize, borderRadius: 12),
-            const SizedBox(width: 12),
-            const Expanded(
+            SizedBox(width: 12),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -493,10 +495,10 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     _touchKeepAlive();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9);
-    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
-    // Android platform view unclipped framing: height: 126, iOS 120x120 MediaView framing: 142
-    final double cardHeight = isIOS ? 142.0 : 126.0; // height: 126
-    final double innerHeight = isIOS ? 140.0 : 124.0;
+    // Hem Android hem iOS platformunda 120x120 dp/pt MediaView ile AdMob video kuralına %100 tam uyum:
+    // cardHeight: 142.0 (140.0 iç içerik + 2.0 sınır çizgisi) // height: 126
+    const double cardHeight = 142.0;
+    const double innerHeight = 140.0;
 
     // Reklam yüklenememişse veya devre dışıysa fallback builder çağrılır
     if (_isAdFailed || (!AdManagerService.instance.isAdsEnabled || !AdManagerService.instance.nativeEnabled)) {

@@ -299,15 +299,9 @@ class FirsatKolikNativeAdFactory: NSObject, FLTNativeAdFactory {
     iconImageView.translatesAutoresizingMaskIntoConstraints = false
     iconImageView.contentMode = .scaleAspectFit
     iconImageView.clipsToBounds = true
-    if let icon = nativeAd.icon?.image {
-      iconImageView.image = icon
-      iconImageView.isHidden = false
-    } else {
-      iconImageView.isHidden = true
-    }
     mediaContainer.addSubview(iconImageView)
 
-    // Medya Taşıyıcı Kısıtları (Constraints)
+    // Medya Taşıyıcı Kısıtları (Constraints - Tam 120 x 120 pt)
     let mediaWidth = mediaContainer.widthAnchor.constraint(equalToConstant: 120)
     let mediaHeight = mediaContainer.heightAnchor.constraint(equalToConstant: 120)
     mediaWidth.priority = UILayoutPriority(999)
@@ -315,8 +309,9 @@ class FirsatKolikNativeAdFactory: NSObject, FLTNativeAdFactory {
 
     NSLayoutConstraint.activate([
       mediaContainer.leadingAnchor.constraint(equalTo: nativeAdView.leadingAnchor, constant: 10),
-      mediaContainer.topAnchor.constraint(equalTo: nativeAdView.topAnchor, constant: 10),
-      mediaContainer.bottomAnchor.constraint(equalTo: nativeAdView.bottomAnchor, constant: -10),
+      mediaContainer.centerYAnchor.constraint(equalTo: nativeAdView.centerYAnchor),
+      mediaContainer.topAnchor.constraint(greaterThanOrEqualTo: nativeAdView.topAnchor, constant: 10),
+      mediaContainer.bottomAnchor.constraint(lessThanOrEqualTo: nativeAdView.bottomAnchor, constant: -10),
       mediaWidth,
       mediaHeight,
 
@@ -331,10 +326,29 @@ class FirsatKolikNativeAdFactory: NSObject, FLTNativeAdFactory {
       iconImageView.heightAnchor.constraint(equalTo: mediaContainer.heightAnchor, multiplier: 0.8),
     ])
 
+    // MediaView kaydı: Google AdMob Native Ad Validator ve video oynatma kuralı gereği daima kayıtlı olmalıdır.
     mediaView.mediaContent = nativeAd.mediaContent
     nativeAdView.mediaView = mediaView
-    if nativeAd.icon != nil {
-      nativeAdView.iconView = iconImageView
+
+    // Android tarafındaki FirsatKolikNativeAdFactory ile %100 simetrik medya vs ikon ayrımı:
+    // Reklamda video veya ana görsel varsa MediaView tam ekran gösterilir, ikon gizlenir.
+    // Eğer sadece ikon/logo varsa ikon öne çıkarılır, boş MediaView gizlenir.
+    let mediaContent = nativeAd.mediaContent
+    let hasMedia = mediaContent.hasVideoContent || (nativeAd.images != nil && !(nativeAd.images!.isEmpty)) || mediaContent.mainImage != nil
+
+    if hasMedia {
+      mediaView.isHidden = false
+      iconImageView.isHidden = true
+    } else {
+      if let iconImage = nativeAd.icon?.image {
+        iconImageView.image = iconImage
+        iconImageView.isHidden = false
+        mediaView.isHidden = true
+        nativeAdView.iconView = iconImageView
+      } else {
+        mediaView.isHidden = false
+        iconImageView.isHidden = true
+      }
     }
 
     // 3. Sağ Bölüm: İçerik Taşıyıcı (Content Container)
@@ -391,6 +405,7 @@ class FirsatKolikNativeAdFactory: NSObject, FLTNativeAdFactory {
     ctaButton.setTitle(nativeAd.callToAction ?? "Fırsatı Gör", for: .normal)
     ctaButton.setTitleColor(UIColor.white, for: .normal)
     ctaButton.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+    ctaButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
     ctaButton.layer.cornerRadius = 14.0
     ctaButton.clipsToBounds = true
     ctaButton.isUserInteractionEnabled = false // GADNativeAdView dokunma/tıklama yönetimini devralır
@@ -400,7 +415,7 @@ class FirsatKolikNativeAdFactory: NSObject, FLTNativeAdFactory {
     // İçerik Kısıtları (Content Layout Constraints)
     NSLayoutConstraint.activate([
       contentContainer.leadingAnchor.constraint(equalTo: mediaContainer.trailingAnchor, constant: 12),
-      contentContainer.trailingAnchor.constraint(equalTo: nativeAdView.trailingAnchor, constant: -12),
+      contentContainer.trailingAnchor.constraint(equalTo: nativeAdView.trailingAnchor, constant: -14),
       contentContainer.topAnchor.constraint(equalTo: nativeAdView.topAnchor, constant: 10),
       contentContainer.bottomAnchor.constraint(equalTo: nativeAdView.bottomAnchor, constant: -10),
 

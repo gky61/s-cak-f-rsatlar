@@ -105,6 +105,9 @@
 		<!-- Google Mobile Ads (AdMob) iOS Application ID -->
 		<key>GADApplicationIdentifier</key>
 		<string>ca-app-pub-6853997017739651~7339420575</string>
+		<!-- Google AdMob Native Ad Validator (Test ortamında yerleşim denetimi için aktif, Prod ortamında Google SDK otomatik kapatır) -->
+		<key>GADNativeAdValidatorEnabled</key>
+		<true/>
 		<!-- AdMob SKAdNetwork Identifier Listesi -->
 		<key>SKAdNetworkItems</key>
 		<array>
