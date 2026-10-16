@@ -203,7 +203,7 @@ class UserService {
         .collection('users')
         .doc(userId)
         .collection('favorites')
-        .limit(100)
+        .limit(200)
         .snapshots()
         .map((snapshot) {
       final now = DateTime.now();

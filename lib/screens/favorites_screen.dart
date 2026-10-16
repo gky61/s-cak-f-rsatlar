@@ -19,6 +19,7 @@ import '../services/deal_sync_service.dart';
 import '../services/ad_manager_service.dart';
 import '../widgets/ad_deal_card.dart';
 import '../widgets/app_snack_bar.dart';
+import '../widgets/floating_refresh_pill.dart';
 
 class FavoritesScreen extends StatefulWidget {
   final bool isRootTab;
@@ -29,13 +30,29 @@ class FavoritesScreen extends StatefulWidget {
   });
 
   @override
-  State<FavoritesScreen> createState() => _FavoritesScreenState();
+  State<FavoritesScreen> createState() => FavoritesScreenState();
 }
 
-class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProviderStateMixin {
+class FavoritesScreenState extends State<FavoritesScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  /// Alt navigasyon çubuğundan veya harici tetikleyiciden aktif sekmeyi tepeye fırlatma
+  void scrollToTop() {
+    final controller = _tabController.index == 0
+        ? _myFavoritesScrollController
+        : _followedCategoriesScrollController;
+    if (controller.hasClients) {
+      controller.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
   final FirestoreService _firestoreService = FirestoreService();
   final ThemeService _themeService = ThemeService();
   late TabController _tabController;
+  bool _hasNewFollowedDealsPill = false;
+  DateTime? _lastFollowedFetchTime;
 
   // Cached streams to prevent re-listening/recreating on rebuilds
   Stream<List<Deal>>? _myFavoritesStream;
@@ -68,6 +85,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
     _myFavoritesScrollController = ScrollController();
     _followedCategoriesScrollController = ScrollController();
@@ -138,8 +156,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         if (_followedCategoriesScrollController.hasClients) {
           offset = _followedCategoriesScrollController.offset;
         }
-        if (_followedDealsList.isEmpty && !_isLoadingFollowed) {
-          _loadFollowedFirstPage();
+        final lastFetch = _lastFollowedFetchTime;
+        final isStale = lastFetch != null &&
+            DateTime.now().difference(lastFetch) > const Duration(minutes: 30);
+        if ((_followedDealsList.isEmpty || isStale) && !_isLoadingFollowed) {
+          _loadFollowedFirstPage(isRefresh: isStale);
         }
       }
 
@@ -206,6 +227,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
               _isLoadingFollowed = false;
               _isFirstLoadFollowed = false;
               _followedErrorMessage = null;
+              _hasNewFollowedDealsPill = false;
+              _lastFollowedFetchTime = DateTime.now();
             });
           } else {
             if (_followedDealsList.isEmpty) {
@@ -245,6 +268,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
             _isLoadingFollowed = false;
             _isFirstLoadFollowed = false;
             _followedErrorMessage = null;
+            _hasNewFollowedDealsPill = false;
+            _lastFollowedFetchTime = DateTime.now();
           });
         }
       } catch (e) {
@@ -290,6 +315,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                   _isLoadingFollowed = false;
                   _isFirstLoadFollowed = false;
                   _followedErrorMessage = null;
+                  _lastFollowedFetchTime = DateTime.now();
                 });
               }
             }
@@ -318,9 +344,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
         });
       }
     } finally {
-      if (mounted) {
-        _isRefreshingFollowed = false;
-      }
+      _isRefreshingFollowed = false;
     }
   }
 
@@ -340,11 +364,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           _hasMoreFollowed = res.hasMore;
           _isLoadingFollowed = false;
           _isFirstLoadFollowed = false;
+          _hasNewFollowedDealsPill = false;
+          _lastFollowedFetchTime = DateTime.now();
         });
       } else {
-        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, pagination lastDoc'u ve hasMore'u koru
-        _lastFollowedDocument = res.lastDocument ?? _lastFollowedDocument;
-        _hasMoreFollowed = res.hasMore;
+        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, floating pill ile kullanıcı iradesine sun
+        setState(() {
+          _lastFollowedDocument = res.lastDocument ?? _lastFollowedDocument;
+          _hasMoreFollowed = res.hasMore;
+          _hasNewFollowedDealsPill = true;
+          _lastFollowedFetchTime = DateTime.now();
+        });
       }
     }).catchError((_) {
       // Sessizce yoksay; yerel önbellek zaten ekranda
@@ -376,7 +406,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           setState(() {
             _followedDealsList.addAll(newDeals);
             _lastFollowedDocument = result.lastDocument;
-            _hasMoreFollowed = result.hasMore && newDeals.isNotEmpty;
+            _hasMoreFollowed = result.hasMore && result.lastDocument != null;
             _isLoadingFollowed = false;
           });
         } else {
@@ -396,6 +426,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dealSyncSubscription?.cancel();
     _authSub?.cancel();
     _themeService.removeListener(_onThemeChanged);
@@ -406,6 +437,26 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
     _followedCategoriesScrollController.removeListener(_scrollListener);
     _followedCategoriesScrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _tabController.index == 1) {
+      final lastFetch = _lastFollowedFetchTime;
+      // 30 dakikadan uzun süre arka planda kalındıysa
+      if (lastFetch != null && DateTime.now().difference(lastFetch) > const Duration(minutes: 30)) {
+        if (!mounted) return;
+        final isAtTop = !_followedCategoriesScrollController.hasClients ||
+            _followedCategoriesScrollController.offset <= 120;
+        if (isAtTop) {
+          _loadFollowedFirstPage(isRefresh: true);
+        } else {
+          setState(() {
+            _hasNewFollowedDealsPill = true;
+          });
+        }
+      }
+    }
   }
 
   /// FS-18 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
@@ -1548,7 +1599,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
       );
     }
 
-    if (_isFirstLoadFollowed && _isLoadingFollowed && _followedDealsList.isEmpty) {
+    if ((_isFirstLoadFollowed || _isLoadingFollowed) && _followedDealsList.isEmpty) {
       return _buildLoadingGrid(isDark);
     }
 
@@ -1672,7 +1723,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                               builder: (_) => const CategoryPreferencesScreen(),
                             ),
                           ).then((_) {
-                            _loadFollowedFirstPage();
+                            _loadFollowedFirstPage(isRefresh: true);
                           });
                         },
                         icon: const Icon(Icons.tune_rounded, size: 18),
@@ -1735,7 +1786,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
                         builder: (_) => const CategoryPreferencesScreen(),
                       ),
                     ).then((_) {
-                      _loadFollowedFirstPage();
+                      _loadFollowedFirstPage(isRefresh: true);
                     });
                   },
                   borderRadius: BorderRadius.circular(10),
@@ -1786,7 +1837,35 @@ class _FavoritesScreenState extends State<FavoritesScreen> with SingleTickerProv
           duration: const Duration(milliseconds: 200),
         ),
         Expanded(
-          child: _buildFollowedCategoriesDealGrid(deals, isDark, _followedCategoriesScrollController),
+          child: Stack(
+            children: [
+              _buildFollowedCategoriesDealGrid(deals, isDark, _followedCategoriesScrollController),
+              Positioned(
+                top: 10,
+                left: 0,
+                right: 0,
+                child: FloatingRefreshPill(
+                  isVisible: _hasNewFollowedDealsPill,
+                  text: '🏷️ Yeni Kategori Fırsatları Var 👆',
+                  icon: Icons.category_rounded,
+                  primaryColor: AppTheme.primary,
+                  onTap: () {
+                    if (_followedCategoriesScrollController.hasClients) {
+                      _followedCategoriesScrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutCubic,
+                      );
+                    }
+                    setState(() {
+                      _hasNewFollowedDealsPill = false;
+                    });
+                    _loadFollowedFirstPage(isRefresh: true);
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

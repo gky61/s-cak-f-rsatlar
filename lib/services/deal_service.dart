@@ -217,18 +217,24 @@ class DealService {
 
   // FS-18: Popüler Fırsatlar Sayfalı ve SWR Destekli Getirme
   // 200 dokümanlık açık WebSocket .snapshots() akışını tasfiye eder.
+  // FS-01: category parametresi ile sunucu seviyesinde filtreleme ve Auto-Backfill kalkanı
   Future<DealsPageResult> getPopularDealsPaginated({
     int limit = 40,
     DocumentSnapshot? lastDocument,
     int minHotVotes = 3,
+    String? category,
     Source source = Source.serverAndCache,
   }) async {
     try {
       Query query = _firestore
           .collection('deals')
-          .where('isApproved', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .limit(limit);
+          .where('isApproved', isEqualTo: true);
+
+      if (category != null && category != 'tumu') {
+        query = query.where('category', isEqualTo: category);
+      }
+
+      query = query.orderBy('createdAt', descending: true).limit(limit);
 
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
@@ -256,12 +262,54 @@ class DealService {
         parsedDeals.add(deal);
       }
 
+      bool hasMore = snapshot.docs.length >= limit;
+
+      // FS-01 Auto-Backfill Kalkanı: İlk sayfa yüklemesinde niş kategorilerde veya
+      // az sayıda popüler fırsat çıktığında (< 5) ve veritabanında daha fazla doküman varsa
+      // kullanıcıya boş/yarım ekran göstermemek için 1 defalık sonraki sayfayı arka planda çek
+      if (lastDocument == null && parsedDeals.length < 5 && hasMore && newLastDoc != null) {
+        try {
+          Query backfillQuery = _firestore
+              .collection('deals')
+              .where('isApproved', isEqualTo: true);
+
+          if (category != null && category != 'tumu') {
+            backfillQuery = backfillQuery.where('category', isEqualTo: category);
+          }
+
+          backfillQuery = backfillQuery
+              .orderBy('createdAt', descending: true)
+              .limit(limit)
+              .startAfterDocument(newLastDoc);
+
+          final backfillSnapshot = await backfillQuery.get(GetOptions(source: source));
+          if (backfillSnapshot.docs.isNotEmpty) {
+            newLastDoc = backfillSnapshot.docs.last;
+            hasMore = backfillSnapshot.docs.length >= limit;
+
+            for (final doc in backfillSnapshot.docs) {
+              final deal = _safeParseDeal(doc);
+              if (deal == null) continue;
+              if (deal.isTest == true) continue;
+              if (deal.isArchived) continue;
+              if (deal.hotVotes < minHotVotes) continue;
+              if (deal.netScore <= 0) continue;
+              if (deal.createdAt.isBefore(cutoffTime)) continue;
+              if (!parsedDeals.any((d) => d.id == deal.id)) {
+                parsedDeals.add(deal);
+              }
+            }
+          }
+        } catch (_) {
+          // Backfill başarısız olursa mevcut ilk sayfa sonucuyla devam et
+        }
+      }
+
       // Popülerlik skoruna göre sırala (Wilson Score + Zaman Çürümesi)
       if (lastDocument == null) {
         parsedDeals.sort((a, b) => b.popularityScore.compareTo(a.popularityScore));
       }
 
-      final bool hasMore = snapshot.docs.length >= limit;
       final bool isFromCache = snapshot.metadata.isFromCache;
 
       return DealsPageResult(
@@ -286,6 +334,7 @@ class DealService {
   }
 
   // FS-18: Favori Kategorilerim Sayfalı ve SWR Destekli Getirme
+  // FS-02: Hedefli Firestore whereIn kalkanı ve Auto-Backfill desteği
   Future<DealsPageResult> getFollowedCategoriesDealsPaginated({
     required String userId,
     int limit = 40,
@@ -324,12 +373,27 @@ class DealService {
         );
       }
 
+      // Ebeveyn kategorileri topla
+      final Set<String> parentCategoryKeys = Set.from(followedCategoryKeys);
+      for (final subKey in followedSubCategoryKeys) {
+        final parent = subKey.split(':').first;
+        if (parent.isNotEmpty) {
+          parentCategoryKeys.add(parent);
+        }
+      }
+
       // 2. Fırsatları sayfalı çek
       Query query = _firestore
           .collection('deals')
-          .where('isApproved', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .limit(limit);
+          .where('isApproved', isEqualTo: true);
+
+      // FS-02 Hedefli Firestore Kalkanı: Eğer takip edilen ana kategori sayısı <= 10 ise
+      // doğrudan Firestore whereIn filtresi ile yalnızca ilgilenilen kategorileri çek
+      if (parentCategoryKeys.isNotEmpty && parentCategoryKeys.length <= 10) {
+        query = query.where('category', whereIn: parentCategoryKeys.toList());
+      }
+
+      query = query.orderBy('createdAt', descending: true).limit(limit);
 
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
@@ -364,11 +428,59 @@ class DealService {
         }
       }
 
+      bool hasMore = snapshot.docs.length >= limit;
+
+      // FS-02 Auto-Backfill Kalkanı: İlk sayfada eşleşen fırsat < 6 ise ve Firestore'da daha fazla doküman varsa
+      // niş kategori takipçilerine boş/yarım akış göstermemek için 1 defalık sonraki sayfayı çek
+      if (lastDocument == null && parsedDeals.length < 6 && hasMore && newLastDoc != null) {
+        try {
+          Query backfillQuery = _firestore
+              .collection('deals')
+              .where('isApproved', isEqualTo: true);
+
+          if (parentCategoryKeys.isNotEmpty && parentCategoryKeys.length <= 10) {
+            backfillQuery = backfillQuery.where('category', whereIn: parentCategoryKeys.toList());
+          }
+
+          backfillQuery = backfillQuery
+              .orderBy('createdAt', descending: true)
+              .limit(limit)
+              .startAfterDocument(newLastDoc);
+
+          final backfillSnapshot = await backfillQuery.get(GetOptions(source: source));
+          if (backfillSnapshot.docs.isNotEmpty) {
+            newLastDoc = backfillSnapshot.docs.last;
+            hasMore = backfillSnapshot.docs.length >= limit;
+
+            for (final doc in backfillSnapshot.docs) {
+              final deal = _safeParseDeal(doc);
+              if (deal == null) continue;
+              if (deal.isTest == true) continue;
+              if (deal.createdAt.isBefore(cutoffTime)) continue;
+
+              final catLower = deal.category.toLowerCase();
+              bool matches = followedCategoryKeys.contains(catLower);
+              if (!matches && deal.subCategory != null && deal.subCategory!.isNotEmpty) {
+                final subKey = '$catLower:${deal.subCategory!.toLowerCase()}';
+                matches = followedSubCategoryKeys.contains(subKey);
+              }
+
+              if (matches) {
+                if (!parsedDeals.any((d) => d.id == deal.id)) {
+                  parsedDeals.add(deal);
+                }
+              }
+            }
+          }
+        } catch (_) {
+          // Backfill sessiz hata koruması
+        }
+      }
+
       if (lastDocument == null) {
         parsedDeals.sort((a, b) => b.homeFeedScore.compareTo(a.homeFeedScore));
       }
 
-      final bool hasMore = snapshot.docs.length >= limit;
       final bool isFromCache = snapshot.metadata.isFromCache;
 
       return DealsPageResult(

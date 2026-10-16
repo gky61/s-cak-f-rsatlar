@@ -279,12 +279,14 @@ class FirestoreService {
     int limit = 40,
     DocumentSnapshot? lastDocument,
     int minHotVotes = 3,
+    String? category,
     Source source = Source.serverAndCache,
   }) =>
       _dealService.getPopularDealsPaginated(
         limit: limit,
         lastDocument: lastDocument,
         minHotVotes: minHotVotes,
+        category: category,
         source: source,
       );
 

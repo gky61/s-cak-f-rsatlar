@@ -44,6 +44,7 @@ import '../widgets/deal_restriction_bottom_sheet.dart';
 import '../widgets/app_snack_bar.dart';
 import '../services/in_app_tutorial_service.dart';
 import '../widgets/in_app_tutorial/tutorial_spotlight_overlay.dart';
+import '../widgets/floating_refresh_pill.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -93,13 +94,14 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static _HomeScreenState? _activeState;
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
   final ThemeService _themeService = ThemeService();
   final InAppTutorialService _tutorialService = InAppTutorialService();
+  DateTime? _lastDealsFetchTime;
 
   // İnteraktif Tur (Tutorial) için yerel hedef GlobalKey'ler (Her HomeScreen örneği için izole)
   final GlobalKey _searchBarKey = GlobalKey();
@@ -134,9 +136,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showScrollToTop = false;
   late CardViewMode _viewMode;
   
-  // Çift tıklama için timer
+  // Çift tıklama ve sekme denetimi için timer & GlobalKey'ler
   DateTime? _lastHomeButtonTap;
+  DateTime? _lastPopularButtonTap;
   static const _doubleTapTimeLimit = Duration(milliseconds: 400);
+  final GlobalKey<PopularDealsScreenState> _popularScreenKey = GlobalKey<PopularDealsScreenState>();
+  final GlobalKey<FavoritesScreenState> _favoritesScreenKey = GlobalKey<FavoritesScreenState>();
   
   // FS-09: SWR + Cache-First Sayfalama & Floating Pill State
   List<Deal> _dealsList = [];
@@ -169,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _activeState = this;
     _currentTabIndex = widget.initialTabIndex;
     _startInitialLoadingTimeout();
@@ -298,6 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (_activeState == this) {
       _activeState = null;
     }
@@ -317,6 +324,26 @@ class _HomeScreenState extends State<HomeScreen> {
     _userSearchDebounceTimer?.cancel();
     _dealSearchDebounceTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final lastFetch = _lastDealsFetchTime;
+      // 30 dakikadan uzun süre arka planda kalındıysa
+      if (lastFetch != null && DateTime.now().difference(lastFetch) > const Duration(minutes: 30)) {
+        if (!mounted) return;
+        final isAtTop = !_scrollController.hasClients || _scrollController.offset <= 120;
+        if (isAtTop) {
+          _fetchInitialDeals(isRefresh: true);
+        } else {
+          setState(() {
+            _hasNewDealsPill = true;
+            _newDealsCount = 1;
+          });
+        }
+      }
+    }
   }
 
   /// FS-09 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
@@ -631,7 +658,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _dealsList.addAll(newDeals);
             _lastDealDocument = result.lastDocument;
-            _hasMore = result.hasMore && newDeals.isNotEmpty;
+            _hasMore = result.hasMore && result.lastDocument != null;
             _isLoadingMore = false;
           });
         } else {
@@ -694,6 +721,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _dealsError = null;
               _hasNewDealsPill = false;
               _newDealsCount = 0;
+              _lastDealsFetchTime = DateTime.now();
             });
             _initialLoadingTimeoutTimer?.cancel();
           } else {
@@ -736,6 +764,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _dealsError = null;
               _hasNewDealsPill = false;
               _newDealsCount = 0;
+              _lastDealsFetchTime = DateTime.now();
             });
             _initialLoadingTimeoutTimer?.cancel();
           }
@@ -792,6 +821,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _isLoadingDeals = false;
                   _hasServerData = true;
                   _dealsError = null;
+                  _lastDealsFetchTime = DateTime.now();
                 });
                 _initialLoadingTimeoutTimer?.cancel();
               }
@@ -824,9 +854,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } finally {
-      if (isRefresh) {
-        _isRefreshingDeals = false;
-      }
+      _isRefreshingDeals = false;
     }
   }
 
@@ -855,6 +883,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoadingDeals = false;
           _hasServerData = true;
           _dealsError = null;
+          _lastDealsFetchTime = DateTime.now();
         });
       } else {
         // Kullanıcı aşağı kaydırıp bir fırsatı inceliyorsa kartları zıplatma;
@@ -960,77 +989,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // FS-09: "Yeni Fırsatlar Var" Yüzen Cam Efektli (Glassmorphic) Hap Butonu
   Widget _buildNewDealsFloatingPill(bool isDark, Color primaryColor) {
-    return AnimatedSlide(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOutBack,
-      offset: _hasNewDealsPill ? Offset.zero : const Offset(0, -1.2),
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 250),
-        opacity: _hasNewDealsPill ? 1.0 : 0.0,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () async {
-              HapticFeedback.lightImpact();
-              setState(() {
-                _hasNewDealsPill = false;
-                _newDealsCount = 0;
-              });
-              if (_scrollController.hasClients) {
-                _scrollController.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeOutCubic,
-                );
-              }
-              await _fetchInitialDeals(isRefresh: true);
-            },
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    primaryColor,
-                    const Color(0xFFFF6A00),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: primaryColor.withValues(alpha: 0.4),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    _newDealsCount > 1
-                        ? '✨ $_newDealsCount Yeni Fırsat Var 👆'
-                        : '✨ Yeni Fırsat Var 👆',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    return FloatingRefreshPill(
+      isVisible: _hasNewDealsPill,
+      text: _newDealsCount > 1
+          ? '✨ $_newDealsCount Yeni Fırsat Var 👆'
+          : '✨ Yeni Fırsat Var 👆',
+      primaryColor: primaryColor,
+      onTap: () async {
+        setState(() {
+          _hasNewDealsPill = false;
+          _newDealsCount = 0;
+        });
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+          );
+        }
+        await _fetchInitialDeals(isRefresh: true);
+      },
     );
   }
 
@@ -2065,12 +2043,7 @@ class _HomeScreenState extends State<HomeScreen> {
             top: 12,
             left: 0,
             right: 0,
-            child: IgnorePointer(
-              ignoring: !_hasNewDealsPill,
-              child: Center(
-                child: _buildNewDealsFloatingPill(isDark, primaryColor),
-              ),
-            ),
+            child: _buildNewDealsFloatingPill(isDark, primaryColor),
           ),
         ],
       ),
@@ -2663,8 +2636,8 @@ class _HomeScreenState extends State<HomeScreen> {
           index: _currentTabIndex,
           children: [
             _buildHomeScreenTab(isDark, primaryColor),
-            const PopularDealsScreen(isRootTab: true),
-            const FavoritesScreen(isRootTab: true),
+            PopularDealsScreen(key: _popularScreenKey, isRootTab: true),
+            FavoritesScreen(key: _favoritesScreenKey, isRootTab: true),
             ProfileScreen(
               key: ValueKey('profile_tab_${_authService.currentUser?.uid ?? "guest"}'),
               isRootTab: true,
@@ -2723,7 +2696,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                 ),
-                // 2. Popüler Fırsatlar (Index 1)
+                // 2. Popüler Fırsatlar (Index 1) - Tek tıklamada tepeye fırlatma, çift tıklamada 'tumu' kategorisine sıfırlama
                 _buildBottomNavItem(
                   targetKey: _bottomNavPopularKey,
                   icon: Icons.whatshot_outlined,
@@ -2732,7 +2705,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   isSelected: _currentTabIndex == 1,
                   onTap: () {
                     AnalyticsService.instance.logScreenView(screenName: 'PopularDealsScreen');
-                    setState(() => _currentTabIndex = 1);
+                    if (_currentTabIndex != 1) {
+                      setState(() => _currentTabIndex = 1);
+                      return;
+                    }
+                    final now = DateTime.now();
+                    final popState = _popularScreenKey.currentState;
+                    if (_lastPopularButtonTap != null &&
+                        now.difference(_lastPopularButtonTap!) < _doubleTapTimeLimit) {
+                      popState?.resetToAllCategories();
+                      _lastPopularButtonTap = null;
+                    } else {
+                      popState?.scrollToTop();
+                      _lastPopularButtonTap = now;
+                    }
                   },
                 ),
                 // 3. Özel Dairesel Orta Buton (Aksiyon: Fırsat Paylaş - Odak Formu)
@@ -2740,7 +2726,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   targetKey: _bottomNavAddKey,
                   onTap: _handleCenterActionTap,
                 ),
-                // 4. Kaydedilenler (Index 2)
+                // 4. Kaydedilenler (Index 2) - Tek tıklamada tepeye fırlatma
                 _buildBottomNavItem(
                   targetKey: _bottomNavSavedKey,
                   icon: Icons.bookmark_outline_rounded,
@@ -2749,7 +2735,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   isSelected: _currentTabIndex == 2,
                   onTap: () {
                     AnalyticsService.instance.logScreenView(screenName: 'FavoritesScreen');
-                    setState(() => _currentTabIndex = 2);
+                    if (_currentTabIndex != 2) {
+                      setState(() => _currentTabIndex = 2);
+                      return;
+                    }
+                    _favoritesScreenKey.currentState?.scrollToTop();
                   },
                 ),
                 // 5. Profil (Index 3)

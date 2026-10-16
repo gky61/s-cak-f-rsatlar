@@ -16,6 +16,8 @@ import '../services/ad_manager_service.dart';
 import '../services/deal_sync_service.dart';
 import 'deal_detail_screen.dart';
 
+import '../widgets/floating_refresh_pill.dart';
+
 class PopularDealsScreen extends StatefulWidget {
   final bool isRootTab;
 
@@ -25,10 +27,46 @@ class PopularDealsScreen extends StatefulWidget {
   });
 
   @override
-  State<PopularDealsScreen> createState() => _PopularDealsScreenState();
+  State<PopularDealsScreen> createState() => PopularDealsScreenState();
 }
 
-class _PopularDealsScreenState extends State<PopularDealsScreen> {
+class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBindingObserver {
+  /// Alt navigasyon çubuğundan veya harici tetikleyiciden tepeye fırlatma
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  /// Alt navigasyon çubuğu çift tıklama (Double-Tap to Reset) kalkanı:
+  /// Kategoriyi 'tumu' seçeneğine sıfırlar, çipleri başa sarar ve tepeye fırlar.
+  void resetToAllCategories() {
+    scrollToTop();
+    if (_selectedCategory != 'tumu') {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _selectedCategory = 'tumu';
+        _dealsList = [];
+        _lastDocument = null;
+        _hasMore = true;
+        _isLoading = true;
+        _errorMessage = null;
+        _hasNewDealsPill = false;
+      });
+      _loadFirstPage(category: 'tumu');
+      if (_categoryScrollController.hasClients) {
+        _categoryScrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+  }
   final FirestoreService _firestoreService = FirestoreService();
   final ThemeService _themeService = ThemeService();
   late CardViewMode _viewMode;
@@ -45,6 +83,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   bool _hasMore = true;
   String? _errorMessage;
   bool _isRefreshing = false;
+  bool _hasNewDealsPill = false;
+  DateTime? _lastPopularFetchTime;
   StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
   Future<DealsPageResult>? _activeServerFuture;
   static const Duration _serverTimeout = Duration(milliseconds: 1400);
@@ -52,6 +92,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _viewMode = _themeService.viewMode;
     _themeService.addListener(_onThemeChanged);
     _scrollController = ScrollController()..addListener(_scrollListener);
@@ -61,12 +102,33 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dealSyncSubscription?.cancel();
     _themeService.removeListener(_onThemeChanged);
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _categoryScrollController.dispose();
     super.dispose();
+  }
+
+  /// FS-04 Kalkanı: Uygulama arka plandan ön plana geldiğinde (Hot-Start/Resume)
+  /// Son veri çekilme süresi > 30 dakika ise akışı güvenle günceller veya kullanıcıya bildirir
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      if (_lastPopularFetchTime != null &&
+          now.difference(_lastPopularFetchTime!) > const Duration(minutes: 30)) {
+        final isAtTop = !_scrollController.hasClients || _scrollController.offset <= 120;
+        if (isAtTop) {
+          _loadFirstPage(isRefresh: true);
+        } else {
+          setState(() {
+            _hasNewDealsPill = true;
+          });
+        }
+      }
+    }
   }
 
   /// FS-18 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
@@ -105,15 +167,17 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   /// 1400ms içinde sunucu dönerse 0 jank, 0 eski veri sıçraması ile en popüler fırsatları gösterir.
   /// Ağ yavaşsa veya kesildiyse anında yerel SQLite cache kalkanına döner (Resilient Cache Fallback).
   /// Arka planda tamamlanan sunucu isteği kullanıcı scroll pozisyonuna saygı duyarak listeyi günceller.
-  Future<void> _loadFirstPage({bool isRefresh = false}) async {
+  Future<void> _loadFirstPage({bool isRefresh = false, String? category}) async {
     if (!mounted) return;
     if (isRefresh) {
       if (_isRefreshing) return;
       _isRefreshing = true;
     } else {
-      if (_activeServerFuture != null) return;
+      if (category == null && _activeServerFuture != null) return;
       if (_isLoading && _dealsList.isNotEmpty) return;
     }
+
+    final requestedCategory = category ?? _selectedCategory;
 
     setState(() {
       _isLoading = true;
@@ -125,10 +189,11 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       if (isRefresh) {
         final serverResult = await _firestoreService.getPopularDealsPaginated(
           limit: 45,
+          category: requestedCategory == 'tumu' ? null : requestedCategory,
           source: Source.server,
         );
 
-        if (mounted) {
+        if (mounted && _selectedCategory == requestedCategory) {
           if (!serverResult.isError) {
             setState(() {
               _dealsList = serverResult.deals;
@@ -137,6 +202,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
               _isLoading = false;
               _isFirstLoad = false;
               _errorMessage = null;
+              _hasNewDealsPill = false;
+              _lastPopularFetchTime = DateTime.now();
             });
           } else {
             if (_dealsList.isEmpty) {
@@ -154,6 +221,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       // 2. İlk Yükleme: Server-First (Single-Flight Future)
       final serverFuture = _firestoreService.getPopularDealsPaginated(
         limit: 45,
+        category: requestedCategory == 'tumu' ? null : requestedCategory,
         source: Source.server,
       );
       _activeServerFuture = serverFuture;
@@ -166,7 +234,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       bool serverLoaded = false;
       try {
         final serverResult = await serverFuture.timeout(_serverTimeout);
-        if (mounted && !serverResult.isError) {
+        if (mounted && _selectedCategory == requestedCategory && !serverResult.isError) {
           serverLoaded = true;
           setState(() {
             _dealsList = serverResult.deals;
@@ -175,6 +243,8 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
             _isLoading = false;
             _isFirstLoad = false;
             _errorMessage = null;
+            _hasNewDealsPill = false;
+            _lastPopularFetchTime = DateTime.now();
           });
         }
       } catch (e) {
@@ -182,14 +252,15 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       }
 
       // 3. Resilient Cache Fallback (Yavaş ağ / çevrimdışı kalkanı)
-      if (!serverLoaded && mounted) {
+      if (!serverLoaded && mounted && _selectedCategory == requestedCategory) {
         bool cacheLoaded = false;
         try {
           final cacheResult = await _firestoreService.getPopularDealsPaginated(
             limit: 45,
+            category: requestedCategory == 'tumu' ? null : requestedCategory,
             source: Source.cache,
           );
-          if (mounted && cacheResult.deals.isNotEmpty) {
+          if (mounted && _selectedCategory == requestedCategory && cacheResult.deals.isNotEmpty) {
             cacheLoaded = true;
             setState(() {
               _dealsList = cacheResult.deals;
@@ -204,7 +275,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         // Eğer cache boşsa ve sunucu henüz dönmediyse, serverFuture'ı bekle
         if (!cacheLoaded && _dealsList.isEmpty && mounted) {
           serverFuture.then((res) {
-            if (mounted) {
+            if (mounted && _selectedCategory == requestedCategory) {
               if (res.isError && _dealsList.isEmpty) {
                 setState(() {
                   _isLoading = false;
@@ -219,11 +290,13 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                   _isLoading = false;
                   _isFirstLoad = false;
                   _errorMessage = null;
+                  _hasNewDealsPill = false;
+                  _lastPopularFetchTime = DateTime.now();
                 });
               }
             }
           }).catchError((err) {
-            if (mounted && _dealsList.isEmpty) {
+            if (mounted && _selectedCategory == requestedCategory && _dealsList.isEmpty) {
               setState(() {
                 _isLoading = false;
                 _isFirstLoad = false;
@@ -233,11 +306,11 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           });
         } else {
           // Önbellekten veri basıldıysa, arka planda tamamlanacak serverFuture'ı dinle (Scroll-Aware)
-          _attachBackgroundServerListener(serverFuture);
+          _attachBackgroundServerListener(serverFuture, requestedCategory);
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && _selectedCategory == requestedCategory) {
         setState(() {
           _isLoading = false;
           _isFirstLoad = false;
@@ -247,16 +320,17 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         });
       }
     } finally {
-      if (mounted) {
-        _isRefreshing = false;
-      }
+      _isRefreshing = false;
     }
   }
 
   /// Arka planda sunucu tamamlandığında scroll durumuna göre listeyi pürüzsüz günceller
-  void _attachBackgroundServerListener(Future<DealsPageResult> serverFuture) {
+  void _attachBackgroundServerListener(
+    Future<DealsPageResult> serverFuture,
+    String requestedCategory,
+  ) {
     serverFuture.then((res) {
-      if (!mounted) return;
+      if (!mounted || _selectedCategory != requestedCategory) return;
       if (res.isError || res.deals.isEmpty) return;
 
       // Kullanıcı listenin başındaysa pürüzsüzce güncelle
@@ -268,11 +342,18 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           _hasMore = res.hasMore;
           _isLoading = false;
           _isFirstLoad = false;
+          _hasNewDealsPill = false;
+          _lastPopularFetchTime = DateTime.now();
         });
       } else {
-        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, pagination lastDoc'u ve hasMore'u koru
-        _lastDocument = res.lastDocument ?? _lastDocument;
-        _hasMore = res.hasMore;
+        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma!
+        // Yüzen hap buton ile kullanıcı iradesine sun
+        setState(() {
+          _lastDocument = res.lastDocument ?? _lastDocument;
+          _hasMore = res.hasMore;
+          _hasNewDealsPill = true;
+          _lastPopularFetchTime = DateTime.now();
+        });
       }
     }).catchError((_) {
       // Sessizce yoksay; yerel önbellek zaten ekranda
@@ -287,14 +368,17 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
       _isLoading = true;
     });
 
+    final requestedCategory = _selectedCategory;
+
     try {
       final result = await _firestoreService.getPopularDealsPaginated(
         limit: 30,
         lastDocument: _lastDocument,
+        category: requestedCategory == 'tumu' ? null : requestedCategory,
         source: Source.serverAndCache,
       );
 
-      if (mounted) {
+      if (mounted && _selectedCategory == requestedCategory) {
         if (!result.isError) {
           final existingIds = _dealsList.map((d) => d.id).toSet();
           final newDeals = result.deals.where((d) => !existingIds.contains(d.id)).toList();
@@ -302,7 +386,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
           setState(() {
             _dealsList.addAll(newDeals);
             _lastDocument = result.lastDocument;
-            _hasMore = result.hasMore && newDeals.isNotEmpty;
+            _hasMore = result.hasMore && result.lastDocument != null;
             _isLoading = false;
           });
         } else {
@@ -312,7 +396,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
         }
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && _selectedCategory == requestedCategory) {
         setState(() {
           _isLoading = false;
         });
@@ -547,9 +631,20 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                   return GestureDetector(
                     onTap: () {
                       HapticFeedback.selectionClick();
+                      if (_selectedCategory == category.id) return;
+                      if (_scrollController.hasClients) {
+                        _scrollController.jumpTo(0);
+                      }
                       setState(() {
                         _selectedCategory = category.id;
+                        _dealsList = [];
+                        _lastDocument = null;
+                        _hasMore = true;
+                        _isLoading = true;
+                        _errorMessage = null;
+                        _hasNewDealsPill = false;
                       });
+                      _loadFirstPage(category: category.id);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 220),
@@ -671,7 +766,36 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
 
           // ─── Fırsatlar Akışı ────
           Expanded(
-            child: _buildDealsContent(context, isDark, primaryColor),
+            child: Stack(
+              children: [
+                _buildDealsContent(context, isDark, primaryColor),
+                Positioned(
+                  top: 10,
+                  left: 0,
+                  right: 0,
+                  child: FloatingRefreshPill(
+                    isVisible: _hasNewDealsPill,
+                    text: '🔥 Yeni Popüler Fırsatlar Var 👆',
+                    icon: Icons.whatshot_rounded,
+                    primaryColor: const Color(0xFFFF6B35),
+                    gradientColor: const Color(0xFFFF3D00),
+                    onTap: () {
+                      if (_scrollController.hasClients) {
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeOutCubic,
+                        );
+                      }
+                      setState(() {
+                        _hasNewDealsPill = false;
+                      });
+                      _loadFirstPage(isRefresh: true);
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -684,7 +808,7 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
   }
 
   Widget _buildDealsContent(BuildContext context, bool isDark, Color primaryColor) {
-    if (_isFirstLoad && _isLoading && _dealsList.isEmpty) {
+    if ((_isFirstLoad || _isLoading) && _dealsList.isEmpty) {
       return _buildLoadingGrid(isDark);
     }
 
@@ -724,7 +848,10 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
-                        onPressed: _loadFirstPage,
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _loadFirstPage();
+                        },
                         icon: const Icon(Icons.refresh_rounded),
                         label: const Text('Tekrar Dene'),
                       ),
@@ -794,6 +921,21 @@ class _PopularDealsScreenState extends State<PopularDealsScreen> {
                           height: 1.4,
                         ),
                       ),
+                      if (_selectedCategory != 'tumu') ...[
+                        const SizedBox(height: 18),
+                        TextButton.icon(
+                          onPressed: () {
+                            HapticFeedback.selectionClick();
+                            resetToAllCategories();
+                          },
+                          icon: const Icon(Icons.apps_rounded, size: 16),
+                          label: const Text('Tüm Popüler Fırsatları Gör'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFFF6B35),
+                            textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
