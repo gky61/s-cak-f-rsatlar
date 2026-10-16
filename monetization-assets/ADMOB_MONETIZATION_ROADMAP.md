@@ -163,6 +163,11 @@ FırsatKolik'in gelir ve kullanıcı deneyimi dengesini kuran 2 resmi reklam for
   * **Sıfır Validator Hatası & Sıfır Politika İhlali:** Android'de `FirsatKolikNativeAdFactory` ve `firsatkolik_native_ad.xml` geliştirilerek fiziksel `MediaView` (100x100dp) ve `ImageView` entegrasyonu sağlandı.
   * **iOS ve Android Simetrisi:** Her iki platform da `firsatkolik_native_ad_factory` üzerinden çalıştırılarak video/görsel/ikon tüm kreatiflerin `MediaView` ile %100 AdMob uyumlu render edilmesi garanti edildi.
   * **R8 / ProGuard Kalkanı:** Release derlemelerinde minifikasyon kaynaklı factory çökmesini önlemek için `proguard-rules.pro` kuralları tamamlandı.
+* **3.6. Faz 3.8: DNS Çözümleme & Canlı Ağ Dayanıklılık Kalkanı (✅ TAMAMLANDI):**
+  * **Android GMS Kod 0 & DNS Filtresi:** İstemci tarafında `Unable to resolve host "googleads.g.doubleclick.net": No address associated with hostname` gibi `UnknownHostException` / DNS veya reklam engelleyici (AdGuard, NextDNS, Pi-hole) durumlarının GMS tarafından Kod 0 altında dönmesi `isTransientAdError` kalkanı ile yakalandı. Sahte Firestore alarmları sıfırlandı.
+  * **25s Soğuma Uyumlu Yeniden Deneme:** `preloadRewardedAd` üstel gecikmesi sistemin 25 saniyelik anti-spam soğuma süresiyle (`_failureCooldown`) senkronize edildi (25s, 50s, 75s); widget'lardaki retry gecikmeleri `failureCooldown + 1s` ile tam uyumlu kılındı.
+  * **`ConnectivityService` Proaktif Canlanma:** Cihaz internetsiz durumdan çevrimiçine döndüğünde `AdManagerService` anında tetiklenerek soğumaları sıfırlar ve ödüllü reklamı arka planda kullanıcı henüz kupon sayfasına girmeden hazır eder.
+  * **Lansman Öncesi Güvenli Test Reklamı Rejimi (`useProductionAdMobUnits`):** Lansman gününe kadar hem DEV hem PROD ortamında Google resmi Test Reklamları (Test Ad Units) sunularak kapalı test (Android) ve TestFlight (iOS) aşamalarında gerçek AdMob hesabına geçersiz trafik (Invalid Traffic) riski %100 engellendi. Gerçek PROD birimleri `lib/firebase_options.dart` içerisinde hazır saklanmakta olup mağazalarda halka açılış günü (Faz 6 / Adım 6.0) `useProductionAdMobUnits = true` yapılarak aktif edilecektir.
 
 ---
 

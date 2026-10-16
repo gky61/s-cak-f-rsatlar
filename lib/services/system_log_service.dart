@@ -109,13 +109,18 @@ class SystemLogService {
       return;
     }
 
-    // 3. Çevrimdışı ve internet yokluğu hatalarını yut (İkinci bir Firestore hatası üretmeme)
+    // 3. Çevrimdışı ve internet yokluğu / DNS çözümleme hatalarını yut (İkinci bir Firestore hatası üretmeme)
     final msgLower = message.toLowerCase();
     if (message.contains('SocketException') ||
         msgLower.contains('network is unreachable') ||
         msgLower.contains('failed host lookup') ||
         msgLower.contains('connection refused') ||
-        msgLower.contains('connection timed out')) {
+        msgLower.contains('connection timed out') ||
+        msgLower.contains('unable to resolve host') ||
+        msgLower.contains('no address associated with hostname') ||
+        msgLower.contains('error while connecting to ad server') ||
+        msgLower.contains('nodename nor servname') ||
+        msgLower.contains('name or service not known')) {
       return;
     }
 

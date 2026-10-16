@@ -34,6 +34,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
   static const int _maxRetries = 1; // Sadece 1 kontrollü tekrar deneme
   DateTime? _loadStartTime;
   Timer? _timeoutTimer;
+  Timer? _retryTimer;
 
   @override
   void initState() {
@@ -48,6 +49,9 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
     if (!mounted) return;
     final adManager = AdManagerService.instance;
     if (!adManager.isAdsEnabled || !adManager.bannerEnabled) {
+      _timeoutTimer?.cancel();
+      _retryTimer?.cancel();
+      _retryTimer = null;
       if (_bannerAd != null) {
         _bannerAd?.dispose();
         _bannerAd = null;
@@ -126,11 +130,16 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
           ad.dispose();
           _bannerAd = null;
 
-          // Google AdMob kuralları gereği hata kodu 3'te agresif retry yapılmaz
-          if (error.code != 3 && _retryCount < _maxRetries) {
+          // Google AdMob kuralları gereği no-fill durumlarında agresif retry yapılmaz
+          final isTransient = AdManagerService.isTransientAdError(error);
+          final isNoFill = error.code == 3 || error.message.toLowerCase().contains('no fill') || error.message.toLowerCase().contains('no ad');
+
+          if (isTransient && !isNoFill && _retryCount < _maxRetries) {
             _retryCount++;
-            _log('🔄 Reklam yükleme 15 saniye sonra tekrar denenecek...');
-            Future.delayed(const Duration(seconds: 15), () {
+            final retryDelay = adManager.failureCooldown + const Duration(seconds: 1);
+            _log('🔄 Reklam yükleme ${retryDelay.inSeconds} saniye sonra tekrar denenecek...');
+            _retryTimer?.cancel();
+            _retryTimer = Timer(retryDelay, () {
               if (mounted && _bannerAd == null) {
                 _loadAd();
               }
@@ -165,6 +174,8 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
   void dispose() {
     AdManagerService.instance.removeListener(_onAdSettingsChanged);
     _timeoutTimer?.cancel();
+    _retryTimer?.cancel();
+    _retryTimer = null;
     _bannerAd?.dispose();
     _bannerAd = null;
     super.dispose();

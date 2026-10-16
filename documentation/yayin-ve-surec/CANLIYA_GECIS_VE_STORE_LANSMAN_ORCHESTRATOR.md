@@ -163,8 +163,22 @@ graph TD
 * 🟢 **Adım 3.2: iOS Minimum Sürüm iOS 15.0+ Sözleşmesi**  
   `ios/Podfile` ve `project.pbxproj` içinde `15.0` hedefi sabitlendi.
 * 🟢 **Adım 3.3: AdMob İki Temel Sütun — Native Ads & Rewarded Video Mimarisi**  
-  - *Native Ads (Faz 3.3):* Android PROD Native: `ca-app-pub-6853997017739651/4004866134`, iOS PROD Native: `ca-app-pub-6853997017739651/9437070495`. Anasayfa, Kuponlar ve Aktüel akışlarında 124dp şık sponsorlu kartlar.  
-  - *Rewarded Video Ads:* Android PROD Rewarded: `ca-app-pub-6853997017739651/9218593979`, iOS PROD Rewarded: `ca-app-pub-6853997017739651/2723583797`. Günlük 2 ücretsiz kupon açma kredisi (`CouponCreditService`); misafir kullanıcılara kilitli kupon önizlemesi ve 1 video ile +2 kredi kazanımı. Test birimleri: Android Test: `ca-app-pub-3940256099942544/5224354917`, iOS Test: `ca-app-pub-3940256099942544/1712485313`. `AdManagerService.isTransientAdError` ile Kod 0 altındaki geçici soket kesintileri (`Software caused connection abort`) sahte alarmları önleyecek şekilde filtrelendi; 3 kademeli (5s, 10s, 20s) üstel gecikmeli otomatik retry ve graceful wait kalkanı devreye alındı.  
+  - *⚠️ [ÖNEMLİ LANSMAN ÖNCESİ TEST ADMOB REJİMİ - ŞU AN PROD'DA DA AKTİF]:*  
+    Google Play 14 Günlük Kapalı Test (12 tester), Play Console incelemesi ve Apple TestFlight testleri sırasında gerçek AdMob hesabına **geçersiz trafik (Invalid Traffic)**, kendi reklamına tıklama veya sahte gösterim cezası gelmesini %100 önlemek amacıyla; **ŞU ANDA HEM DEV HEM PROD ORTAMINDA GOOGLE RESMİ TEST REKLAMLARI (Test Ad Units) GÖSTERİLMEKTEDİR.**  
+    Gerçek PROD AdMob birimleri (`lib/firebase_options.dart`) içerisinde hazır olarak saklanmakta ve `DefaultFirebaseOptions.useProductionAdMobUnits` bayrağı ile korunmaktadır (`defaultValue: false`).  
+    **Lansman Günü Eylemi:** Mağazalar genel kullanıma açılacağı gün (Faz 6 öncesi Adım 6.0) `lib/firebase_options.dart` içindeki `useProductionAdMobUnits = true` yapılarak (veya derleme parametresi `--dart-define=USE_PROD_ADMOB_UNITS=true` ile) gerçek reklam birimlerine geçiş yapılacaktır.  
+  - *Aktif Test Ad Unit'leri (Hem DEV Hem PROD'da Şu An Çalışan):*  
+    - Android Native: `ca-app-pub-3940256099942544/2247696110`  
+    - Android Rewarded: `ca-app-pub-3940256099942544/5224354917`  
+    - iOS Native: `ca-app-pub-3940256099942544/3986624511`  
+    - iOS Rewarded: `ca-app-pub-3940256099942544/1712485313`  
+  - *Gerçek PROD AdMob Birimleri (Lansman Günü Adım 6.0'da Açılacak):*  
+    - Android PROD Native: `ca-app-pub-6853997017739651/4004866134`  
+    - Android PROD Rewarded: `ca-app-pub-6853997017739651/9218593979`  
+    - iOS PROD Native: `ca-app-pub-6853997017739651/9437070495`  
+    - iOS PROD Rewarded: `ca-app-pub-6853997017739651/2723583797`  
+  - *Native Ads (Faz 3.3):* Anasayfa, Kuponlar ve Aktüel akışlarında 124dp şık sponsorlu kartlar.  
+  - *Rewarded Video Ads (Faz 3.8 Canlı Ağ Dayanıklılığı):* Günlük 2 ücretsiz kupon açma kredisi (`CouponCreditService`); misafir kullanıcılara kilitli kupon önizlemesi ve 1 video ile +2 kredi kazanımı. `AdManagerService.isTransientAdError` ile Kod 0 altındaki DNS çözümleme kesintileri (`Unable to resolve host: googleads.g.doubleclick.net: No address associated with hostname`), soket abort'ları (`Software caused connection abort`), SSL ve Private DNS/adblocker engelleri sahte alarmları önleyecek şekilde filtrelendi; 25s soğuma süresiyle kilitlenmeyi önleyen senkronize (25s, 50s, 75s) üstel gecikmeli otomatik retry, `ConnectivityService` canlı ağ yeniden bağlanma dinleyicisi ve graceful wait kalkanı devreye alındı.  
   - *Fair-Play Reklamsızlık İzolasyonu:* Kaydedilenler sayfası Tab 1 ("Kaydettiklerim") sekmesi kullanıcının satın alma niyetinin en yüksek olduğu alandır; **%100 reklamsız** bırakılmıştır. Kullanıcı deneyimini bozan Interstitial (Geçiş) ve App Open reklamları FırsatKolik'ten tamamen temizlenmiştir ("Altın Oran" prensibi).  
   - *Denetim:* `python admob_cli.py inspect` 10/10 PASS.
 * 🟢 **Adım 3.4: UMP (Consent) SDK, iOS ATT & AdMob Web Konsol Rıza Formları Yayını**  
@@ -338,6 +352,7 @@ graph TD
   - *"Tamamlanması gerekenler" sekmesinde 0 bekleyen işlem kaldı (10/10 Tamamlandı).* ✅  
 * 🟡 **Adım 4.4: [ŞU ANKİ AKTİF ADIM] AAB Paketini Play Console "Kapalı Test" (Closed Testing) Kanalına Yükleme**  
   Shorebird ile üretilen imzalı `app-prod-release.aab` dosyası Play Console Kapalı Test kanalına yüklenecektir.  
+  *⚠️ Test Reklam Güvencesi:* Kapalı test süresince 12 test kullanıcısının yapacağı testlerde Google AdMob hesabına geçersiz trafik (Invalid Traffic) cezası gelmemesi için PROD derlemesinde Google Test Reklamları aktiftir (`DefaultFirebaseOptions.useProductionAdMobUnits = false`).  
 * ⚠️ **Adım 4.5: [ÇOK KRİTİK] Google App Signing SHA-1 Parmak İzini Firebase PROD'a Ekleme**  
   *Nereden Alınır?:* Play Console > Setup > App Integrity > App Signing > "App signing key certificate" SHA-1.  
   *Nereye Eklenir?:* Firebase Console PROD (`firsatkolik-prod-e6eae`) > Proje Ayarları > Android Uygulaması SHA parmak izleri.  
@@ -383,7 +398,7 @@ graph TD
   3. *UMP Rıza & ATT Akışı:* iOS ATT (`AppTrackingTransparency`) ve AdMob UMP onay diyaloğu.  
   4. *Universal Links & Deep Linking:* `https://firsatkolik.app/deal/{id}` linkinin uygulamayı doğrudan açması.  
   5. *Harici Mağaza Yönlendirmeleri:* `hbapp://`, `amazon://`, `teknosa://` şemalarıyla doğrudan yerel mağaza uygulamasına sıçrama (Zero Browser).  
-  6. *AdMob Reklam Deneyimi:* Anasayfa ve Kuponlar akışında 124dp Native Reklam; Kupon detayında Rewarded Video ile +2 kredi kazanımı.  
+  6. *AdMob Reklam Deneyimi:* Anasayfa ve Kuponlar akışında 124dp Native Reklam; Kupon detayında Rewarded Video ile +2 kredi kazanımı (TestFlight aşamasında güvenli Google Test Reklamları görüntülenir).  
   7. *Hesap Silme & Revoke Kaskadı:* `SupportHubScreen` üzerinden hesap silme ve Apple jetonunun iptal edilmesi (Guideline 5.1.1(v)).  
   8. *UGC Şikayet & Engelleme:* Fırsat/yorum şikayeti (`ReportDialog`) ve kullanıcı engelleme mekanizması (Guideline 1.2).  
   9. *Dynamic Island & Safe Area:* Çentikli iPhone'larda ve Dynamic Island alanlarında taşma/kırpılma olmaması.  
@@ -401,6 +416,10 @@ graph TD
 
 ## 🚀 FAZ 6 — Kademeli Canlı Yayın & Mağaza Aktivasyonu (⚪ BEKLEMEDE)
 
+* ⚪ **Adım 6.0: [LANSMAN GÜNÜ KRİTİK GEÇİŞ] Gerçek PROD AdMob Reklam Birimlerine Geçiş (`useProductionAdMobUnits = true`)**  
+  - *Gerekçe:* Kapalı test (Android) ve TestFlight (iOS) aşamalarında tester'ların hesabı riske atmaması için devrede olan Google Test Reklamları kalkanı sonlandırılır.  
+  - *Eylem:* `lib/firebase_options.dart` içerisindeki `useProductionAdMobUnits` bayrağı `true` yapılır (veya release derlemesi `--dart-define=USE_PROD_ADMOB_UNITS=true` parametresiyle alınır).  
+  - *Doğrulama:* Gerçek Android PROD (`ca-app-pub-6853997017739651/4004866134` Native, `9218593979` Rewarded) ve iOS PROD (`ca-app-pub-6853997017739651/9437070495` Native, `2723583797` Rewarded) birimlerinin canlıya geçtiği teyit edilir.
 * ⚪ **Adım 6.1: Google Play Kademeli Yayın (%5 ➔ %20 ➔ %50 ➔ %100)**  
   İlk 24 saat %5 kullanıcıya açılarak Crashlytics ve ANR vitals değerleri izlenir.
 * ⚪ **Adım 6.2: App Store Canlı Sürümü Yayına Alma**  

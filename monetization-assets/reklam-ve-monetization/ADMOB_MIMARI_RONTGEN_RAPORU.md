@@ -286,3 +286,29 @@ Sadece pop-up'ı susturmak (NATIVE_AD_DEBUGGER_ENABLED) yetersiz bir geçici ç�
    * `android/app/src/main/AndroidManifest.xml` (`com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED = true`) ve `ios/Runner/Info.plist` (`GADNativeAdValidatorEnabled = true`) aktif tutulmuştur. Bu sayede test aşamasında gelecekteki olası yerleşim kusurları anında yakalanır; Google SDK ise prod ortamında bu validator'ı otomatik olarak kapatır.
    * `AdManagerService.instance.openAdInspector()` metodu eklenerek cihaz üzerinde arabuluculuk (mediation) şelalesi ve reklam isteklerinin canlı incelenmesi sağlanmıştır.
 
+---
+
+## 🌐 7. Faz 3.8: Android GMS Kod 0 / DNS Çözümleme ("Unable to resolve host") & Canlı Ağ Dayanıklılık Mimarisi
+
+### 7.1. Belirti ve Hata Kaydı (Symptom)
+Web Admin "Sistem Kontrol & Hata Logları" ekranında `AdMobLoadError_0` parmak iziyle 1 adet açık hata raporlanmıştır:
+```
+AdUnit: ca-app-pub-6853997017739651/9218593979 | Kod: 0 | Mesaj: Error while connecting to ad server: Unable to resolve host "googleads.g.doubleclick.net": No address associated with hostname
+```
+
+### 7.2. Kök Neden Analizi (Root Cause Analysis)
+1. **İstemci DNS Çözümleme Başarısızlığı (`UnknownHostException`):**
+   * Kullanıcı cihazının interneti koptuğunda, Wi-Fi/4G geçişinde veya cihazda Özel DNS (Private DNS - AdGuard, NextDNS, Pi-hole) açık olduğunda `googleads.g.doubleclick.net` adresi çözümlenememektedir.
+   * Android Google Play Services (GMS) Ads SDK, bu ağ/soket kesintisini `ERROR_CODE_NETWORK_ERROR (Kod 2)` yerine catch-all olan `ERROR_CODE_INTERNAL_ERROR (Kod 0)` altına koymaktadır.
+2. **`isTransientAdError` Kapsam Eksikliği:**
+   * `AdManagerService.isTransientAdError` mesaj içinde `unable to resolve host`, `no address associated with hostname` ve `error while connecting to ad server` kalıplarını taramadığı için bu olağan istemci ağ durumunu bir sistem hatası sanarak `SystemLogService` üzerinden Firestore'a basmıştır.
+3. **Yeniden Deneme & Soğuma Çakışması:**
+   * `_failureCooldown` 25 saniye iken, eski retry mantığı 5 saniye sonra istek atmış ve `canRequestAd` tarafından bloke edilmiştir. Ayrıca `ConnectivityService` dinleyicisi bulunmadığı için cihaz çevrimiçi olduğunda soğuma sıfırlanmamaktaydı.
+
+### 7.3. Uygulanan Kalıcı Dünya Standardı Çözüm
+1. **Gelişmiş Geçici Hata Ayrıştırma:** `isTransientAdError` fonksiyonuna DNS (`unable to resolve host`, `no address associated with hostname`, `failed host lookup`), soket, SSL, sunucu 5xx yanıtları ve mediation no-fill kontrolleri eklendi.
+2. **25s Soğuma Uyumlu Yeniden Deneme:** `preloadRewardedAd` üstel gecikmesi `_failureCooldown` ile senkronize edildi (25s, 50s, 75s); widget'lardaki retry gecikmeleri `failureCooldown + 1s` ile tam uyumlu kılındı.
+3. **`ConnectivityService` Canlı Dinleyicisi:** Ağ durumu çevrimiçine döndüğünde `AdManagerService` soğumaları sıfırlar ve ödüllü reklamı arka planda proaktif olarak yükler.
+4. **`SystemLogService` Çift Kalkanı:** Sistem log servisi seviyesinde DNS istisnaları filtrelenerek Firestore kota israfı ve sahte alarmlar tamamen engellendi.
+5. **PROD Firestore Kapatma:** `systemErrors/YvFHIvEpuFpvsf25Edw1` belgesi Admin SDK ile `resolved` olarak mühürlendi.
+

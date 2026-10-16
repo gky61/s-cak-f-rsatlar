@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../firebase_options.dart';
 import 'analytics_service.dart';
+import 'connectivity_service.dart';
 import 'coupon_credit_service.dart';
 import 'system_log_service.dart';
 
@@ -85,17 +86,23 @@ class AdManagerService extends ChangeNotifier {
   // ─── Hata Soğuma (Cooldown) Takibi ───────────────────────────────────────
   final Map<String, DateTime> _lastFailedTime = {};
   Duration _failureCooldown = const Duration(seconds: 25);
+  Duration get failureCooldown => _failureCooldown;
 
   // ─── Firestore Canlı Ayar Dinleyicisi ────────────────────────────────────
   StreamSubscription<DocumentSnapshot>? _settingsSubscription;
+
+  // ─── Canlı Ağ Bağlantısı Dinleyicisi (Proaktif Önyükleme) ─────────────────
+  StreamSubscription<bool>? _connectivitySubscription;
 
   /// AdMob SDK Başlatma
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      final isDevEnvironment = kDebugMode || !DefaultFirebaseOptions.isProductionFlavor;
-      if (isDevEnvironment) {
+      final isTestAdsActive = kDebugMode ||
+          !DefaultFirebaseOptions.isProductionFlavor ||
+          !DefaultFirebaseOptions.useProductionAdMobUnits;
+      if (isTestAdsActive) {
         final configuration = RequestConfiguration(
           testDeviceIds: const <String>[
             '7dc74815-ecce-4731-b631-27ab9c0cbd15', // Android Test Telefonu
@@ -103,7 +110,7 @@ class AdManagerService extends ChangeNotifier {
           ],
         );
         await MobileAds.instance.updateRequestConfiguration(configuration);
-        _log('✅ Test ortamı (Dev/Debug) test cihazları yapılandırıldı');
+        _log('✅ Test ortamı (Dev/Debug/Test Ads) test cihazları yapılandırıldı');
       }
 
       final initStatus = await MobileAds.instance.initialize();
@@ -118,6 +125,9 @@ class AdManagerService extends ChangeNotifier {
 
       // Firestore settings/admob dinleyicisini başlat (Web Admin senkronizasyonu)
       _startFirestoreSettingsListener();
+
+      // Canlı ağ bağlantı dinleyicisini başlat (Ağ geri geldiğinde proaktif önyükleme)
+      _startConnectivityListener();
 
       // Başlatma tamamlandığında bekleyen widget'ları uyar
       notifyListeners();
@@ -143,35 +153,110 @@ class AdManagerService extends ChangeNotifier {
     return true;
   }
 
-  /// Bir AdMob yükleme hatasının geçici bir ağ/soket kesintisi veya stok yokluğu olup olmadığını belirler.
+  /// Bir AdMob yükleme hatasının geçici bir ağ/soket kesintisi, DNS çözümlenememesi,
+  /// reklam engelleyici (adblocker/Private DNS) engeli veya stok yokluğu olup olmadığını belirler.
   /// 
   /// - Kod 3 (NO_FILL): Google sunucusunda o anlık reklam envanteri olmaması (Normal piyasa davranışı)
+  /// - Kod 1 (iOS GADErrorNoFill): iOS tarafında envanter bulunamaması
   /// - Kod 2 (NETWORK_ERROR): Genel ağ bağlantısı kesintisi
   /// - Kod 5 (GADErrorTimeout): iOS ağ zaman aşımı
-  /// - Kod 0 (INTERNAL_ERROR): Android Google Play Services (GMS) katmanında `SocketException`
-  ///   ("Software caused connection abort", "Connection reset", "Broken pipe", vb.) fırlatıldığında
-  ///   GMS Ads SDK bunu Kod 2 yerine genel catch-all Kod 0 içine düşürür.
-  ///   Bu durum bir konfigürasyon veya kod hatası DEĞİL, işletim sisteminin soketi
-  ///   (Wi-Fi/4G geçişi, arka plan Doze modu veya ekran kilidi) aniden sonlandırmasıdır.
+  /// - Kod 3 (iOS GADErrorServerError): iOS Google sunucu hatası
+  /// - Kod 10 / 7 / 9 (MEDIATION_NO_FILL): Arabuluculuk şelalesinde doluluk olmaması
+  /// - Kod 0 (INTERNAL_ERROR): Android Google Play Services (GMS) katmanında `UnknownHostException`
+  ///   ("Unable to resolve host", "No address associated with hostname"), `SocketException`
+  ///   ("Software caused connection abort", "Connection reset", "Broken pipe") veya bağlantı kesintileri
+  ///   fırlatıldığında GMS Ads SDK bunu Kod 2 yerine genel catch-all Kod 0 içine düşürür.
+  ///   Ayrıca kullanıcının telefonunda AdGuard, NextDNS veya Private DNS gibi reklam engelleyiciler
+  ///   açıksa, DNS sorgusu doğrudan "No address associated with hostname" ile engellenir.
+  ///   Bu durum bir yazılım/kod hatası DEĞİL, istemci ağ veya ortam davranışıdır.
   static bool isTransientAdError(LoadAdError error) {
-    if (error.code == 3 || error.code == 2 || error.code == 5) {
+    // 1. Standart No-Fill, Network, Timeout ve Mediation hata kodları
+    if (error.code == 3 || error.code == 2 || error.code == 5 || error.code == 10) {
       return true;
     }
-    if (error.code == 0) {
+
+    // iOS platformunda code 1 = GADErrorNoFill'dir. Android'de code 1 = INVALID_REQUEST'tir.
+    if (error.code == 1) {
+      final domain = error.domain.toLowerCase();
       final msg = error.message.toLowerCase();
-      if (msg.contains('connection abort') ||
-          msg.contains('connection reset') ||
-          msg.contains('broken pipe') ||
-          msg.contains('socket closed') ||
-          msg.contains('failed to connect') ||
-          msg.contains('ssl handshake') ||
-          msg.contains('timeout') ||
-          msg.contains('network') ||
-          msg.contains('end of stream') ||
-          msg.contains('unexpected end')) {
+      if (domain.contains('admob') || msg.contains('no fill') || msg.contains('inventory') || msg.contains('no ad')) {
         return true;
       }
+      if (domain.contains('android.gms.ads') && (msg.contains('invalid') || msg.contains('not valid') || msg.contains('must be set'))) {
+        return false;
+      }
     }
+
+    // 2. Kod 0 (Android GMS Catch-all) ve genel mesaj bazlı ağ/DNS/bağlantı desenleri
+    final msg = error.message.toLowerCase();
+
+    // DNS ve Host çözümleme kesintileri (AdBlocker, offline, DNS timeout, uçak modu)
+    if (msg.contains('unable to resolve host') ||
+        msg.contains('no address associated with hostname') ||
+        msg.contains('failed host lookup') ||
+        msg.contains('unknownhost') ||
+        msg.contains('name or service not known') ||
+        msg.contains('nodename nor servname') ||
+        msg.contains('eai_')) {
+      return true;
+    }
+
+    // Bağlantı ve sunucu iletişim kesintileri
+    if (msg.contains('error while connecting to ad server') ||
+        msg.contains('connecting to ad server') ||
+        msg.contains('failed to connect') ||
+        msg.contains('connection abort') ||
+        msg.contains('connection reset') ||
+        msg.contains('connection refused') ||
+        msg.contains('connection closed') ||
+        msg.contains('connection timed out') ||
+        msg.contains('connect timed out') ||
+        msg.contains('route to host') ||
+        msg.contains('no route to host') ||
+        msg.contains('network is unreachable') ||
+        msg.contains('network error') ||
+        msg.contains('network unreachable') ||
+        msg.contains('client was closed')) {
+      return true;
+    }
+
+    // Soket, pipe ve SSL kesintileri
+    if (msg.contains('broken pipe') ||
+        msg.contains('socket closed') ||
+        msg.contains('socketexception') ||
+        msg.contains('socket timeout') ||
+        msg.contains('ssl handshake') ||
+        msg.contains('handshake failed') ||
+        msg.contains('ssl exception') ||
+        msg.contains('certificate') ||
+        msg.contains('end of stream') ||
+        msg.contains('unexpected end') ||
+        msg.contains('ioexception')) {
+      return true;
+    }
+
+    // Sunucu taraflı geçici HTTP yanıtları veya zaman aşımları
+    if (msg.contains('timeout') ||
+        msg.contains('timed out') ||
+        msg.contains('server error') ||
+        msg.contains('service unavailable') ||
+        msg.contains('bad gateway') ||
+        msg.contains('gateway timeout') ||
+        msg.contains('500') ||
+        msg.contains('502') ||
+        msg.contains('503') ||
+        msg.contains('504')) {
+      return true;
+    }
+
+    // Stok yokluğu / No-Fill varyasyonları
+    if (msg.contains('no fill') ||
+        msg.contains('no ad config') ||
+        msg.contains('no inventory') ||
+        msg.contains('no ad available')) {
+      return true;
+    }
+
     return false;
   }
 
@@ -180,14 +265,17 @@ class AdManagerService extends ChangeNotifier {
     _lastFailedTime[adUnitId] = DateTime.now();
     _log('❌ Reklam yüklenemedi: $adUnitId | Kod: ${error.code} | Mesaj: ${error.message}');
 
-    // Kod 3 (ERROR_CODE_NO_FILL), Kod 2 (ERROR_CODE_NETWORK_ERROR), Kod 5 (GADErrorTimeout)
-    // ve Kod 0 altındaki geçici soket abort / network kesintileri piyasa veya cihaz ağ davranışıdır.
-    // Bunlar sahte alarmları engellemek adına SystemLogService'e kritik error olarak yazılmaz.
-    // Ancak Kod 1 (INVALID_REQUEST / Yanlış AdUnitId) veya mesajı geçici olmayan gerçek dahili hatalar kritiktir!
     final isTransient = isTransientAdError(error);
-    if (isTransient) {
-      _log('ℹ️ [AdMob] Geçici ağ/soket kesintisi veya stok yokluğu algılandı (Kod: ${error.code}, Mesaj: ${error.message}). Sistem hatası olarak kaydedilmiyor.');
+    final isDeviceOffline = !ConnectivityService().isConnected;
+
+    // Kod 3 (NO_FILL), Kod 2 (NETWORK_ERROR), Kod 5 (TIMEOUT), DNS çözümleme hataları
+    // ("Unable to resolve host: googleads.g.doubleclick.net"), soket abort'ları veya cihazın
+    // çevrimdışı olması olağan piyasa veya kullanıcı ağ/ortam davranışıdır.
+    // Bunlar sahte alarmları engellemek adına SystemLogService'e kritik error olarak ASLA yazılmaz.
+    if (isTransient || isDeviceOffline) {
+      _log('ℹ️ [AdMob] Geçici ağ/soket kesintisi, DNS çözümlenememesi, adblocker veya stok yokluğu algılandı (Kod: ${error.code}, Mesaj: ${error.message}). Sistem hatası olarak kaydedilmiyor.');
     } else {
+      // Yalnızca kod veya konfigürasyon kaynaklı gerçek hatalar (ör. yanlış ad unit formatı, geçersiz istek) kaydedilir.
       SystemLogService.instance.logError(
         category: 'admob',
         subCategory: 'ad_load_failure',
@@ -207,6 +295,24 @@ class AdManagerService extends ChangeNotifier {
   /// Başarılı reklam isteğinde soğuma kaydını sıfırlar
   void recordAdSuccess(String adUnitId) {
     _lastFailedTime.remove(adUnitId);
+  }
+
+  /// Ağ durumu çevrimiçine döndüğünde reklam soğuma kayıtlarını sıfırlar ve ödüllü reklamı önceden yükler
+  void _startConnectivityListener() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = ConnectivityService().connectionStatusStream.listen((isConnected) {
+      if (isConnected && isAdsEnabled) {
+        _log('📶 [AdManager] Ağ bağlantısı tekrar kuruldu. Hata soğumaları sıfırlanıyor...');
+        _lastFailedTime.clear();
+        _rewardedRetryAttempts = 0;
+        _rewardedRetryTimer?.cancel();
+        _rewardedRetryTimer = null;
+        if (rewardedEnabled && _rewardedAd == null && !_isRewardedLoading) {
+          _log('🔄 [AdManager] Ağ geri geldiği için ödüllü reklam proaktif önyükleniyor...');
+          preloadRewardedAd();
+        }
+      }
+    });
   }
 
   /// AdMob Paid Event (Gelir & Telemetri) Kaydı
@@ -256,7 +362,7 @@ class AdManagerService extends ChangeNotifier {
     }
 
     final unitId = DefaultFirebaseOptions.rewardedAdUnitId;
-    if (!canRequestAd(unitId)) return;
+    if (!isRetry && !canRequestAd(unitId)) return;
 
     if (!isRetry) {
       _rewardedRetryAttempts = 0;
@@ -332,7 +438,8 @@ class AdManagerService extends ChangeNotifier {
           final isTransient = isTransientAdError(error);
           if (isTransient && _rewardedRetryAttempts < _maxRewardedRetries && isAdsEnabled && rewardedEnabled) {
             _rewardedRetryAttempts++;
-            final delaySeconds = math.min(30, 5 * (1 << (_rewardedRetryAttempts - 1)));
+            final baseSeconds = math.max(25, _failureCooldown.inSeconds);
+            final delaySeconds = baseSeconds * _rewardedRetryAttempts;
             _log('🔄 [Rewarded Ad] Geçici kesinti nedeniyle ${delaySeconds}s sonra otomatik yeniden denenecek (Deneme: $_rewardedRetryAttempts/$_maxRewardedRetries)...');
             _rewardedRetryTimer?.cancel();
             _rewardedRetryTimer = Timer(Duration(seconds: delaySeconds), () {
@@ -632,6 +739,8 @@ class AdManagerService extends ChangeNotifier {
     if (_rewardedLoadCompleter != null && !_rewardedLoadCompleter!.isCompleted) {
       _rewardedLoadCompleter!.complete(false);
     }
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
     _settingsSubscription?.cancel();
     _settingsSubscription = null;
     _rewardedAd?.dispose();

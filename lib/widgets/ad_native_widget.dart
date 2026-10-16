@@ -45,6 +45,7 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
   static const int _maxRetries = 1;
   DateTime? _loadStartTime;
   Timer? _timeoutTimer;
+  Timer? _retryTimer;
   bool _isDisposed = false;
 
   // FS-27: Sınırlı Keep-Alive Havuzu (Bounded KeepAlive Pool - Azami 5 Aktif Reklam)
@@ -112,6 +113,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     super.didUpdateWidget(oldWidget);
     if (widget.adUnitId != oldWidget.adUnitId || widget.viewMode != oldWidget.viewMode) {
       _timeoutTimer?.cancel();
+      _retryTimer?.cancel();
+      _retryTimer = null;
       _isKeepAliveGranted = false;
       _activeAdsPool.remove(this);
       final adToDispose = _nativeAd;
@@ -134,6 +137,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     final adManager = AdManagerService.instance;
     if (!adManager.isAdsEnabled || !adManager.nativeEnabled) {
       _timeoutTimer?.cancel();
+      _retryTimer?.cancel();
+      _retryTimer = null;
       _isLoading = false;
       _isKeepAliveGranted = false;
       _activeAdsPool.remove(this);
@@ -343,10 +348,15 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
             } catch (_) {}
           });
 
-          if (error.code != 3 && _retryCount < _maxRetries) {
+          final isTransient = AdManagerService.isTransientAdError(error);
+          final isNoFill = error.code == 3 || error.message.toLowerCase().contains('no fill') || error.message.toLowerCase().contains('no ad');
+
+          if (isTransient && !isNoFill && _retryCount < _maxRetries) {
             _retryCount++;
-            _log('🔄 Native Ad yükleme 15 saniye sonra tekrar denenecek...');
-            Future.delayed(const Duration(seconds: 15), () {
+            final retryDelay = adManager.failureCooldown + const Duration(seconds: 1);
+            _log('🔄 Native Ad yükleme ${retryDelay.inSeconds} saniye sonra tekrar denenecek...');
+            _retryTimer?.cancel();
+            _retryTimer = Timer(retryDelay, () {
               if (mounted && !_isDisposed && _nativeAd == null && !_isLoading) {
                 _loadAd();
               }
@@ -396,6 +406,8 @@ class _AdNativeWidgetState extends State<AdNativeWidget>
     _activeAdsPool.remove(this);
     AdManagerService.instance.removeListener(_onAdSettingsChanged);
     _timeoutTimer?.cancel();
+    _retryTimer?.cancel();
+    _retryTimer = null;
     _isLoading = false;
     final adToDispose = _nativeAd;
     _nativeAd = null;

@@ -320,5 +320,126 @@ void main() {
       expect(proguardFile.contains('FirsatKolikNativeAdFactory'), isTrue,
           reason: 'proguard-rules.pro must preserve FirsatKolikNativeAdFactory from R8 obfuscation');
     });
+
+    test('21. DNS lookup & transient ad error classification prevents false alarm logging (Hata #1 Resolution)', () {
+      // 1. Android GMS DNS Host Resolution Failure (Hata #1'deki gerçek hata mesajı)
+      final dnsError = LoadAdError(
+        0,
+        'com.google.android.gms.ads',
+        'Error while connecting to ad server: Unable to resolve host "googleads.g.doubleclick.net": No address associated with hostname',
+        null,
+      );
+      expect(AdManagerService.isTransientAdError(dnsError), isTrue,
+          reason: 'DNS Host resolution failure must be classified as a transient network/client error');
+
+      // 2. Android GMS Socket Connection Abort
+      final socketAbortError = LoadAdError(
+        0,
+        'com.google.android.gms.ads',
+        'Software caused connection abort',
+        null,
+      );
+      expect(AdManagerService.isTransientAdError(socketAbortError), isTrue);
+
+      // 3. Standard Network Error
+      final networkError = LoadAdError(
+        2,
+        'com.google.android.gms.ads',
+        'Network error.',
+        null,
+      );
+      expect(AdManagerService.isTransientAdError(networkError), isTrue);
+
+      // 4. No Fill / Inventory Shortage
+      final noFillError = LoadAdError(
+        3,
+        'com.google.android.gms.ads',
+        'No ad config.',
+        null,
+      );
+      expect(AdManagerService.isTransientAdError(noFillError), isTrue);
+
+      // 5. iOS Timeout Error
+      final timeoutError = LoadAdError(
+        5,
+        'com.google.admob',
+        'The ad request timed out.',
+        null,
+      );
+      expect(AdManagerService.isTransientAdError(timeoutError), isTrue);
+
+      // 6. Non-transient genuine config error (should NOT be transient)
+      final invalidRequestError = LoadAdError(
+        1,
+        'com.google.android.gms.ads',
+        'Invalid ad request: ad unit id must be set and valid format.',
+        null,
+      );
+      expect(AdManagerService.isTransientAdError(invalidRequestError), isFalse,
+          reason: 'Developer invalid ad unit configuration must NOT be marked transient');
+    });
+
+    test('22. AdManagerService integrates with ConnectivityService and handles safe recordAdFailure', () {
+      final adManager = AdManagerService.instance;
+      const testRewardedUnit = 'ca-app-pub-6853997017739651/9218593979';
+
+      // Verify recordAdFailure can safely process the DNS error without throwing or failing
+      final dnsError = LoadAdError(
+        0,
+        'com.google.android.gms.ads',
+        'Error while connecting to ad server: Unable to resolve host "googleads.g.doubleclick.net": No address associated with hostname',
+        null,
+      );
+
+      adManager.recordAdFailure(testRewardedUnit, dnsError);
+      // Cooldown should be registered
+      expect(adManager.canRequestAd(testRewardedUnit), isFalse);
+
+      // Success resets cooldown
+      adManager.recordAdSuccess(testRewardedUnit);
+      expect(adManager.canRequestAd(testRewardedUnit), isTrue);
+
+      // Verify ad_manager_service.dart source code wires ConnectivityService
+      final adManagerCode = File('lib/services/ad_manager_service.dart').readAsStringSync();
+      expect(adManagerCode.contains('ConnectivityService'), isTrue,
+          reason: 'AdManagerService must wire ConnectivityService for auto-recovery');
+      expect(adManagerCode.contains('_startConnectivityListener()'), isTrue,
+          reason: 'AdManagerService must register connectivity listener');
+    });
+
+    test('23. Pre-launch Test Ad Regime delivers official test units in PROD until launch day switch', () {
+      // 1. By default, useProductionAdMobUnits must be false to protect AdMob account during testing
+      expect(DefaultFirebaseOptions.useProductionAdMobUnits, isFalse,
+          reason: 'useProductionAdMobUnits must default to false before launch day');
+
+      // 2. In Android, official Google test units are delivered
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        expect(DefaultFirebaseOptions.nativeAdUnitId, 'ca-app-pub-3940256099942544/2247696110');
+        expect(DefaultFirebaseOptions.rewardedAdUnitId, 'ca-app-pub-3940256099942544/5224354917');
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      // 3. In iOS, official Google test units are delivered
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        expect(DefaultFirebaseOptions.nativeAdUnitId, 'ca-app-pub-3940256099942544/3986624511');
+        expect(DefaultFirebaseOptions.rewardedAdUnitId, 'ca-app-pub-3940256099942544/1712485313');
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      // 4. Verify genuine PROD IDs are defined in firebase_options.dart for launch day
+      final optionsCode = File('lib/firebase_options.dart').readAsStringSync();
+      expect(optionsCode.contains('ca-app-pub-6853997017739651/4004866134'), isTrue,
+          reason: 'Android PROD Native ID must be defined in source');
+      expect(optionsCode.contains('ca-app-pub-6853997017739651/9218593979'), isTrue,
+          reason: 'Android PROD Rewarded ID must be defined in source');
+      expect(optionsCode.contains('ca-app-pub-6853997017739651/9437070495'), isTrue,
+          reason: 'iOS PROD Native ID must be defined in source');
+      expect(optionsCode.contains('ca-app-pub-6853997017739651/2723583797'), isTrue,
+          reason: 'iOS PROD Rewarded ID must be defined in source');
+    });
   });
 }

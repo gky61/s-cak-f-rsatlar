@@ -138,6 +138,19 @@ class DefaultFirebaseOptions {
 
   // ─── AdMob Reklam Birimi Kimlikleri (4 Boyutlu Matris: Dev/Prod x Android/iOS) ───
 
+  /// [ÖNEMLİ - LANSMAN ÖNCESİ KONTROL]:
+  /// Lansman gününe kadar hem DEV hem PROD ortamında Google Test Reklamları
+  /// (Test Ad Units) sunulur. Böylece Kapalı Test (12 tester / 14 gün) ve TestFlight
+  /// aşamalarında gerçek AdMob hesabına geçersiz trafik (Invalid Traffic) riski
+  /// OLUŞTURULMAZ.
+  /// 
+  /// ⚠️ LANSMAN GÜNÜ EYLEMİ: Mağazalarda halka açılış günü (Faz 6) bu bayrak 'true'
+  /// yapılarak (veya --dart-define=USE_PROD_ADMOB_UNITS=true ile) gerçek AdMob birimlerine geçilir.
+  static const bool useProductionAdMobUnits = bool.fromEnvironment(
+    'USE_PROD_ADMOB_UNITS',
+    defaultValue: false, // Lansman gününe kadar hem DEV hem PROD test reklamları gösterir
+  );
+
   /// iOS Prod Banner ID (Eski/Geçişli Banner Birimi - Faz 3.3 ile Native Ads'e geçildi)
   static const String _iosProdBannerId = String.fromEnvironment(
     'ADMOB_IOS_BANNER_ID',
@@ -150,19 +163,17 @@ class DefaultFirebaseOptions {
   /// Banner Reklam Birimi ID'si (DEPRECATED: Faz 3.3 kapsamında akış içi reklamlar nativeAdUnitId'ye taşınmıştır)
   @Deprecated('Faz 3.3 kapsamında akış içi reklamlar nativeAdUnitId formatına taşınmıştır.')
   static String get bannerAdUnitId {
-    final isDev = kDebugMode || !isProductionFlavor;
+    final useRealAds = useProductionAdMobUnits && isProductionFlavor && !kDebugMode;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      if (isDev || _iosProdBannerId.isEmpty) {
+      if (!useRealAds || _iosProdBannerId.isEmpty) {
         return 'ca-app-pub-3940256099942544/2934735716'; // Google iOS Test Banner ID
       }
       return _iosProdBannerId;
     }
-    return isDev
+    return !useRealAds
         ? 'ca-app-pub-3940256099942544/6300978111' // Google Android Test Banner ID
         : _androidProdBannerId; // Gerçek Android Banner ID
   }
-
-
 
   /// iOS Prod Native Ad ID (FırsatKolik iOS Prod Yerel Akış Reklam Birimi)
   static const String _iosProdNativeId = String.fromEnvironment(
@@ -178,27 +189,27 @@ class DefaultFirebaseOptions {
 
   /// Yerel Reklam (Native Advanced) Birimi ID'si (Akış İçi Grid & List Birimleri)
   static String get nativeAdUnitId {
-    final isDev = kDebugMode || !isProductionFlavor;
+    final useRealAds = useProductionAdMobUnits && isProductionFlavor && !kDebugMode;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      if (isDev || _iosProdNativeId.isEmpty) {
+      if (!useRealAds || _iosProdNativeId.isEmpty) {
         return 'ca-app-pub-3940256099942544/3986624511'; // Google iOS Test Native ID
       }
       return _iosProdNativeId;
     }
-    return isDev
+    return !useRealAds
         ? 'ca-app-pub-3940256099942544/2247696110' // Google Android Test Native ID
         : _androidProdNativeId; // FırsatKolik Gerçek Android Native ID
   }
 
   /// Ödüllü Reklam (Rewarded) Birimi ID'si
   static String get rewardedAdUnitId {
-    final isDev = kDebugMode || !isProductionFlavor;
+    final useRealAds = useProductionAdMobUnits && isProductionFlavor && !kDebugMode;
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       const iosProdId = String.fromEnvironment(
         'ADMOB_REWARDED_IOS',
         defaultValue: 'ca-app-pub-6853997017739651/2723583797', // FırsatKolik Prod iOS Rewarded ID
       );
-      return isDev
+      return !useRealAds
           ? 'ca-app-pub-3940256099942544/1712485313' // Google iOS Test Rewarded ID
           : iosProdId;
     }
@@ -206,7 +217,7 @@ class DefaultFirebaseOptions {
       'ADMOB_REWARDED_ANDROID',
       defaultValue: 'ca-app-pub-6853997017739651/9218593979', // FırsatKolik Prod Android Rewarded ID
     );
-    return isDev
+    return !useRealAds
         ? 'ca-app-pub-3940256099942544/5224354917' // Google Android Test Rewarded ID
         : androidProdId;
   }
