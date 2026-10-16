@@ -206,7 +206,6 @@
         }
       ]
     },
-
     {
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
@@ -514,66 +513,6 @@
         {
           "fieldPath": "active",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "conversations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "participants",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "adminToUserMessages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "kuponlar",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "durum",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "kaynakTipi",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "olusturulmaTarihi",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "kuponlar",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "durum",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "olusturulmaTarihi",
-          "order": "DESCENDING"
         }
       ]
     },
