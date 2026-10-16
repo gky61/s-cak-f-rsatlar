@@ -37,17 +37,30 @@ class KatalogListesiPage extends StatefulWidget {
 }
 
 class _KatalogListesiPageState extends State<KatalogListesiPage> {
-  late final Stream<QuerySnapshot> _kataloglarStream;
+  late Stream<QuerySnapshot> _kataloglarStream;
   KatalogSortOption _currentSort = KatalogSortOption.defaultNewest;
 
   @override
   void initState() {
     super.initState();
+    _initStream();
+  }
+
+  void _initStream() {
+    final cleanCode = widget.magazaKodu.toLowerCase().trim();
     _kataloglarStream = FirebaseFirestore.instance
         .collection('kataloglar')
-        .where('magazaKodu', isEqualTo: widget.magazaKodu)
+        .where('magazaKodu', isEqualTo: cleanCode)
         .limit(50)
         .snapshots();
+  }
+
+  Future<void> _refreshCatalogs() async {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _initStream();
+    });
+    await Future.delayed(const Duration(milliseconds: 300));
   }
 
   String _formatDateRange(DateTime start, DateTime end) {
@@ -179,23 +192,70 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
           }
 
           if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Bir hata oluştu: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
+            debugPrint('❌ [KatalogListesiPage] Error loading catalogs: ${snapshot.error}');
+            return RefreshIndicator(
+              onRefresh: _refreshCatalogs,
+              color: AppTheme.primary,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.wifi_off_rounded,
+                              size: 48,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Kataloglar yüklenirken bir sorun oluştu.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _refreshCatalogs,
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Tekrar Dene'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             );
           }
 
-          // Parse and filter active catalogs
+          // Parse and filter active catalogs (day-level precision)
           final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
           final catalogs = snapshot.data?.docs
                   .map((doc) => Katalog.fromFirestore(doc))
-                  .where((catalog) => 
-                      catalog.bitisTarihi.isAfter(now) || 
-                      catalog.bitisTarihi.year == now.year && 
-                      catalog.bitisTarihi.month == now.month && 
-                      catalog.bitisTarihi.day == now.day)
+                  .where((catalog) {
+                    final expiry = DateTime(
+                      catalog.bitisTarihi.year,
+                      catalog.bitisTarihi.month,
+                      catalog.bitisTarihi.day,
+                    );
+                    return !expiry.isBefore(today);
+                  })
                   .toList() ?? [];
 
           // Sort catalogs dynamically
@@ -324,9 +384,13 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
                 }
               }
 
-              return CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: slivers,
+              return RefreshIndicator(
+                onRefresh: _refreshCatalogs,
+                color: AppTheme.primary,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  slivers: slivers,
+                ),
               );
             },
           );
@@ -869,60 +933,72 @@ class _KatalogListesiPageState extends State<KatalogListesiPage> {
 
   // --- EMPTY CATALOG STATE ---
   Widget _buildEmptyCatalogState(bool isDark) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(
-                color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.menu_book_rounded,
-                size: 38,
-                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
+    return RefreshIndicator(
+      onRefresh: _refreshCatalogs,
+      color: AppTheme.primary,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppTheme.darkSurface : const Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.menu_book_rounded,
+                        size: 38,
+                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Aktif Broşür Bulunmuyor',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${widget.magazaAdi} için şu anda yayında olan güncel bir kampanya broşürü bulunamadı.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                      label: const Text(
+                        'Diğer Mağazalara Bak',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Aktif Broşür Bulunmuyor',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: isDark ? AppTheme.darkTextPrimary : const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${widget.magazaAdi} için şu anda yayında olan güncel bir kampanya broşürü bulunamadı.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 18),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back_rounded, size: 16),
-              label: const Text(
-                'Diğer Mağazalara Bak',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

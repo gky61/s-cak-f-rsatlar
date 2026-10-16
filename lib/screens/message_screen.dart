@@ -88,8 +88,10 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   bool _isSending = false;
   bool _isBlockedByMe = false;
   bool _isMuted = false;
-  int _messageLimit = 60;
   bool _isLoadingMore = false;
+  bool _hasMoreOlderMessages = true;
+  final List<Message> _olderMessages = [];
+  DateTime? _lastOldestStreamMessageTime;
 
   final Set<String> _markedAsRead = {};
   Message? _replyingToMessage;
@@ -253,18 +255,15 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       _messagesStream = FirebaseFirestore.instance
           .collection('adminToUserMessages')
           .where('userId', isEqualTo: currentUserId)
+          .orderBy('createdAt', descending: true)
           .limit(100)
           .snapshots()
-          .map((snap) {
-        final list = snap.docs.map((d) => Message.fromAdminFirestore(d)).toList();
-        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return list;
-      });
+          .map((snap) => snap.docs.map((d) => Message.fromAdminFirestore(d)).toList());
     } else if (currentUserId != null) {
       _messagesStream = _firestoreService.getConversationStream(
         currentUserId,
         widget.otherUserId,
-        limit: _messageLimit,
+        limit: 40,
       );
     } else {
       _messagesStream = Stream.value([]);
@@ -300,16 +299,57 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     }
 
     // reverse: true -> maxScrollExtent en üst (en eski mesajlar) demektir.
+    // FS-MSG-06: Two-Tier Hybrid Pagination - Stream ASLA kapatılıp yeniden başlatılmaz!
     if (currentOffset > _scrollController.position.maxScrollExtent - 250 &&
         !_isLoadingMore &&
-        _lastKnownMessageCount >= _messageLimit) {
-      _isLoadingMore = true;
-      _messageLimit += 40;
-      _updateMessagesStream();
-      setState(() {});
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _isLoadingMore = false);
-      });
+        _hasMoreOlderMessages &&
+        !widget.isAdminMessage) {
+      _loadMoreOlderMessages();
+    }
+  }
+
+  Future<void> _loadMoreOlderMessages() async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null || _isLoadingMore || !_hasMoreOlderMessages) return;
+
+    final oldestCreatedAt = _olderMessages.isNotEmpty
+        ? _olderMessages.last.createdAt
+        : _lastOldestStreamMessageTime;
+
+    if (oldestCreatedAt == null) return;
+
+    setState(() => _isLoadingMore = true);
+
+    try {
+      final olderBatch = await _firestoreService.loadOlderMessages(
+        currentUserId: currentUserId,
+        otherUserId: widget.otherUserId,
+        oldestCreatedAt: oldestCreatedAt,
+        limit: 30,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+          if (olderBatch.isEmpty || olderBatch.length < 30) {
+            _hasMoreOlderMessages = false;
+          }
+          if (olderBatch.isNotEmpty) {
+            final existingIds = _olderMessages.map((m) => m.id).toSet();
+            for (final msg in olderBatch) {
+              if (!existingIds.contains(msg.id)) {
+                _olderMessages.add(msg);
+                existingIds.add(msg.id);
+              }
+            }
+            _olderMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+      }
     }
   }
 
@@ -706,7 +746,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                         ],
                       ),
                       content: Text(
-                        '${widget.otherUserName} ile olan tüm sohbeti kalıcı olarak silmek istediğinize emin misiniz?',
+                        '${widget.otherUserName} ile olan sohbet geçmişinizi temizlemek istediğinize emin misiniz?',
                         style: const TextStyle(fontSize: 13.5),
                       ),
                       actions: [
@@ -718,13 +758,13 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: () => Navigator.pop(c, true),
-                          child: const Text('Sil'),
+                          child: const Text('Temizle'),
                         ),
                       ],
                     ),
                   );
                   if (confirm == true && mounted && context.mounted) {
-                    await _firestoreService.deleteConversationPermanently(currentUserId, widget.otherUserId);
+                    await _firestoreService.clearConversationForUser(currentUserId, widget.otherUserId);
                     if (mounted) {
                       Navigator.pop(context); // MessageScreen'den çıkış yapıp mesaj listesine dön
                     }
@@ -973,12 +1013,17 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     }
 
                     final serverMessages = snapshot.data ?? [];
-                    if (_lastKnownMessageCount > 0 &&
-                        serverMessages.length > _lastKnownMessageCount &&
-                        _showScrollToBottomBtn) {
-                      _newIncomingCount += (serverMessages.length - _lastKnownMessageCount);
+                    if (serverMessages.isNotEmpty) {
+                      final oldestInServer = serverMessages.reduce((a, b) => a.createdAt.isBefore(b.createdAt) ? a : b).createdAt;
+                      _lastOldestStreamMessageTime = oldestInServer;
                     }
-                    _lastKnownMessageCount = serverMessages.length;
+
+                    if (_lastKnownMessageCount > 0 &&
+                        (serverMessages.length + _olderMessages.length) > _lastKnownMessageCount &&
+                        _showScrollToBottomBtn) {
+                      _newIncomingCount += ((serverMessages.length + _olderMessages.length) - _lastKnownMessageCount);
+                    }
+                    _lastKnownMessageCount = serverMessages.length + _olderMessages.length;
 
                     // Okundu olarak işaretle (Post Frame Callback ile güvenli)
                     if (serverMessages.isNotEmpty) {
@@ -1012,9 +1057,15 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
 
                     // 2. Birleştirme (Merging) ve İkincil Tekilleştirme Koruması:
                     final Map<String, Message> mergedMap = {};
+                    // Tier 2: Eski statik mesajlar (Sayfalama ile çekilen arşiv)
+                    for (var m in _olderMessages) {
+                      mergedMap[m.id] = m;
+                    }
+                    // Tier 1: Gerçek zamanlı akış mesajları (En son 40 mesaj)
                     for (var m in serverMessages) {
                       mergedMap[m.id] = m;
                     }
+                    // Tier 0: Tohum ve optimistik mesajlar
                     for (var m in _optimisticMessages) {
                       final isIncomingSeed = m.senderId == widget.otherUserId || m.id.startsWith('incoming_');
                       if (isIncomingSeed) {
@@ -1687,7 +1738,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                 GestureDetector(
                   onLongPress: () => _showMessageOptionsModal(message, isMe),
                   onDoubleTap: () {
-                    if (widget.isAdminMessage) return;
+                    if (widget.isAdminMessage || message.isDeletedForEveryone) return;
                     HapticFeedback.lightImpact();
                     _showExtendedEmojiPicker(message);
                   },
@@ -1722,39 +1773,64 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                     child: Column(
                       crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                       children: [
-                        // Alıntı Önizleme Bloğu
-                        if (message.replyToSenderName != null && message.replyToText != null)
-                          _buildQuotedBlock(message.replyToSenderName!, message.replyToText!, isMe, isDark, primaryColor),
-
-                        // Gömülü Fırsat Kartı (Deal Context veya Paylaşılan Link)
-                        if (message.dealId != null && message.dealId!.isNotEmpty)
-                          _buildEmbeddedDealCard(
-                            dealId: message.dealId!,
-                            dealTitle: message.dealTitle ?? 'Fırsat',
-                            dealImageUrl: message.dealImageUrl,
-                            dealPrice: message.dealPrice,
-                            dealStore: message.dealStore,
-                            isMe: isMe,
-                            isDark: isDark,
-                            primaryColor: primaryColor,
-                          )
-                        else
-                          _buildParsedDealLinkPreview(message.text, isMe, isDark, primaryColor),
-
-                        // Mesaj Metni (Keskin, net ve yüksek kontrastlı)
-                        Text(
-                          message.text,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            height: 1.38,
-                            fontWeight: FontWeight.w500,
-                            color: isMe ? myTextColor : otherTextColor,
-                            letterSpacing: 0.1,
+                        if (message.isDeletedForEveryone) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.block_outlined,
+                                  size: 14,
+                                  color: isMe ? Colors.white70 : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Bu mesaj silindi',
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontStyle: FontStyle.italic,
+                                    color: isMe ? Colors.white70 : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        ] else ...[
+                          // Alıntı Önizleme Bloğu
+                          if (message.replyToSenderName != null && message.replyToText != null)
+                            _buildQuotedBlock(message.replyToSenderName!, message.replyToText!, isMe, isDark, primaryColor),
 
-                        // Rich Link Preview
-                        _buildLinkPreviewSection(message.text, isMe, isDark, surfaceColor, primaryColor),
+                          // Gömülü Fırsat Kartı (Deal Context veya Paylaşılan Link)
+                          if (message.dealId != null && message.dealId!.isNotEmpty)
+                            _buildEmbeddedDealCard(
+                              dealId: message.dealId!,
+                              dealTitle: message.dealTitle ?? 'Fırsat',
+                              dealImageUrl: message.dealImageUrl,
+                              dealPrice: message.dealPrice,
+                              dealStore: message.dealStore,
+                              isMe: isMe,
+                              isDark: isDark,
+                              primaryColor: primaryColor,
+                            )
+                          else
+                            _buildParsedDealLinkPreview(message.text, isMe, isDark, primaryColor),
+
+                          // Mesaj Metni (Keskin, net ve yüksek kontrastlı)
+                          Text(
+                            message.text,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              height: 1.38,
+                              fontWeight: FontWeight.w500,
+                              color: isMe ? myTextColor : otherTextColor,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+
+                          // Rich Link Preview
+                          _buildLinkPreviewSection(message.text, isMe, isDark, surfaceColor, primaryColor),
+                        ],
 
                         const SizedBox(height: 4),
 
@@ -1805,7 +1881,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
   }
 
   void _showExtendedEmojiPicker(Message message) {
-    if (widget.isAdminMessage) return;
+    if (widget.isAdminMessage || message.isDeletedForEveryone) return;
     final currentUserId = _authService.currentUser?.uid;
     final myReaction = currentUserId != null ? message.reactions[currentUserId] : null;
 
@@ -1826,6 +1902,8 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     final myReaction = currentUserId != null ? message.reactions[currentUserId] : null;
 
     const quickEmojis = ['👍', '❤️', '🔥', '😂', '😮', '😢'];
+    final isRetracted = message.isDeletedForEveryone;
+    final isWithin15Minutes = DateTime.now().difference(message.createdAt).inMinutes <= 15;
 
     showModalBottomSheet(
       context: context,
@@ -1854,77 +1932,78 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   ),
                 ),
 
-                // Hızlı Emoji Barı (WhatsApp / Telegram Stili)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                  margin: const EdgeInsets.only(bottom: 14),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-                      width: 0.8,
+                // Hızlı Emoji Barı (WhatsApp / Telegram Stili) - Yalnızca silinmemiş mesajlar için
+                if (!isRetracted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                        width: 0.8,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      ...quickEmojis.map((emoji) {
-                        final isSelected = myReaction == emoji;
-                        return Material(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        ...quickEmojis.map((emoji) {
+                          final isSelected = myReaction == emoji;
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                Navigator.pop(ctx);
+                                _toggleReaction(message.id, emoji);
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.2)
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                  border: isSelected
+                                      ? Border.all(color: primaryColor, width: 1.5)
+                                      : null,
+                                ),
+                                child: Text(
+                                  emoji,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        // Daha Fazla Emoji (+) Butonu
+                        Material(
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              HapticFeedback.lightImpact();
                               Navigator.pop(ctx);
-                              _toggleReaction(message.id, emoji);
+                              _showExtendedEmojiPicker(message);
                             },
                             borderRadius: BorderRadius.circular(20),
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: isSelected
-                                    ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.2)
-                                    : Colors.transparent,
+                                color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
                                 shape: BoxShape.circle,
-                                border: isSelected
-                                    ? Border.all(color: primaryColor, width: 1.5)
-                                    : null,
                               ),
-                              child: Text(
-                                emoji,
-                                style: const TextStyle(fontSize: 24),
+                              child: Icon(
+                                Icons.add_rounded,
+                                size: 24,
+                                color: isDark ? Colors.white70 : const Color(0xFF475569),
                               ),
-                            ),
-                          ),
-                        );
-                      }),
-                      // Daha Fazla Emoji (+) Butonu
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            _showExtendedEmojiPicker(message);
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.add_rounded,
-                              size: 24,
-                              color: isDark ? Colors.white70 : const Color(0xFF475569),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
 
                 // Mesaj Önizleme Kutusu
                 Container(
@@ -1934,77 +2013,114 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
                   decoration: BoxDecoration(
                     color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border(left: BorderSide(color: primaryColor, width: 3.5)),
+                    border: Border(left: BorderSide(color: isRetracted ? Colors.grey : primaryColor, width: 3.5)),
                   ),
                   child: Text(
-                    message.text,
+                    isRetracted ? 'Bu mesaj silindi' : message.text,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
                       color: isDark ? Colors.grey[300] : const Color(0xFF334155),
-                      fontStyle: FontStyle.italic,
+                      fontStyle: isRetracted ? FontStyle.italic : FontStyle.normal,
                     ),
                   ),
                 ),
 
                 // İşlem Seçenekleri
-                // 1. Metni Kopyala
-                ListTile(
-                  leading: const Icon(Icons.copy_rounded, size: 20),
-                  title: const Text('Metni Kopyala', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                  dense: true,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Clipboard.setData(ClipboardData(text: message.text));
-                    HapticFeedback.lightImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Mesaj panoya kopyalandı 📋'),
-                        duration: Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                ),
-
-                // 2. Yanıtla
-                ListTile(
-                  leading: Icon(Icons.reply_rounded, color: primaryColor, size: 20),
-                  title: Text(
-                    'Yanıtla',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: primaryColor),
-                  ),
-                  dense: true,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _replyingToMessage = message;
-                    });
-                    _focusNode.requestFocus();
-                  },
-                ),
-
-                // 3. Mesajı Sil (Her iki taraftan kalıcı)
-                if (isMe)
+                // 1. Metni Kopyala (Yalnızca silinmemiş mesajlar için)
+                if (!isRetracted)
                   ListTile(
-                    leading: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                    title: const Text(
-                      'Mesajı Sil',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.red),
+                    leading: const Icon(Icons.copy_rounded, size: 20),
+                    title: const Text('Metni Kopyala', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Clipboard.setData(ClipboardData(text: message.text));
+                      HapticFeedback.lightImpact();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Mesaj panoya kopyalandı 📋'),
+                          duration: Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                  ),
+
+                // 2. Yanıtla (Yalnızca silinmemiş mesajlar için)
+                if (!isRetracted)
+                  ListTile(
+                    leading: Icon(Icons.reply_rounded, color: primaryColor, size: 20),
+                    title: Text(
+                      'Yanıtla',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: primaryColor),
                     ),
                     dense: true,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     onTap: () {
                       Navigator.pop(ctx);
-                      _deleteMessagePermanently(message);
+                      setState(() {
+                        _replyingToMessage = message;
+                      });
+                      _focusNode.requestFocus();
                     },
                   ),
 
-                // 4. Şikayet Et (Karşı tarafın mesajı ise)
-                if (!isMe)
+                // 3. Benden Sil (Soft Delete - Masum tarafın sohbetini veya delil zincirini bozmaz)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                  title: const Text(
+                    'Benden Sil',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.redAccent),
+                  ),
+                  subtitle: const Text(
+                    'Bu mesaj yalnızca sizin sohbetinizden gizlenir.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  dense: true,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _softDeleteMessage(message);
+                  },
+                ),
+
+                // 4. Herkesten Geri Çek (15 Dakika kuralı & Kanıt Karartmayı Önleyen Dünya Standardı Retract)
+                if (isMe && !isRetracted)
+                  ListTile(
+                    leading: Icon(
+                      Icons.undo_rounded,
+                      color: isWithin15Minutes ? Colors.red : Colors.grey,
+                      size: 20,
+                    ),
+                    title: Text(
+                      'Herkesten Geri Çek',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isWithin15Minutes ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                    subtitle: Text(
+                      isWithin15Minutes
+                          ? 'Mesaj her iki taraftan geri çekilir (15 dk sınırı)'
+                          : '15 dakika dolduğu için geri çekilemez',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    onTap: isWithin15Minutes
+                        ? () {
+                            Navigator.pop(ctx);
+                            _retractMessageForEveryone(message);
+                          }
+                        : null,
+                  ),
+
+                // 5. Şikayet Et (Karşı tarafın mesajı ise)
+                if (!isMe && !isRetracted)
                   ListTile(
                     leading: const Icon(Icons.flag_outlined, color: Colors.orange, size: 20),
                     title: const Text(
@@ -2035,21 +2151,51 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     );
   }
 
-  Future<void> _deleteMessagePermanently(Message message) async {
+  Future<void> _softDeleteMessage(Message message) async {
+    final currentUserId = _authService.currentUser?.uid;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+
+    try {
+      await _firestoreService.softDeleteMessageForUser(message.id, currentUserId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mesaj sohbetinizden gizlendi'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mesaj gizlenirken bir hata oluştu'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _retractMessageForEveryone(Message message) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Mesajı Sil'),
-        content: const Text('Bu mesajı silmek istediğinize emin misiniz?'),
+        title: const Text('Mesajı Herkesten Geri Çek'),
+        content: const Text(
+          'Bu mesaj her iki taraftan da geri çekilecek ve yerine "Bu mesaj silindi" ifadesi yer alacaktır. Onaylıyor musunuz?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('İptal'),
+            child: const Text('Vazgeç'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Sil'),
+            child: const Text('Geri Çek'),
           ),
         ],
       ),
@@ -2061,7 +2207,11 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Mesaj silindi' : 'Mesaj silinirken hata oluştu'),
+            content: Text(
+              success
+                  ? 'Mesaj herkesten geri çekildi'
+                  : 'Mesaj 15 dakikadan eski olduğu için geri çekilemedi',
+            ),
             backgroundColor: success ? Colors.green : Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -2077,7 +2227,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
     Color primaryColor,
     String? currentUserId,
   ) {
-    if (message.reactions.isEmpty) return const SizedBox.shrink();
+    if (message.isDeletedForEveryone || message.reactions.isEmpty) return const SizedBox.shrink();
 
     final Map<String, int> counts = {};
     for (var emoji in message.reactions.values) {

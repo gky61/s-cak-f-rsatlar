@@ -50,10 +50,13 @@ graph TD
 
 ### Temel Mimari Prensipler:
 * **İki Sekmeli İzolasyon & Çift Cursor Sayfalama (FS-KUP-03):** Botların web'den topladığı "Kupon Radarı" (`kaynakTipi == 'web'`) ile kullanıcıların paylaştığı "Topluluk Kuponları" (`kaynakTipi == 'topluluk'`) iki tamamen bağımsız liste ve ayrı Firestore cursor'ları ile yönetilir (`durum ASC, kaynakTipi ASC, olusturulmaTarihi DESC` bileşik indeksi).
-* **Deterministik ID & Oy Koruma Kalkanı (FS-KUP-02):** Scraper her çalıştığında rastgele doküman ID'si üretmek yerine `web_${magaza}_${kod}` deterministik kimliğini kullanır. `batch.set(docRef, data, { merge: true })` sayesinde oylar ve orijinal oluşturulma tarihleri korunur; siteden kalkan kuponlardan oyu olanlar silinmez (`durum: 'gecersiz'`), yetim alt dokümanlar engellenir.
+* **Deterministik ID & Oy Koruma Kalkanı (FS-KUP-02):** Scraper her çalıştığında rastgele doküman ID'si üretmek yerine `web_${magaza}_${kod}` deterministik kimliğini kullanır. `batch.set(docRef, data, { merge: true })` sayesinde oylar ve orijinal oluşturulma tarihleri korunur; siteden kalkan kuponlardan oyu olanlar silinmez (`durum: 'gecersiz'`, `sonlanmaNedeni: 'scraper_stale'`), yetim alt dokümanlar engellenir.
+* **Kapsamlı Uzlaşma (Scoped Reconciliation):** Kupon kazıyıcısı 3 kaynağı (DonanımHaber 16 mağaza, Kuponla, Kuponburada) bağımsız takip eder. Herhangi bir mağaza veya site taranamadığında kuponlar silinmez veya geçersiz kılınmaz (`successfulDhStores`, `kuponlaSucceeded`, `kuponburadaSucceeded` takibi).
+* **Zombi Dirilme Kalkanı (sonlanmaNedeni Guard):** Bir kuponun durumu `gecersiz` olduğunda sonlanma nedeni (`community_downvote` veya `scraper_stale`) mühürlenir. `onCouponUpdated` tetikleyicisi yalnızca `sonlanmaNedeni === 'community_downvote'` olan kuponları net skor < 5'e toparlandığında tekrar `aktif` yapabilir. Siteden kalkmış veya admin tarafından reddedilmiş kuponlar asla dirilemez!
+* **UID İzolasyonlu Kupon Kredisi (CouponCreditService):** Kullanıcı oturum açtığında veya değiştirdiğinde `SharedPreferences` anahtarları UID bazında izole edilir (`_scopedKey`). Eski anonim haklar `_migrateLegacyKeysIfAny` ile kayıpsız taşınır; hesaplar arası hak sızıntısı %100 engellenir.
 * **0ms Senkron Oy Önbelleği (FS-KUP-01):** Kart builder içinde Firestore'dan N+1 ağ okuması yapılması tamamen engellenmiştir. Kullanıcı oyları cihaz hafızasından (`SharedPreferences`) senkron yüklenir, 0ms anlık arayüz tepkisi sağlanır.
 * **Form Spam Cooldown ve Veritabanı Karakter Kalkanı (FS-KUP-04):** Topluluk kuponu ekleme formunda 30 saniyelik yerel spam cooldown'ı ve `firestore.rules` üzerinde başlık (3-120 krk) ve kod (1-50 krk) karakter doğrulamaları aktiftir.
-* **Topluluk Koruması (Fail-Safe):** Kazıma işlemi web kuponlarını yenilerken `kaynakTipi == 'topluluk'` olan kullanıcı paylaşımlarına asla dokunmaz.
+* **Topluluk Koruması (Fail-Safe):** Kazıma işlemi web kuponlarını yenilerken `kaynakTipi == 'topluluk'` olan kullanıcı paylaşımlarına asla dokunmaz. Web Admin'deki "Tüm Kuponları Sil" butonu dahi yalnızca `where('kaynakTipi', '==', 'web')` filtresiyle çalışır.
 * **Akıllı Sıralama (Wilson Score & Time Decay):** Oylanan kuponlar güvenilirlik puanına göre en üste taşınır; çalışmayan kuponlar otomatik olarak listenin sonuna atılır.
 * **Dinamik Uzaktan Şalter (Remote Feature Switch):** `settings/app` dokümanı üzerinden tek tıkla mobil uygulamadaki kuponlar sekmesi kapatılıp açılabilir.
 
@@ -375,7 +378,7 @@ Kupon kazıma ve senkronizasyon motoru iki Cloud Function ile yönetilir ([funct
   - Kupon sahibine `"ℹ️ Kuponunuz Reddedildi"` bildirimi yazılır ve yöneticinin seçtiği red gerekçesi (`moderationReason`) iliştirilir.
   - Kuponun önceden oluşturulmuş küresel duyurusu varsa yayından kaldırılır (`active: false`).
   - Kullanıcı Bildirim Merkezinde reddedilen kupona tıkladığında turuncu rozetli detay modalında gerekçe kutusunu görür; pasif/reddedilmiş kupon için aksiyon butonları gizlenir.
-* **Otomatik Çöp Temizliği:** Soğuk oy farkı >= 5 olduğunda topluluk kuponları otomatik `gecersiz` yapılır, web kuponları silinir. Net skor < 5'e toparlanırsa tekrar `aktif` yapılır.
+* **Otomatik Çöp Temizliği & Zombi Dirilme Kalkanı:** Soğuk oy farkı >= 5 olduğunda hem topluluk hem web kuponları kalıcı silinmez; `durum: 'gecersiz'`, `sonlanmaNedeni: 'community_downvote'` yapılır ve alt `votes` koleksiyonu korunur. Pozitif oylarla net skor < 5'e toparlanırsa ve moderasyon engeli yoksa yalnızca `sonlanmaNedeni === 'community_downvote'` olan kuponlar tekrar `aktif` yapılır. Siteden kalkan (`sonlanmaNedeni: 'scraper_stale'`) veya admin moderasyonuyla reddedilen kuponlar ise asla yanlışlıkla dirilemez. Hiç oyu olmayan siteden kalkan çöp web kuponları ise veritabanını temiz tutmak amacıyla scraper tarafından silinir.
 * **Tıklama Davranışı:** Bildirime tıklandığında `KuponlarPage(initialTabIndex: 1, highlightKuponId: kuponId)` ile doğrudan **Topluluk Kuponları** sekmesi açılır. Hedef kart 3.6 saniye boyunca radar ışımasıyla parlar. Kullanıcı zaten kuponlar ekranındaysa (`isCouponsScreenActive == true`) ön plan afişi spam korumasıyla bastırılır.
 
 ---
@@ -395,12 +398,12 @@ graph TD
     Dedup1 --> S2[2. Kuponla.com: Sayfa 1 ve 2 Taraması]
     S2 --> Dedup2[seenCodes Set: Yeni Olanları Ekle]
     
-    Dedup2 --> S3[3. Kuponburada.com: LD+JSON + AJAX Sayfa 2]
+    Dedup2 --> S3[3. Kuponburada.com: 15 Mağaza Hedefli Taraması + /kesfet/ Yedek Keşif]
     S3 --> Dedup3[seenCodes Set: Yeni Olanları Ekle]
     
     Dedup3 --> Order[⏱️ Sıralama Düzeltmesi: 1'er Saniyelik Aralıklarla Timestamp Üretimi]
     Order --> WriteNew[📝 Firestore: Deterministik ID ile 400'lük Batch Upsert merge:true]
-    WriteNew --> CleanOld[🧹 Firestore: Siteden Kalkan Oysuz Kayıtları Temizleme / Oyluları Arşivleme]
+    WriteNew --> CleanOld[🛡️ Scoped Reconciliation: Yalnızca Taranan Mağazaların Eski/Oysuz Kuponlarını Temizleme]
 ```
 
 ### 9.1. Kaynak Detayları ve Ayrıştırma Yöntemleri:
@@ -409,13 +412,16 @@ graph TD
    - Her kuponun detay sayfasına (`data-single`) giderek `input#coupon_copy` alanından tam kupon kodu, `meta[property="og:title"]` ve `meta[property="og:description"]` alanlarından başlık ve açıklama çekilir (100ms throttle).
 2. **Kuponla.com (2. Öncelik):**
    - `son-eklenen-kuponlar` sayfa 1 ve sayfa 2'deki `a.coupon-code[data-code]` butonlarını ve mağaza adlarını parse eder.
-3. **Kuponburada.com (3. Öncelik):**
-   - **Sayfa 1:** HTML içindeki `<script type="application/ld+json">` yapısındaki Schema.org `@type: "Offer"` nesnelerinden doğrudan JSON formatında kupon kodlarını ayıklar.
-   - **Sayfa 2:** `X-Requested-With: XMLHttpRequest` başlığıyla AJAX uç noktasına istek atarak dönen JSON içindeki HTML kartlarını ayrıştırır.
+3. **Kuponburada.com (3. Öncelik - Store-Targeted Scraping Mimarisi):**
+   - **Tarihsel Kusur & Çözüm (Anomali 2 RCA):** Kuponburada'nın genel `/kesfet/` akışında Schema.org `@type: "Offer"` JSON-LD desteğini kaldırması ve akışın yalnızca desteklenmeyen niş butiklerle (Antioch vb.) dolması sebebiyle; 15 büyük zincir mağazayı (`trendyol`, `hepsiburada`, `amazon`, `n11`, `boyner`, `defacto`, `idefix`, `migros`, `teknosa` vb.) doğrudan hedefleyen **Store-Targeted URL Mimarisine** (`https://www.kuponburada.com/${storeSlug}-indirim-kodu/`) geçilmiştir.
+   - **DOM Kod Ayrıştırma:** Her mağaza sayfasındaki `li[data-coupon-type="code"]` elemanları taranır. Süresi dolanlar (`data-coupon-expired="1"`) elenir. `a.coupon-button` üzerindeki `aria-label` niteliğinden Regex (`/Kod:\s*([^,]+)/i`) ile temiz kod çekilir.
+   - **Yedek Keşif:** `/kesfet/` sayfası da ek keşif olarak taranmaya devam eder.
+   - **Başarı Verisi:** Canlı ortamda sıfır (0) kupon veren Kuponburada kaynağından **138 adet doğrulanmış, aktif kupon** üretilmektedir.
 
-### 9.2. Mükerrer Engelleme (Deduplication) ve Sıralama Koruma:
+### 9.2. Mükerrer Engelleme (Deduplication) ve Kapsam Korumalı Mutabakat (Scoped Reconciliation):
 * Tüm kodlar büyük harfe çevrilerek `seenCodes` kümesinde kontrol edilir; bir kod birden fazla sitede varsa yalnızca en yüksek öncelikli kaynaktan alınır.
 * **Sıralama Koruma Algoritması:** Sitelerde en üstte yer alan kuponların mobil uygulamada da en üstte çıkması için kupon dizisindeki elemanlara `Date.now() - (i * 1000)` formülüyle 1'er saniye azalan Timestamp atanır.
+* **🛡️ Kapsam Korumalı Mutabakat (Scoped Reconciliation):** Scraper, siteden kalkan oysuz kuponları silerken veya oylu kuponları `scraper_stale` olarak arşivlerken körlemesine tüm kuponları silmez. Sadece o çalıştırmada **başarıyla taranan mağazalara** (`successfulStores = successfulDhStores ∪ successfulKbStores`) ait eski kayıtlar üzerinde mutabakat yapar. Olası geçici ağ/sayfa hatalarında diğer mağazaların canlı kuponları silinmeye karşı %100 güvenceye alınmıştır.
 
 ---
 

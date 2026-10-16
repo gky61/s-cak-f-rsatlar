@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
+import '../models/notification_preferences.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
 import '../widgets/guest_login_bottom_sheet.dart';
 import 'home_screen.dart';
+import 'notification_settings_screen.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -29,6 +31,7 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   static const int maxKeywordLimit = 30;
 
   List<String> _watchKeywords = [];
+  NotificationPreferences? _notificationPreferences;
   StreamSubscription<User?>? _authSub;
   bool _isLoading = true;
   bool _isAdding = false;
@@ -67,9 +70,11 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
   Future<void> _loadKeywords() async {
     try {
       final keywords = await _notificationService.getNotificationKeywords();
+      final prefs = await _notificationService.getNotificationPreferences();
       if (mounted) {
         setState(() {
           _watchKeywords = keywords;
+          _notificationPreferences = prefs;
           _isLoading = false;
         });
       }
@@ -172,6 +177,9 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
       }
     } catch (e) {
       _log('Anahtar kelime çıkarma hatası: $e');
+      if (mounted) {
+        _showSnackBar('Kelime silinirken bir hata oluştu', isError: true);
+      }
     }
   }
 
@@ -251,8 +259,17 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
 
     HapticFeedback.heavyImpact();
     final copyList = List<String>.from(_watchKeywords);
-    for (final kw in copyList) {
-      await _removeKeyword(kw);
+    setState(() {
+      _watchKeywords.clear();
+    });
+    try {
+      await Future.wait(copyList.map((kw) => _notificationService.removeKeywordSubscription(kw)));
+      if (mounted) {
+        _showSnackBar('🗑️ Tüm anahtar kelimeler temizlendi');
+      }
+    } catch (e) {
+      _log('Tüm kelimeleri temizleme hatası: $e');
+      _loadKeywords();
     }
   }
 
@@ -468,6 +485,72 @@ class _KeywordTrackingScreenState extends State<KeywordTrackingScreen> {
                               textStyle: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.w700),
                             ),
                             child: const Text('Giriş Yap'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (_notificationPreferences != null &&
+                      (!_notificationPreferences!.pushMasterEnabled ||
+                          !_notificationPreferences!.keywordNotificationsEnabled)) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: isDark ? 0.35 : 0.5),
+                          width: 1.1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.notifications_off_outlined, color: Colors.amber.shade800, size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Kelime Bildirimleriniz Kapalı',
+                                  style: GoogleFonts.roboto(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                    color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Kelimeleriniz radara kaydedildi ancak telefonunuza bildirim gelebilmesi için Bildirim Ayarlarından kelime bildirimlerini açmanız gerekir.',
+                                  style: GoogleFonts.roboto(
+                                    fontSize: 11,
+                                    color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()),
+                              );
+                              if (!mounted) return;
+                              _loadKeywords();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amber.shade800,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              textStyle: GoogleFonts.roboto(fontSize: 11, fontWeight: FontWeight.w700),
+                            ),
+                            child: const Text('Ayarları Aç'),
                           ),
                         ],
                       ),

@@ -92,9 +92,25 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && (userId() == targetUserId || isAdmin());
       }
       
-      // Kullanıcı bildirim tercihleri
+      // Kullanıcı bildirim tercihleri (FS-PREF-14: Alan Doğrulama ve Storage Bloat Kalkanı)
       match /notificationPreferences/{documentId} {
-        allow read, write: if isAuthenticated() && userId() == targetUserId;
+        allow read, delete: if isAuthenticated() && userId() == targetUserId;
+        allow create, update: if canWrite() && userId() == targetUserId &&
+          request.resource.data.keys().hasOnly([
+            'pushMasterEnabled', 'dealNotificationsEnabled', 'categoryNotificationsEnabled',
+            'keywordNotificationsEnabled', 'communityNotificationsEnabled',
+            'submissionStatusNotificationsEnabled', 'marketingNotificationsEnabled',
+            'quietHoursEnabled', 'quietHoursStart', 'quietHoursEnd', 'timezone',
+            'updatedAt', 'schemaVersion', 'lastStates', 'dismissedAnnouncementIds', 'readAnnouncementIds'
+          ]) &&
+          (!('pushMasterEnabled' in request.resource.data) || request.resource.data.pushMasterEnabled is bool) &&
+          (!('dealNotificationsEnabled' in request.resource.data) || request.resource.data.dealNotificationsEnabled is bool) &&
+          (!('categoryNotificationsEnabled' in request.resource.data) || request.resource.data.categoryNotificationsEnabled is bool) &&
+          (!('keywordNotificationsEnabled' in request.resource.data) || request.resource.data.keywordNotificationsEnabled is bool) &&
+          (!('communityNotificationsEnabled' in request.resource.data) || request.resource.data.communityNotificationsEnabled is bool) &&
+          (!('submissionStatusNotificationsEnabled' in request.resource.data) || request.resource.data.submissionStatusNotificationsEnabled is bool) &&
+          (!('marketingNotificationsEnabled' in request.resource.data) || request.resource.data.marketingNotificationsEnabled is bool) &&
+          (!('quietHoursEnabled' in request.resource.data) || request.resource.data.quietHoursEnabled is bool);
       }
     }
     
@@ -192,6 +208,28 @@ service cloud.firestore {
     }
     
     // ========================================
+    // CONVERSATIONS COLLECTION (Inbox & Aggregation)
+    // ========================================
+    match /conversations/{conversationId} {
+      // Katılımcı olan kullanıcı veya admin okuyabilir
+      allow read: if isAuthenticated() && 
+                  (resource == null ||
+                   (resource.data.participants != null && userId() in resource.data.participants) ||
+                   isAdmin());
+      
+      // Mesaj gönderildiğinde veya okundu/temizlendi işaretlendiğinde katılımcılar veya admin yazabilir
+      allow create: if canWrite() && 
+                    ((request.resource.data.participants != null && userId() in request.resource.data.participants) || isAdmin());
+      allow update: if canWrite() && 
+                    ((resource.data.participants != null && userId() in resource.data.participants) ||
+                     (request.resource.data.participants != null && userId() in request.resource.data.participants) ||
+                     isAdmin());
+      
+      // Sohbet üst dokümanını fiziksel olarak yalnızca Admin silebilir
+      allow delete: if isAdmin();
+    }
+
+    // ========================================
     // MESSAGES COLLECTION (User-to-User)
     // ========================================
     match /messages/{messageId} {
@@ -203,24 +241,41 @@ service cloud.firestore {
                    (resource.data.participants != null && userId() in resource.data.participants) ||
                    isAdmin());
       
-      // Giriş yapmış kullanıcılar mesaj gönderilebilir; admin herhangi bir gönderen adına simüle edebilir
-      allow create: if canWrite() && (request.resource.data.senderId == userId() || isAdmin());
+      // Mesaj oluşturma: gönderen kullanıcı kimliği doğrulanmalı, metin boyutu sınırlı olmalı (max 4000 karakter) ve alıcı engellememiş olmalı
+      allow create: if canWrite() && 
+                    (isAdmin() || 
+                     (request.resource.data.senderId == userId() &&
+                      request.resource.data.text is string &&
+                      request.resource.data.text.size() <= 4000 &&
+                      request.resource.data.receiverId is string &&
+                      request.resource.data.receiverId != userId() &&
+                      (!exists(/databases/$(database)/documents/users/$(request.resource.data.receiverId)) ||
+                       !(userId() in get(/databases/$(database)/documents/users/$(request.resource.data.receiverId)).data.get('blockedUsers', [])))));
       
-      // Alıcı veya gönderen sadece tepki (reactions), okundu durumu (isRead, readAt) veya silme referansı (deletedBy) güncelleyebilir.
-      // Mesaj metni veya gönderen/alıcı bilgileri asla sonradan değiştirilemez!
+      // Güncelleme:
+      // 1. Admin her şeyi güncelleyebilir.
+      // 2. Geri Çekme (Retract - FS-MSG-13): Sadece gönderen, mesaj tarihinden itibaren en fazla 15 dakika içinde (request.time denetimi)
+      //    isDeletedForEveryone true ve metin 'Bu mesaj silindi' yapılarak; kimlik ve diğer veriler asla değiştirilemez.
+      // 3. Normal güncelleme (FS-MSG-12): Alıcı veya gönderen; KESİN BEYAZ LİSTE ile sadece
+      //    okundu (isRead, isReadByAdmin, readAt), tepki (reactions), benden sil (deletedBy) güncelleyebilir.
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (
+          resource.data.senderId == userId() &&
+          request.resource.data.isDeletedForEveryone == true &&
+          request.resource.data.text == 'Bu mesaj silindi' &&
+          request.time <= resource.data.createdAt + duration.value(15, 'm') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDeletedForEveryone', 'text', 'dealId', 'dealTitle', 'dealImageUrl', 'dealPrice', 'dealStore', 'reactions', 'deletedAt'])
+        ) ||
+        (
           (resource.data.receiverId == userId() || resource.data.senderId == userId()) &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['senderId', 'receiverId', 'text', 'content', 'createdAt'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'isReadByAdmin', 'readAt', 'reactions', 'deletedBy'])
         )
       );
       
-      // Gönderen, alıcı veya admin silebilir
-      allow delete: if isAuthenticated() && 
-                    (resource.data.senderId == userId() || 
-                     resource.data.receiverId == userId() || 
-                     isAdmin());
+      // Fiziksel silme: Delil karartma ve karşı tarafın verisini yok etmeyi önlemek için yalnızca Admin yapabilir.
+      // Kullanıcılar soft-delete (deletedBy) veya geri çekme (isDeletedForEveryone) mekanizmasını kullanır.
+      allow delete: if isAdmin();
     }
 
     // ========================================
@@ -345,13 +400,45 @@ service cloud.firestore {
     }
 
     // ========================================
-    // NOTIFICATION SUBSCRIPTIONS
+    // NOTIFICATION SUBSCRIPTIONS (100k PROD-READY)
     // ========================================
     match /notificationSubscriptions/{subscriptionId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == userId() || resource.data.userId == userId());
-      allow write: if canWrite() && 
-                   (request.resource == null || request.resource.data.uid == userId() || request.resource.data.userId == userId()) && 
-                   (resource == null || resource.data.uid == userId() || resource.data.userId == userId());
+      allow read: if isAuthenticated() && (
+        resource == null || 
+        resource.data.uid == userId() || 
+        resource.data.userId == userId() || 
+        isAdmin()
+      );
+
+      // Sıkı şema, uzunluk ve boyut doğrulaması (FS-NOTIF-10 Kalkanı)
+      allow create: if canWrite() && (
+        isAdmin() || (
+          request.resource.data.uid == userId() &&
+          request.resource.data.type in ['keyword', 'category', 'author'] &&
+          request.resource.data.key is string &&
+          request.resource.data.key.size() >= 1 &&
+          request.resource.data.key.size() <= 100 &&
+          request.resource.data.displayValue is string &&
+          request.resource.data.displayValue.size() >= 1 &&
+          request.resource.data.displayValue.size() <= 100 &&
+          request.resource.data.enabled is bool &&
+          subscriptionId.size() <= 160
+        )
+      );
+
+      allow update: if canWrite() && (
+        isAdmin() || (
+          resource.data.uid == userId() &&
+          request.resource.data.uid == userId() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'userId', 'type', 'key']) &&
+          request.resource.data.enabled is bool
+        )
+      );
+
+      allow delete: if isAuthenticated() && (
+        isAdmin() ||
+        (resource != null && (resource.data.uid == userId() || resource.data.userId == userId()))
+      );
     }
     // ========================================
     // KUPONLAR COLLECTION

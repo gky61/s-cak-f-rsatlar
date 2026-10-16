@@ -33,6 +33,21 @@ class NotificationPreferences {
     this.lastStates = const {},
   });
 
+  /// FS-NOTIF-01: Kullanıcının yerel saatine göre şu an sessiz saat aralığında olup olmadığını hesaplar
+  bool isQuietHoursNow([DateTime? now]) {
+    if (!quietHoursEnabled) return false;
+    final currentTime = now ?? DateTime.now();
+    final hour = currentTime.hour;
+    final minute = currentTime.minute;
+    final currentHm = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+    if (quietHoursStart.compareTo(quietHoursEnd) <= 0) {
+      return currentHm.compareTo(quietHoursStart) >= 0 && currentHm.compareTo(quietHoursEnd) < 0;
+    } else {
+      return currentHm.compareTo(quietHoursStart) >= 0 || currentHm.compareTo(quietHoursEnd) < 0;
+    }
+  }
+
   factory NotificationPreferences.fromFirestore(DocumentSnapshot doc) {
     if (!doc.exists || doc.data() == null) {
       return NotificationPreferences.defaultPreferences();
@@ -142,6 +157,57 @@ class NotificationPreferences {
       updatedAt: updatedAt ?? DateTime.now(),
       schemaVersion: schemaVersion ?? this.schemaVersion,
       lastStates: lastStates ?? this.lastStates,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'pushMasterEnabled': pushMasterEnabled,
+      'dealNotificationsEnabled': dealNotificationsEnabled,
+      'categoryNotificationsEnabled': categoryNotificationsEnabled,
+      'keywordNotificationsEnabled': keywordNotificationsEnabled,
+      'communityNotificationsEnabled': communityNotificationsEnabled,
+      'submissionStatusNotificationsEnabled': submissionStatusNotificationsEnabled,
+      'marketingNotificationsEnabled': marketingNotificationsEnabled,
+      'quietHoursEnabled': quietHoursEnabled,
+      'quietHoursStart': quietHoursStart,
+      'quietHoursEnd': quietHoursEnd,
+      'timezone': timezone,
+      'updatedAt': updatedAt.toIso8601String(),
+      'schemaVersion': schemaVersion,
+      'lastStates': lastStates,
+    };
+  }
+
+  factory NotificationPreferences.fromJson(Map<String, dynamic> json) {
+    final rawLastStates = json['lastStates'] as Map<String, dynamic>? ?? {};
+    final Map<String, bool> parsedLastStates = {};
+    rawLastStates.forEach((key, value) {
+      if (value is bool) parsedLastStates[key] = value;
+    });
+
+    DateTime parsedUpdatedAt;
+    try {
+      parsedUpdatedAt = json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : DateTime.now();
+    } catch (_) {
+      parsedUpdatedAt = DateTime.now();
+    }
+
+    return NotificationPreferences(
+      pushMasterEnabled: json['pushMasterEnabled'] ?? true,
+      dealNotificationsEnabled: json['dealNotificationsEnabled'] ?? true,
+      categoryNotificationsEnabled: json['categoryNotificationsEnabled'] ?? false,
+      keywordNotificationsEnabled: json['keywordNotificationsEnabled'] ?? true,
+      communityNotificationsEnabled: json['communityNotificationsEnabled'] ?? true,
+      submissionStatusNotificationsEnabled: json['submissionStatusNotificationsEnabled'] ?? true,
+      marketingNotificationsEnabled: json['marketingNotificationsEnabled'] ?? false,
+      quietHoursEnabled: json['quietHoursEnabled'] ?? true,
+      quietHoursStart: json['quietHoursStart'] ?? "23:00",
+      quietHoursEnd: json['quietHoursEnd'] ?? "08:00",
+      timezone: json['timezone'] ?? "Europe/Istanbul",
+      updatedAt: parsedUpdatedAt,
+      schemaVersion: json['schemaVersion'] ?? 1,
+      lastStates: parsedLastStates,
     );
   }
 }

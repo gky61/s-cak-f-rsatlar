@@ -36,6 +36,9 @@ class Message {
   // Soft deletion ("Benden Sil")
   final List<String> deletedBy;
 
+  // Herkesten Sil (15 dk kuralı ile kalıcı delil silmek yerine geri çekme mühürlemesi)
+  final bool isDeletedForEveryone;
+
   // Emoji Tepkileri (Reactions): {'userId': '❤️', 'userId2': '👍'}
   final Map<String, String> reactions;
 
@@ -74,6 +77,7 @@ class Message {
     this.replyToSenderName,
     this.replyToText,
     this.deletedBy = const [],
+    this.isDeletedForEveryone = false,
     this.reactions = const {},
     this.participants = const [],
     this.status = 'sent',
@@ -82,6 +86,10 @@ class Message {
   // Firestore'dan Message oluşturma
   factory Message.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = (doc.data() as Map<String, dynamic>?) ?? {};
+    return Message.fromMap(data, doc.id);
+  }
+
+  factory Message.fromMap(Map<String, dynamic> data, String id) {
     
     // createdAt parse et
     DateTime createdAt;
@@ -128,7 +136,7 @@ class Message {
             : null);
 
     return Message(
-      id: doc.id,
+      id: id,
       conversationId: conversationId,
       senderId: senderId,
       senderName: data['senderName'] ?? '',
@@ -150,6 +158,7 @@ class Message {
       replyToSenderName: data['replyToSenderName'] as String?,
       replyToText: data['replyToText'] as String?,
       deletedBy: deletedBy,
+      isDeletedForEveryone: data['isDeletedForEveryone'] == true,
       reactions: reactions,
       participants: List<String>.from(data['participants'] ?? [senderId, receiverId].where((s) => s.isNotEmpty)),
       status: 'sent',
@@ -228,6 +237,7 @@ class Message {
       if (replyToSenderName != null) 'replyToSenderName': replyToSenderName,
       if (replyToText != null) 'replyToText': replyToText,
       if (deletedBy.isNotEmpty) 'deletedBy': deletedBy,
+      if (isDeletedForEveryone) 'isDeletedForEveryone': true,
       if (reactions.isNotEmpty) 'reactions': reactions,
     };
   }
@@ -255,6 +265,7 @@ class Message {
     String? replyToSenderName,
     String? replyToText,
     List<String>? deletedBy,
+    bool? isDeletedForEveryone,
     Map<String, String>? reactions,
     List<String>? participants,
     String? status,
@@ -282,6 +293,7 @@ class Message {
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,
       deletedBy: deletedBy ?? this.deletedBy,
+      isDeletedForEveryone: isDeletedForEveryone ?? this.isDeletedForEveryone,
       reactions: reactions ?? this.reactions,
       participants: participants ?? this.participants,
       status: status ?? this.status,

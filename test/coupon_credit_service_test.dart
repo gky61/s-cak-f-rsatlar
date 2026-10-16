@@ -256,6 +256,25 @@ void main() {
       service.updateMaxDailyRewardedVideos(10); // Restore default
       expect(service.maxDailyRewardedVideos, 10);
     });
+
+    test('19. Legacy key migration converts un-scoped keys to active user scope seamlessly', () async {
+      final service = CouponCreditService.instance;
+      SharedPreferences.setMockInitialValues({
+        'firsatkolik_coupon_credits_count': 7,
+        'firsatkolik_coupon_credits_date': service.getTodayStringForTesting(),
+        'firsatkolik_coupon_unlocked_ids': ['legacy_c1', 'legacy_c2'],
+        'firsatkolik_daily_rewarded_watched': 3,
+      });
+
+      await service.initialize();
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(prefs.containsKey('firsatkolik_coupon_credits_count'), isFalse);
+      expect(prefs.containsKey('firsatkolik_coupon_credits_count_guest'), isTrue);
+      expect(service.remainingCredits, 7);
+      expect(service.isUnlockedToday('legacy_c1'), isTrue);
+      expect(service.isUnlockedToday('legacy_c2'), isTrue);
+    });
   });
 }
 

@@ -13629,7 +13629,7 @@ function closeCouponModal() {
 }
 
 function deleteAllCoupons() {
-    if (confirm("Tüm kuponları veritabanından kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+    if (confirm("Yalnızca bot/web tarafından otomatik kazınan kuponları kalıcı olarak silmek istiyor musunuz?\n\n(NOT: Kullanıcıların paylaştığı topluluk kuponları korunacaktır.)")) {
         const deleteBtn = document.getElementById('deleteAllCouponsBtn');
         if (!deleteBtn) return;
         const originalHtml = deleteBtn.innerHTML;
@@ -13640,7 +13640,11 @@ function deleteAllCoupons() {
             try {
                 let totalDeleted = 0;
                 while (true) {
-                    const querySnapshot = await db.collection('kuponlar').limit(400).get();
+                    // P2-KUP-01: Topluluk kuponlarını korumak için sadece web kaynaklı kuponları sil
+                    const querySnapshot = await db.collection('kuponlar')
+                        .where('kaynakTipi', '==', 'web')
+                        .limit(400)
+                        .get();
                     if (querySnapshot.empty) break;
 
                     const batch = db.batch();
@@ -13653,9 +13657,9 @@ function deleteAllCoupons() {
                 }
 
                 if (totalDeleted === 0) {
-                    showSuccess("Silecek kupon bulunamadı.");
+                    showSuccess("Silecek otomatik web kuponu bulunamadı.");
                 } else {
-                    showSuccess(`Toplam ${totalDeleted} kupon başarıyla silindi!`);
+                    showSuccess(`Toplam ${totalDeleted} adet web kuponu başarıyla temizlendi (Topluluk kuponları korundu).`);
                 }
                 loadCoupons();
             } catch (error) {

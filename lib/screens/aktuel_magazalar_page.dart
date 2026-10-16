@@ -108,26 +108,64 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
     _loadActiveCatalogs();
   }
 
-  /// FS-AKT-01: 150 Dokümanlık limitsiz WebSocket yerine 'bitisTarihi >= today' filtreli SWR okuma
-  /// 100k kullanıcıda 15 milyon okuma maliyetini ve mağaza kayıplarını sıfırlar.
-  Future<void> _loadActiveCatalogs() async {
+  /// FS-AKT-01 & P0-AKT-01: 20 Milyon Doküman Okuma Felaketi Kalkanı
+  /// Doğrudan 'settings/aktuel_meta' dokümanından tek okuma yapar (100k kullanıcıda 20M -> 100k okuma).
+  /// Meta dokümanı bulunamazsa geriye dönük uyumlulukla 'kataloglar' sorgusu fallback olarak çalışır.
+  Future<void> _loadActiveCatalogs({bool forceServer = false}) async {
+    bool hasRenderedFromCache = false;
+
+    // 1. Aşama: Cache-First (0ms önbellekten anında render - sıfır bekleme)
+    if (!forceServer) {
+      try {
+        final cacheMetaSnap = await FirebaseFirestore.instance
+            .collection('settings')
+            .doc('aktuel_meta')
+            .get(const GetOptions(source: Source.cache));
+
+        if (cacheMetaSnap.exists && cacheMetaSnap.data() != null && mounted) {
+          _applyMetaData(cacheMetaSnap.data()!);
+          hasRenderedFromCache = true;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Aşama: Server Revalidation (Arka planda sunucu mutabakatı - SWR)
+    try {
+      final serverMetaSnap = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('aktuel_meta')
+          .get(const GetOptions(source: Source.server));
+
+      if (serverMetaSnap.exists && serverMetaSnap.data() != null && mounted) {
+        _applyMetaData(serverMetaSnap.data()!);
+        return;
+      }
+    } catch (_) {
+      // Çevrimdışıysak ve cache'den render yapıldıysa akıcı deneyimi koru ve bitir
+      if (hasRenderedFromCache) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+    }
+
+    // 3. Aşama: Fallback (Eğer settings/aktuel_meta dokümanı henüz oluşmadıysa kataloglar sorgusu ile devam et)
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final todayTimestamp = Timestamp.fromDate(today);
 
-    // 1. Aşama: Cache-First (0ms önbellekten okuma)
-    try {
-      final cacheSnap = await FirebaseFirestore.instance
-          .collection('kataloglar')
-          .where('bitisTarihi', isGreaterThanOrEqualTo: todayTimestamp)
-          .get(const GetOptions(source: Source.cache));
-      if (cacheSnap.docs.isNotEmpty && mounted) {
-        _processCatalogDocs(cacheSnap.docs);
-        setState(() => _isLoading = false);
-      }
-    } catch (_) {}
+    if (!forceServer) {
+      try {
+        final cacheSnap = await FirebaseFirestore.instance
+            .collection('kataloglar')
+            .where('bitisTarihi', isGreaterThanOrEqualTo: todayTimestamp)
+            .get(const GetOptions(source: Source.cache));
+        if (cacheSnap.docs.isNotEmpty && mounted) {
+          _processCatalogDocs(cacheSnap.docs);
+          setState(() => _isLoading = false);
+        }
+      } catch (_) {}
+    }
 
-    // 2. Aşama: Server Revalidation
     try {
       final serverSnap = await FirebaseFirestore.instance
           .collection('kataloglar')
@@ -139,6 +177,32 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _applyMetaData(Map<String, dynamic> data) {
+    final rawCounts = data['activeStoreCatalogCounts'];
+    final total = data['totalActiveCatalogs'];
+    if (rawCounts is Map) {
+      final counts = <String, int>{};
+      rawCounts.forEach((key, value) {
+        if (value is num) {
+          counts[key.toString().toLowerCase()] = value.toInt();
+        }
+      });
+      if (mounted) {
+        setState(() {
+          _activeStoreCatalogCounts = counts;
+          _totalActiveCatalogs = total is num ? total.toInt() : counts.values.fold(0, (a, b) => a + b);
+          _isLoading = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -218,7 +282,7 @@ class _AktuelMagazalarPageState extends State<AktuelMagazalarPage> {
       body: RefreshIndicator(
         onRefresh: () async {
           HapticFeedback.lightImpact();
-          await _loadActiveCatalogs();
+          await _loadActiveCatalogs(forceServer: true);
         },
         color: AppTheme.primary,
         child: Builder(

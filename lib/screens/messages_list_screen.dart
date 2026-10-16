@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 
 import '../models/message.dart';
+import '../models/conversation.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../utils/asset_path_migration.dart';
@@ -27,7 +28,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController _searchController = TextEditingController();
 
-  Stream<List<Message>> _messagesStream = const Stream.empty();
+  Stream<List<Conversation>> _conversationsStream = const Stream.empty();
   StreamSubscription? _authSub;
   String _searchQuery = '';
   final Set<String> _mutedUserIds = {};
@@ -38,26 +39,120 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     AppBadgeService.instance.syncBadgeWithFirestore();
     final uid = _authService.currentUser?.uid;
     if (uid != null) {
-      _messagesStream = _firestoreService.getUserMessagesStream(uid);
+      _conversationsStream = _getUnifiedConversationsStream(uid);
       _loadMutedUsers();
     } else {
-      _messagesStream = const Stream.empty();
+      _conversationsStream = const Stream.empty();
     }
 
     _authSub = _authService.authStateChanges.listen((user) {
       if (!mounted) return;
       if (user != null) {
         setState(() {
-          _messagesStream = _firestoreService.getUserMessagesStream(user.uid);
+          _conversationsStream = _getUnifiedConversationsStream(user.uid);
         });
         _loadMutedUsers();
       } else {
         setState(() {
-          _messagesStream = const Stream.empty();
+          _conversationsStream = const Stream.empty();
           _mutedUserIds.clear();
         });
       }
     });
+  }
+
+  /// FS-MSG-01 & FS-MSG-03: Gelen kutusu için tekil, soket sızıntısı yapmayan akış.
+  /// conversations koleksiyonundan N+1 okuma olmadan dinler; eski veriler varsa
+  /// tek seferlik statik sorgu ile dönüştürür ve sürekli dinleyici açmaz.
+  Stream<List<Conversation>> _getUnifiedConversationsStream(String uid) {
+    late StreamController<List<Conversation>> controller;
+    StreamSubscription? convSub;
+    bool checkedLegacyMigration = false;
+
+    controller = StreamController<List<Conversation>>(
+      onListen: () {
+        convSub = _firestoreService.getConversationsStream(uid).listen(
+          (conversations) async {
+            if (conversations.isNotEmpty) {
+              if (!controller.isClosed) controller.add(conversations);
+            } else {
+              // conversations koleksiyonu henüz boşsa, tek seferlik legacy mesaj kontrolü yap
+              if (!checkedLegacyMigration) {
+                checkedLegacyMigration = true;
+                try {
+                  final snap = await FirebaseFirestore.instance
+                      .collection('messages')
+                      .where('participants', arrayContains: uid)
+                      .orderBy('createdAt', descending: true)
+                      .limit(60)
+                      .get();
+
+                  if (snap.docs.isNotEmpty) {
+                    final messages = snap.docs.map((d) => Message.fromFirestore(d)).toList();
+                    final migrated = _convertMessagesToConversations(messages, uid);
+                    if (!controller.isClosed) {
+                      controller.add(migrated);
+                      return;
+                    }
+                  }
+                } catch (_) {}
+              }
+              if (!controller.isClosed) controller.add([]);
+            }
+          },
+          onError: (_) {
+            if (!controller.isClosed) controller.add([]);
+          },
+        );
+      },
+      onCancel: () {
+        convSub?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  List<Conversation> _convertMessagesToConversations(List<Message> messages, String currentUserId) {
+    final Map<String, Message> latestByOther = {};
+    final Map<String, int> unreads = {};
+
+    for (final msg in messages) {
+      final otherUid = msg.senderId == currentUserId ? msg.receiverId : msg.senderId;
+      if (!unreads.containsKey(otherUid)) unreads[otherUid] = 0;
+      if (!msg.isRead && msg.receiverId == currentUserId) {
+        unreads[otherUid] = (unreads[otherUid] ?? 0) + 1;
+      }
+      if (!latestByOther.containsKey(otherUid) || latestByOther[otherUid]!.createdAt.isBefore(msg.createdAt)) {
+        latestByOther[otherUid] = msg;
+      }
+    }
+
+    final list = latestByOther.entries.map((e) {
+      final otherUid = e.key;
+      final msg = e.value;
+      final otherName = msg.senderId == currentUserId ? msg.receiverName : msg.senderName;
+      final otherAvatar = msg.senderId == currentUserId ? msg.receiverImageUrl : msg.senderImageUrl;
+      return Conversation(
+        id: Conversation.computeConversationId(currentUserId, otherUid),
+        participants: [currentUserId, otherUid],
+        lastMessageText: msg.text,
+        lastMessageSenderId: msg.senderId,
+        lastMessageSenderName: msg.senderName,
+        lastMessageCreatedAt: msg.createdAt,
+        lastMessageIsRead: msg.isRead,
+        lastMessageDealId: msg.dealId,
+        lastMessageDealTitle: msg.dealTitle,
+        updatedAt: msg.createdAt,
+        unreadCounts: {currentUserId: unreads[otherUid] ?? 0},
+        participantDetails: {
+          otherUid: ConversationParticipant(name: otherName, avatar: otherAvatar),
+        },
+      );
+    }).toList();
+
+    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return list;
   }
 
   Future<void> _loadMutedUsers() async {
@@ -137,7 +232,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                       final uid = _authService.currentUser?.uid;
                       if (uid != null) {
                         setState(() {
-                          _messagesStream = _firestoreService.getUserMessagesStream(uid);
+                          _conversationsStream = _getUnifiedConversationsStream(uid);
                         });
                         _loadMutedUsers();
                       }
@@ -170,8 +265,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         foregroundColor: textMain,
         elevation: 0,
       ),
-      body: StreamBuilder<List<Message>>(
-        stream: _messagesStream,
+      body: StreamBuilder<List<Conversation>>(
+        stream: _conversationsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const ChatListSkeleton();
@@ -197,46 +292,14 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
             );
           }
 
-          final messages = snapshot.data ?? [];
+          final conversationList = snapshot.data ?? [];
 
-          // Konuşmaları grupla (her kullanıcı ile son mesaj) ve okunmamış sayılarını hesapla
-          final Map<String, Message> conversations = {};
-          final Map<String, int> unreadCounts = {};
-
-          for (var message in messages) {
-            final otherUserId = message.senderId == currentUserId
-                ? message.receiverId
-                : message.senderId;
-            final otherUserName = message.senderId == currentUserId
-                ? message.receiverName
-                : message.senderName;
-            final otherUserImageUrl = message.senderId == currentUserId
-                ? message.receiverImageUrl
-                : message.senderImageUrl;
-
-            // Okunmamış sayısını artır
-            if (!message.isRead && message.receiverId == currentUserId) {
-              unreadCounts[otherUserId] = (unreadCounts[otherUserId] ?? 0) + 1;
-            }
-
-            if (!conversations.containsKey(otherUserId) ||
-                conversations[otherUserId]!.createdAt.isBefore(message.createdAt)) {
-              conversations[otherUserId] = message.copyWith(
-                receiverName: otherUserName,
-                receiverImageUrl: otherUserImageUrl,
-              );
-            }
-          }
-
-          final conversationList = conversations.values.toList();
-          conversationList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-          final filteredList = conversationList.where((msg) {
+          final filteredList = conversationList.where((conv) {
             if (_searchQuery.trim().isEmpty) return true;
             final q = _searchQuery.toLowerCase();
-            return msg.receiverName.toLowerCase().contains(q) ||
-                msg.senderName.toLowerCase().contains(q) ||
-                msg.text.toLowerCase().contains(q);
+            final otherName = conv.getOtherUserName(currentUserId).toLowerCase();
+            final lastText = conv.lastMessageText.toLowerCase();
+            return otherName.contains(q) || lastText.contains(q);
           }).toList();
 
           return Column(
@@ -287,7 +350,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                   ),
                 ),
 
-              // Dinamik Sohbet Listesi
+              // Dinamik Sohbet Listesi (FS-MSG-03: Sıfır N+1 Dinleyici Maliyeti)
               Expanded(
                 child: filteredList.isNotEmpty
                     ? ListView.separated(
@@ -296,81 +359,30 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         itemCount: filteredList.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
-                          final message = filteredList[index];
-                          final otherUserId = message.senderId == currentUserId
-                              ? message.receiverId
-                              : message.senderId;
-                          final otherUserName = message.senderId == currentUserId
-                              ? message.receiverName
-                              : message.senderName;
-                          final otherUserImageUrl = message.senderId == currentUserId
-                              ? message.receiverImageUrl
-                              : message.senderImageUrl;
-                          final unreadCount = unreadCounts[otherUserId] ?? 0;
+                          final conv = filteredList[index];
+                          final otherUserId = conv.getOtherUserId(currentUserId);
+                          final displayName = conv.getOtherUserName(currentUserId);
+                          final profileImageUrl = conv.getOtherUserAvatar(currentUserId);
+                          final unreadCount = conv.getUnreadCount(currentUserId);
                           final isUnread = unreadCount > 0;
                           final isMuted = _mutedUserIds.contains(otherUserId);
+                          final isDeleted = conv.participantDetails[otherUserId]?.isDeleted == true;
 
-                          final isSystemUser = otherUserId == 'admin' || otherUserId == 'botkolik' || otherUserId.startsWith('test_user_');
-
-                          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                            stream: isSystemUser
-                                ? null
-                                : FirebaseFirestore.instance.collection('users').doc(otherUserId).snapshots(),
-                            builder: (context, userSnapshot) {
-                              String displayName = otherUserName;
-                              String profileImageUrl = otherUserImageUrl;
-                              bool isDeleted = false;
-
-                              if (otherUserId == 'admin') {
-                                displayName = 'FırsatKolik Yönetim';
-                                profileImageUrl = 'assets/logo.webp';
-                                isDeleted = false;
-                              } else if (otherUserId == 'botkolik') {
-                                displayName = 'Botkolik';
-                                profileImageUrl = 'assets/botkolik.webp';
-                                isDeleted = false;
-                              } else if (otherUserId == 'test_user_ahmet') {
-                                displayName = 'Ahmet Yılmaz (Test)';
-                                isDeleted = false;
-                              } else if (otherUserId == 'test_user_zeynep') {
-                                displayName = 'Zeynep Kaya (Test)';
-                                profileImageUrl = 'assets/avatars/avatar_duck.webp';
-                                isDeleted = false;
-                              } else if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                                final userData = userSnapshot.data!.data();
-                                displayName = userData?['username'] ?? userData?['displayName'] ?? otherUserName;
-                                profileImageUrl = migrateAssetPath(userData?['profileImageUrl'] ?? otherUserImageUrl);
-                              } else if (userSnapshot.connectionState == ConnectionState.active &&
-                                  (!userSnapshot.hasData || !userSnapshot.data!.exists) &&
-                                  !message.isAdminMessage) {
-                                if (otherUserName.isNotEmpty && otherUserName != 'Kullanıcı' && otherUserName != 'Silinmiş Kullanıcı') {
-                                  displayName = otherUserName;
-                                  profileImageUrl = migrateAssetPath(otherUserImageUrl);
-                                  isDeleted = false;
-                                } else {
-                                  isDeleted = true;
-                                  displayName = 'Silinmiş Kullanıcı';
-                                  profileImageUrl = '';
-                                }
-                              }
-
-                              return _buildSwipeableConversationCard(
-                                context: context,
-                                message: message,
-                                otherUserId: otherUserId,
-                                displayName: displayName,
-                                profileImageUrl: profileImageUrl,
-                                isUnread: isUnread,
-                                unreadCount: unreadCount,
-                                isMuted: isMuted,
-                                isDeleted: isDeleted,
-                                isDark: isDark,
-                                primaryColor: primaryColor,
-                                textMain: textMain,
-                                textSub: textSub,
-                                surfaceColor: surfaceColor,
-                              );
-                            },
+                          return _buildSwipeableConversationCard(
+                            context: context,
+                            conversation: conv,
+                            otherUserId: otherUserId,
+                            displayName: displayName,
+                            profileImageUrl: profileImageUrl,
+                            isUnread: isUnread,
+                            unreadCount: unreadCount,
+                            isMuted: isMuted,
+                            isDeleted: isDeleted,
+                            isDark: isDark,
+                            primaryColor: primaryColor,
+                            textMain: textMain,
+                            textSub: textSub,
+                            surfaceColor: surfaceColor,
                           );
                         },
                       )
@@ -424,7 +436,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
   Widget _buildSwipeableConversationCard({
     required BuildContext context,
-    required Message message,
+    required Conversation conversation,
     required String otherUserId,
     required String displayName,
     required String profileImageUrl,
@@ -438,11 +450,11 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     required Color? textSub,
     required Color surfaceColor,
   }) {
-    final isSystemAdmin = message.isAdminMessage || otherUserId == 'admin';
+    final isSystemAdmin = otherUserId == 'admin' || conversation.id.startsWith('admin_');
     final cardDisplayName = isSystemAdmin ? 'FırsatKolik Yönetim' : (otherUserId == 'botkolik' ? 'Botkolik' : displayName);
 
     return Dismissible(
-      key: Key('conv_${otherUserId}_${message.id}'),
+      key: Key('conv_${otherUserId}_${conversation.id}'),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -461,7 +473,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
         ),
       ),
       confirmDismiss: (direction) async {
-        return await _showDeleteDialog(context, message, cardDisplayName);
+        return await _showDeleteDialog(context, conversation, cardDisplayName);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -497,12 +509,12 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                     otherUserImageUrl: isSystemAdmin
                         ? 'assets/logo.webp'
                         : (otherUserId == 'botkolik' ? 'assets/botkolik.webp' : profileImageUrl),
-                    isAdminMessage: message.isAdminMessage,
+                    isAdminMessage: isSystemAdmin,
                   ),
                 ),
               );
             },
-            onLongPress: () => _showConversationActionsModal(message, otherUserId, cardDisplayName, isMuted, isUnread),
+            onLongPress: () => _showConversationActionsModal(conversation, otherUserId, cardDisplayName, isMuted, isUnread),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -593,7 +605,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                               ),
                             ),
                             Text(
-                              _formatTime(message.createdAt),
+                              _formatTime(conversation.lastMessageCreatedAt),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
@@ -607,7 +619,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                message.text,
+                                conversation.lastMessageText,
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: isUnread ? FontWeight.w700 : FontWeight.w400,
@@ -650,7 +662,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   }
 
   void _showConversationActionsModal(
-    Message message,
+    Conversation conversation,
     String otherUserId,
     String userName,
     bool isMuted,
@@ -706,7 +718,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  _showDeleteDialog(context, message, userName);
+                  _showDeleteDialog(context, conversation, userName);
                 },
               ),
             ],
@@ -716,8 +728,9 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     );
   }
 
-  Future<bool> _showDeleteDialog(BuildContext context, Message message, String userName) async {
+  Future<bool> _showDeleteDialog(BuildContext context, Conversation conversation, String userName) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final otherUserId = conversation.getOtherUserId(_authService.currentUser?.uid ?? '');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -731,7 +744,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
           ],
         ),
         content: Text(
-          '$userName ile olan tüm konuşma geçmişinizi silmek istediğinize emin misiniz?',
+          '$userName ile olan konuşma geçmişinizi silmek istediğinize emin misiniz?',
           style: const TextStyle(fontSize: 13.5),
         ),
         actions: [
@@ -756,20 +769,17 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
       final messenger = ScaffoldMessenger.of(context);
       HapticFeedback.mediumImpact();
       try {
-        if (message.isAdminMessage) {
-          await _firestoreService.deleteAdminToUserMessage(message.id);
-        } else {
-          final currentUserId = _authService.currentUser!.uid;
-          final otherUserId = message.senderId == currentUserId
-              ? message.receiverId
-              : message.senderId;
-
-          await _firestoreService.deleteConversationPermanently(currentUserId, otherUserId);
+        final currentUserId = _authService.currentUser!.uid;
+        if (conversation.id.startsWith('admin_') || otherUserId == 'admin') {
+          try {
+            await _firestoreService.deleteAllAdminToUserMessages(currentUserId);
+          } catch (_) {}
         }
+        await _firestoreService.clearConversationForUser(currentUserId, otherUserId);
 
         messenger.showSnackBar(
           SnackBar(
-            content: Text('🗑️ $userName ile olan sohbet kalıcı olarak silindi'),
+            content: Text('🗑️ $userName ile olan sohbet temizlendi'),
             backgroundColor: Colors.orange[800],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

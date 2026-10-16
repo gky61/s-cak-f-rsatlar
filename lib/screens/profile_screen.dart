@@ -241,13 +241,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     }
 
-    // Stream ile sürekli güncelle (mesajlar okunduğunda otomatik güncellenir)
+    // Stream ile sürekli güncelle (FS-MSG-01: 250 dokümanlık havuz yerine sadece conversations sayaç dinleyicisi)
     _messageCountSubscription?.cancel();
-    _messageCountSubscription = _firestoreService.getUserMessagesStream(currentUserId).listen((messages) {
+    _messageCountSubscription = _firestoreService.getUnreadTotalMessageCountStream(currentUserId).listen((unreadCount) {
       if (mounted) {
-        final unreadCount = messages
-            .where((m) => m.receiverId == currentUserId && !m.isRead)
-            .length;
         setState(() {
           _unreadMessageCount = unreadCount;
         });

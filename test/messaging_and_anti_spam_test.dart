@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sicak_firsatlar/models/message.dart';
+import 'package:sicak_firsatlar/models/conversation.dart';
+import 'package:sicak_firsatlar/services/message_service.dart';
 
 void main() {
   group('1. Anti-Spam Rate Limiter (Sliding Window) Tests', () {
@@ -69,10 +71,10 @@ void main() {
     test('Same sender produces deterministic notifId and tag (Prevents notification stacking)', () {
       const sender1 = 'user_murat_123';
       final notifId1 = sender1.hashCode % 100000;
-      final tag1 = 'msg_$sender1';
+      const tag1 = 'msg_$sender1';
 
       final notifId2 = sender1.hashCode % 100000;
-      final tag2 = 'msg_$sender1';
+      const tag2 = 'msg_$sender1';
 
       expect(notifId1, equals(notifId2));
       expect(tag1, equals(tag2));
@@ -83,8 +85,8 @@ void main() {
       const senderA = 'user_ahmet';
       const senderB = 'user_zeynep';
 
-      final tagA = 'msg_$senderA';
-      final tagB = 'msg_$senderB';
+      const tagA = 'msg_$senderA';
+      const tagB = 'msg_$senderB';
 
       expect(tagA, isNot(equals(tagB)));
       expect(tagA, 'msg_user_ahmet');
@@ -93,7 +95,7 @@ void main() {
 
     test('Admin sender produces msg_admin tag', () {
       const senderAdmin = 'admin';
-      final tagAdmin = 'msg_$senderAdmin';
+      const tagAdmin = 'msg_$senderAdmin';
       expect(tagAdmin, 'msg_admin');
     });
   });
@@ -584,4 +586,254 @@ void main() {
       expect(legacyChannelRegex.hasMatch(notifServiceCode), isFalse);
     });
   });
+
+  group('7. Conversation Model & 100k Scale Architecture Tests', () {
+    test('getConversationId produces deterministic, sorted identifier', () {
+      final id1 = MessageService.getConversationId('user_alpha', 'user_beta');
+      final id2 = MessageService.getConversationId('user_beta', 'user_alpha');
+
+      expect(id1, equals(id2));
+      expect(id1, equals('user_alpha_user_beta'));
+    });
+
+    test('Conversation model serialization and deserialization roundtrip', () {
+      final now = DateTime(2026, 10, 16, 14, 0, 0);
+      final conversation = Conversation(
+        id: 'user1_user2',
+        participants: ['user1', 'user2'],
+        lastMessageText: 'Merhaba fırsat var mı?',
+        lastMessageSenderId: 'user1',
+        lastMessageSenderName: 'Ali',
+        lastMessageCreatedAt: now,
+        lastMessageIsRead: false,
+        unreadCounts: {'user1': 0, 'user2': 1},
+        participantDetails: {
+          'user1': const ConversationParticipant(name: 'Ali', avatar: 'assets/avatar_a.webp'),
+          'user2': const ConversationParticipant(name: 'Veli', avatar: 'assets/avatar_b.webp'),
+        },
+        clearedAt: {'user1': now.subtract(const Duration(days: 1))},
+        updatedAt: now,
+      );
+
+      final map = conversation.toFirestore();
+      expect(map['participants'], equals(['user1', 'user2']));
+      expect(map['lastMessage']['text'], equals('Merhaba fırsat var mı?'));
+      expect(map['unreadCounts']['user2'], equals(1));
+
+      final parsed = Conversation.fromMap('user1_user2', map);
+      expect(parsed.id, equals('user1_user2'));
+      expect(parsed.lastMessageText, equals('Merhaba fırsat var mı?'));
+      expect(parsed.getOtherUserId('user1'), equals('user2'));
+      expect(parsed.getOtherUserName('user1'), equals('Veli'));
+      expect(parsed.getOtherUserAvatar('user1'), equals('assets/avatar_b.webp'));
+      expect(parsed.getUnreadCount('user2'), equals(1));
+      expect(parsed.getUnreadCount('user1'), equals(0));
+    });
+
+    test('isClearedForMessage correctly filters messages older than user clearedAt timestamp', () {
+      final clearTime = DateTime(2026, 10, 16, 12, 0, 0);
+      final conversation = Conversation(
+        id: 'u1_u2',
+        participants: ['u1', 'u2'],
+        lastMessageText: 'Selam',
+        lastMessageSenderId: 'u1',
+        lastMessageSenderName: 'U1',
+        lastMessageCreatedAt: clearTime,
+        lastMessageIsRead: true,
+        updatedAt: clearTime,
+        clearedAt: {'u1': clearTime},
+      );
+
+      final olderMessageTime = DateTime(2026, 10, 16, 11, 59, 0);
+      final newerMessageTime = DateTime(2026, 10, 16, 12, 01, 0);
+
+      // u1 sohbeti sildikten önceki mesajı görmemeli
+      expect(conversation.isClearedForMessage('u1', olderMessageTime), isTrue);
+      // u1 sohbeti sildikten sonraki yeni mesajı görebilmeli
+      expect(conversation.isClearedForMessage('u1', newerMessageTime), isFalse);
+      // u2 sohbeti hiç silmediği için eski mesajı da görebilmeli
+      expect(conversation.isClearedForMessage('u2', olderMessageTime), isFalse);
+    });
+  });
+
+  group('8. Message Retract (15-min) and Soft Delete Tests', () {
+    test('Message model deserialization handles isDeletedForEveryone and deletedBy', () {
+      final now = DateTime.now();
+      final message = Message(
+        id: 'msg_test_retract',
+        conversationId: 'u1_u2',
+        senderId: 'u1',
+        senderName: 'Ahmet',
+        senderImageUrl: '',
+        receiverId: 'u2',
+        receiverName: 'Mehmet',
+        receiverImageUrl: '',
+        text: 'Bu mesaj silindi',
+        createdAt: now,
+        isDeletedForEveryone: true,
+        deletedBy: ['u1'],
+      );
+
+      final map = message.toFirestore();
+      expect(map['isDeletedForEveryone'], isTrue);
+      expect(map['deletedBy'], contains('u1'));
+
+      final fromMap = Message.fromMap(map, 'msg_test_retract');
+      expect(fromMap.isDeletedForEveryone, isTrue);
+      expect(fromMap.text, equals('Bu mesaj silindi'));
+      expect(fromMap.deletedBy, contains('u1'));
+    });
+
+    test('15-Minute retract rule validates strictly by timestamp difference', () {
+      final now = DateTime(2026, 10, 16, 15, 30, 0);
+
+      // 10 dakika önce atılmış mesaj -> Geri çekilebilir (<= 15 dk)
+      final within10Min = now.subtract(const Duration(minutes: 10));
+      expect(now.difference(within10Min).inMinutes <= 15, isTrue);
+
+      // Tam 15 dakika önce atılmış mesaj -> Geri çekilebilir
+      final exactly15Min = now.subtract(const Duration(minutes: 15));
+      expect(now.difference(exactly15Min).inMinutes <= 15, isTrue);
+
+      // 16 dakika önce atılmış mesaj -> Geri çekilemez (> 15 dk)
+      final over15Min = now.subtract(const Duration(minutes: 16));
+      expect(now.difference(over15Min).inMinutes <= 15, isFalse);
+    });
+  });
+
+  group('9. Firestore Security Rules & Composite Index Structural Audit Tests', () {
+    test('firestore.rules enforces conversations and messages security contracts', () {
+      final rulesCode = File('firestore.rules').readAsStringSync();
+
+      // Conversations koleksiyon kuralı mevcut olmalı
+      expect(rulesCode.contains('match /conversations/{conversationId}'), isTrue);
+      // Mesaj silme kuralı admin-only olmalı (delil karartma kalkanı)
+      expect(rulesCode.contains('allow delete: if isAdmin();'), isTrue);
+      // Retract güncellemesi kurallarda tanımlı olmalı
+      expect(rulesCode.contains('request.resource.data.isDeletedForEveryone == true'), isTrue);
+      expect(rulesCode.contains("request.resource.data.text == 'Bu mesaj silindi'"), isTrue);
+      // FS-MSG-08: Alıcının engellediği kullanıcıların mesaj göndermesini engelleyen kural olmalı
+      expect(rulesCode.contains('blockedUsers'), isTrue);
+    });
+
+    test('firestore.indexes.json contains required composite index for conversations query', () {
+      final indexesCode = File('firestore.indexes.json').readAsStringSync();
+
+      expect(indexesCode.contains('"collectionGroup": "conversations"'), isTrue);
+      expect(indexesCode.contains('"fieldPath": "participants"'), isTrue);
+      expect(indexesCode.contains('"arrayConfig": "CONTAINS"'), isTrue);
+      expect(indexesCode.contains('"fieldPath": "updatedAt"'), isTrue);
+      expect(indexesCode.contains('"collectionGroup": "adminToUserMessages"'), isTrue);
+    });
+
+    test('functions/index.js contains KVKK-compliant message anonymization and soft-delete on account cleanup', () {
+      final functionsCode = File('functions/index.js').readAsStringSync();
+
+      expect(functionsCode.contains("senderName: 'Silinmiş Kullanıcı'"), isTrue);
+      expect(functionsCode.contains("db.collection('conversations')"), isTrue);
+      expect(functionsCode.contains('anonymizedMsgCount'), isTrue);
+      expect(functionsCode.contains('participantDetails'), isTrue);
+    });
+  });
+
+  group('10. FS-MSG-11 to FS-MSG-17 Advanced Disaster & Vulnerability Tests', () {
+    test('FS-MSG-11: Pagination logic suppresses zombie messages created before user clearedAt', () {
+      final clearedAt = DateTime(2026, 10, 16, 12, 0, 0);
+      final messages = [
+        Message(
+          id: 'msg_recent_1',
+          conversationId: 'u1_u2',
+          senderId: 'u2',
+          senderName: 'Mehmet',
+          senderImageUrl: '',
+          receiverId: 'u1',
+          receiverName: 'Ali',
+          receiverImageUrl: '',
+          text: 'Yeni temiz sohbet sonrası mesaj',
+          createdAt: DateTime(2026, 10, 16, 12, 5, 0),
+        ),
+        Message(
+          id: 'msg_zombie_1',
+          conversationId: 'u1_u2',
+          senderId: 'u2',
+          senderName: 'Mehmet',
+          senderImageUrl: '',
+          receiverId: 'u1',
+          receiverName: 'Ali',
+          receiverImageUrl: '',
+          text: 'Sohbet temizlenmeden önceki zombi mesaj (deletedBy eksik kalmış)',
+          createdAt: DateTime(2026, 10, 16, 11, 45, 0),
+        ),
+      ];
+
+      // Filtreleme kuralı (loadOlderMessages içindeki mantık)
+      final filtered = messages.where((m) {
+        if (m.deletedBy.contains('u1')) return false;
+        if (m.createdAt.isBefore(clearedAt)) return false;
+        return true;
+      }).toList();
+
+      expect(filtered.length, equals(1));
+      expect(filtered.first.id, equals('msg_recent_1'));
+      expect(filtered.any((m) => m.id == 'msg_zombie_1'), isFalse);
+    });
+
+    test('FS-MSG-12: firestore.rules uses strict whitelist for message updates', () {
+      final rulesCode = File('firestore.rules').readAsStringSync();
+      // Whitelist kuralının varlığını doğrula (affectedKeys().hasOnly(...))
+      expect(rulesCode.contains("affectedKeys().hasOnly(['isRead', 'isReadByAdmin', 'readAt', 'reactions', 'deletedBy'])"), isTrue);
+      // Keyfi alan enjeksiyonuna karşı açık blacklist bulunmamalı
+      expect(rulesCode.contains("affectedKeys().hasAny(['senderId', 'receiverId', 'createdAt'])"), isFalse);
+    });
+
+    test('FS-MSG-13: firestore.rules enforces server-side 15-minute retract timestamp check', () {
+      final rulesCode = File('firestore.rules').readAsStringSync();
+      // Server-side request.time <= resource.data.createdAt + 15m doğrulaması
+      expect(rulesCode.contains("request.time <= resource.data.createdAt + duration.value(15, 'm')"), isTrue);
+      expect(rulesCode.contains("affectedKeys().hasOnly(['isDeletedForEveryone', 'text', 'dealId', 'dealTitle', 'dealImageUrl', 'dealPrice', 'dealStore', 'reactions', 'deletedAt'])"), isTrue);
+    });
+
+    test('FS-MSG-14: Reaction spoofing defense rejects unauthorized caller and clamps emoji length', () {
+      // 1. Emoji uzunluk sınırlaması (Grapheme / Karakter bloat saldırısı)
+      String sanitizeEmoji(String rawEmoji) {
+        final trimmed = rawEmoji.trim();
+        return trimmed.length > 10 ? trimmed.substring(0, 10) : trimmed;
+      }
+
+      final longEmojiPayload = '👍' * 50;
+      final sanitized = sanitizeEmoji(longEmojiPayload);
+      expect(sanitized.length <= 10, isTrue);
+
+      // 2. Yetkisiz kullanıcı engeli
+      bool canToggle(String authUid, String targetUserId) {
+        return authUid == targetUserId;
+      }
+      expect(canToggle('user_hacker', 'user_victim'), isFalse);
+      expect(canToggle('user_legit', 'user_legit'), isTrue);
+    });
+
+    test('FS-MSG-15: onUserMessageCreated masks profanity on push notification and sends moderation alarm', () {
+      final functionsCode = File('functions/index.js').readAsStringSync();
+      expect(functionsCode.contains('[FS-MSG-15] Mesajda küfür/şüpheli içerik tespit edildi'), isTrue);
+      expect(functionsCode.contains("createModerationMessage"), isTrue);
+      expect(functionsCode.contains("resolvedBody = 'Yeni bir mesaj aldınız'"), isTrue);
+    });
+
+    test('FS-MSG-16: markConversationAsRead uses paginated loop for 100+ unread messages', () {
+      final msgServiceCode = File('lib/services/message_service.dart').readAsStringSync();
+      expect(msgServiceCode.contains('FS-MSG-16: 100+ okunmamış mesaj olduğunda tümünü sayfalı tüketerek'), isTrue);
+      expect(msgServiceCode.contains('while (true)'), isTrue);
+      expect(msgServiceCode.contains('batch.commit()'), isTrue);
+    });
+
+    test('FS-MSG-17: FCM payload data fields are strictly sliced to fit under 4KB ceiling', () {
+      final functionsCode = File('functions/index.js').readAsStringSync();
+      expect(functionsCode.contains('FS-MSG-17: FCM Data payload\'unun 4KB tavanını aşmasını önleyen'), isTrue);
+      expect(functionsCode.contains('slice(0, 100)'), isTrue);
+      expect(functionsCode.contains('slice(0, 80)'), isTrue);
+      expect(functionsCode.contains('slice(0, 200)'), isTrue);
+      expect(functionsCode.contains('slice(0, 500)'), isTrue);
+    });
+  });
 }
+

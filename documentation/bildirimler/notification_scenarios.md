@@ -28,6 +28,12 @@ Uygulama içerisinde bildirimlerle ilgili iki temel kavram bulunur:
    * Firestore'da `users/{userId}/notificationPreferences/main` belgesinde saklanır.
    * Cloud Functions `onNotificationCreated` tetikleyicisi, bildirim kutusuna yeni bir doküman eklendiğinde devreye girer. Bu tercihlere, sistem limitlerine ve sessiz saatlere bakarak push bildirimini hedefler veya göndermeyi atlar.
 
+3. **"Ana Sayfa Bildirim Zili" Hafif Sayaç ve Dedup Kalkanı (FS-PREF-02 & FS-PREF-03):**
+   * 100k DAU ölçeğinde ana sayfa açılışında 100 kişisel + 15 küresel doküman indirmek yerine, ultra hafif `getUnreadNotificationCountStream` (limit 20 unread kişisel + 5 aktif küresel) dinlenir.
+   * **FS-02 Dedup Kalkanı:** Hem kişisel bildirim dokümanı hem küresel duyurusu olan kayıtlar tekil sayılır; çift sayım veya hayalet rozet hatası oluşmaz.
+   * **Yazar Takip Senkronizasyonu:** `followUser` ve `unfollowUser` işlemlerinde `FirebaseMessaging.instance.subscribeToTopic / unsubscribeFromTopic` çağrıları anlık tetiklenir; takipten çıkan kullanıcıya hayalet bildirim gitmesi engellenir.
+   * **Kelime Radarı Uyarı Banner'ı:** `KeywordTrackingScreen` içinde bildirim izinleri kapalıyken kullanıcıya amber renkli rehberlik banner'ı sunulur.
+
 ---
 
 ## 📁 2. Tüm Bildirim Türleri, Aksiyon Tetikleyicileri ve Dağıtım Matrisi
@@ -143,6 +149,12 @@ graph TD
 4. **Evrensel ve Markalı In-App Banner (`InAppMessageBanner`):**
    * iOS'ta ön plandayken yalnızca sohbet ve `admin_message` bildirimlerinin native afişi bastırılır (`ios/Runner/AppDelegate.swift` -> `willPresent: completionHandler([])`); diğer türlerde native afiş de gösterilir (`[.banner, .list, .badge, .sound]`).
    * Bunun yerine ekranın tepesinden yumuşak animasyonla (`CurvedAnimation`) kayarak inen, haptik titreşim (`HapticFeedback.lightImpact`) veren, yukarı kaydırılarak (`Dismissible`) kapatılabilen veya 4.2 saniye sonra kaybolan, tıklanınca `handleNotificationTapPublic(rawData)` üzerinden doğrudan doğru ekrana deep link yapan FırsatKolik özel afişi gösterilir.
+5. **Multi-Push Echo Storm Kalkanı (`NotificationService._isRecentDealHandled`):**
+   * Bir fırsat birden fazla topic (örn. hem kategori `cat_elektronik`, hem kelime `kw_playstation`, hem botkolik `author_botkolik`) ile eşleştiğinde, cihaz 60 saniyelik sliding window süresince aynı `dealId` için yalnızca İLK bildirimi görüntüler; takip eden mükerrer push'ları loglayarak anında bastırır.
+6. **İstemci Tarafı Tercih & Sessiz Saat Kalkanı (Client-Side Zero-Cost Filter):**
+   * Topic yayınları backend `onNotificationCreated` filtrelerini atlayarak doğrudan FCM Topic katmanından iletildiği için, Flutter istemcisi ön planda kullanıcının güncel `NotificationPreferences` kaydını denetler. Master anahtar kapalıysa (`!pushMasterEnabled`), sessiz saat aralığındaysa (`isQuietHoursNow()`) veya ilgili alt kategori/kelime kapalıysa ön plan afişi ve yerel bildirim bastırılır.
+7. **APNs Collapse-ID & Android Tag Kalkanı:**
+   * Sunucu tarafında `deal_${dealId}` etiketi (`tag`) ve APNs `apns-collapse-id: deal_${dealId}` eklenerek kilit ekranında veya sistem çubuğunda aynı fırsat için bildirim yığılması engellenir, tek bir güncel bildirim tutulur.
 
 ---
 
@@ -221,11 +233,11 @@ Cloud Functions `onNotificationCreated` motoru her bildirim için kararı verip 
    - **AÇIK:** Tüm alt kanallar eski durumları korunmuş şekilde canlı renklerine döner ve etkileşime açılır. Kullanıcı bu şalteri ilk açtığında işletim sisteminden bildirim izni istenir (`requestPermission`).
 
 2. **Kanal Bazlı Switch'ler:**
-   - `dealNotificationsEnabled`: Yazar ve genel fırsat bildirimlerini kontrol eder (`disabled_by_user_group_deal`).
+   - `dealNotificationsEnabled`: Yazar ve genel fırsat bildirimlerini kontrol eder (`disabled_by_user_group_deal`). Bu switch kapatıldığında veya Master switch kapalıysa cihaz tüm `author_<authorId>` FCM topic aboneliklerinden anında çıkarılır (FS-PREF-04). Kullanıcı yeni bir yazarı takip ettiğinde de bu tercih kontrol edilerek sessizlik korunur. Takipten çıkıldığında ise `unfollowUser` cihaz aboneliğini kesin olarak siler (FS-PREF-03).
    - `communityNotificationsEnabled`: Yorum/yanıt bildirimlerini (`disabled_by_user_group_comment_reply` / `_community`) kontrol eder. Topluluk kuponu push'unda (NOTIF-15) etkisi istemci tarafındadır: `pushMasterEnabled && communityNotificationsEnabled` değilse istemci `community_coupons` topic aboneliğinden çıkar.
    - `marketingNotificationsEnabled`: Kampanya bildirimlerini kontrol eder (`disabled_by_user_group_marketing`).
    - `categoryNotificationsEnabled`: Kategori bildirimlerini kontrol eder (`disabled_by_user_group_category`).
-   - `keywordNotificationsEnabled`: Anahtar kelime bildirimlerini kontrol eder (`disabled_by_user_group_keyword`).
+   - `keywordNotificationsEnabled`: Anahtar kelime bildirimlerini kontrol eder (`disabled_by_user_group_keyword`). Kelime takibi ekranında bu ayar kapalıysa amber uyarı banner'ı ile kullanıcı yönlendirilir (FS-PREF-05).
 
 3. **Detay Tercih Kartları (Chevron `>`):**
    - `Takip Edilen Kategoriler >`: Master Switch AÇIK VE `categoryNotificationsEnabled == true` ise açılır. Kapalıysa dinamik uyarı: *"Bu ayarı değiştirmek için önce Kategori Bildirimleri'ni açmalısınız."*.

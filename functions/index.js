@@ -451,7 +451,8 @@ async function matchAndCreateDealNotifications(deal, dealId) {
     candidateKeywords.add(`${w1} ${w2} ${w3}`);
   }
 
-  const uniqueKeywords = [...candidateKeywords];
+  // FS-NOTIF-05: Tek bir fırsatta Firestore subquery patlamasını önleyen azami 90 aday kelime (en fazla 3 chunk) tavanı
+  const uniqueKeywords = [...candidateKeywords].slice(0, 90);
   const matchedUsers = new Map(); // userId -> { reason: 'keyword'|'author'|'category', detail: String, reasons: {} }
 
   // A. Takip Edilen Yazarlar (zil açık - Limit 200)
@@ -483,9 +484,15 @@ async function matchAndCreateDealNotifications(deal, dealId) {
 
   // B. Kategori Abonelikleri (Limit 200)
   const category = deal.category || 'genel';
+  const subCategory = deal.subCategory || deal.subcategory || null;
   const categoriesToCheck = [category];
   if (category.includes(':')) {
     categoriesToCheck.push(category.split(':')[0]); // parent category
+  }
+  if (subCategory && typeof subCategory === 'string' && subCategory.trim().length > 0) {
+    const cleanSubTrim = subCategory.trim();
+    categoriesToCheck.push(`${category}:${cleanSubTrim}`);
+    categoriesToCheck.push(`${category}:${cleanSubTrim.toLowerCase()}`);
   }
 
   try {
@@ -617,21 +624,24 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       const cleanCategory = String(rawCategory).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
       const categoryTopic = `cat_${cleanCategory}`;
 
+      const safeTitle = String(deal.title || '').substring(0, 100);
       const formattedPrice = (deal.price === 0 || deal.price === '0') ? 'ÜCRETSİZ' : `${deal.price || 0} TL`;
       const catTitle = rawCategory ? (rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1)) : 'Fırsat';
+      const rawImg = deal.imageUrl || deal.mainImage || '';
+      const safeImageUrl = (typeof rawImg === 'string' && rawImg.startsWith('http')) ? rawImg.substring(0, 500) : '';
 
       const topicPayload = {
         topic: categoryTopic,
         notification: {
           title: `🎯 ${catTitle} Fırsatı!`,
-          body: `${deal.title}\n💰 ${formattedPrice}`
+          body: `${safeTitle}\n💰 ${formattedPrice}`
         },
         data: {
           type: 'deal',
           reason: 'category',
           dealId: String(dealId),
           category: String(rawCategory),
-          imageUrl: String(deal.imageUrl || deal.mainImage || ''),
+          imageUrl: safeImageUrl,
           merchant: String(deal.merchant || ''),
           price: String(deal.price !== undefined ? deal.price : ''),
           click_action: 'FLUTTER_NOTIFICATION_CLICK'
@@ -645,19 +655,21 @@ async function matchAndCreateDealNotifications(deal, dealId) {
             icon: '@mipmap/ic_launcher',
             tag: `deal_${dealId}`,
             defaultSound: true,
-            defaultVibrateTimings: true
+            defaultVibrateTimings: true,
+            onlyAlertOnce: true
           }
         },
         apns: {
           headers: {
             'apns-push-type': 'alert',
-            'apns-priority': '10'
+            'apns-priority': '10',
+            'apns-collapse-id': `deal_${dealId}`
           },
           payload: {
             aps: {
               alert: {
                 title: `🎯 ${catTitle} Fırsatı!`,
-                body: `${deal.title}\n💰 ${formattedPrice}`
+                body: `${safeTitle}\n💰 ${formattedPrice}`
               },
               sound: 'default',
               badge: 1,
@@ -672,7 +684,23 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       const topicRes = await admin.messaging().send(topicPayload);
       functions.logger.info(`📢 Kategori FCM konusuna (topic: ${categoryTopic}) push gönderildi: ${topicRes}`);
 
-      // Eğer alt kategori ise (örn. elektronik:bilgisayar) ana kategoriye de ilet
+      // FS-NOTIF-07: Alt kategori konusuna (cat_kategori_altkategori) doğrudan FCM topic yayını
+      if (subCategory && typeof subCategory === 'string' && subCategory.trim().length > 0) {
+        const cleanSub = subCategory.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+        const subTopic = `cat_${cleanCategory}_${cleanSub}`;
+        const subPayload = {
+          ...topicPayload,
+          topic: subTopic,
+          data: {
+            ...topicPayload.data,
+            subCategory: cleanSub
+          }
+        };
+        await admin.messaging().send(subPayload).catch(e => functions.logger.warn(`⚠️ Subcategory topic push (${subTopic}) uyarısı:`, e.message));
+        functions.logger.info(`📢 Alt kategori FCM konusuna (topic: ${subTopic}) push gönderildi.`);
+      }
+
+      // Eğer kategori stringi ":" içeriyorsa (örn. elektronik:bilgisayar) ana kategoriye de ilet
       if (rawCategory.includes(':')) {
         const parentCat = rawCategory.split(':')[0];
         const cleanParent = parentCat.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
@@ -682,6 +710,64 @@ async function matchAndCreateDealNotifications(deal, dealId) {
           await admin.messaging().send(parentPayload).catch(e => functions.logger.warn('⚠️ Parent category topic push uyarısı:', e.message));
           functions.logger.info(`📢 Ana kategori FCM konusuna (topic: ${parentTopic}) push gönderildi.`);
         }
+      }
+
+      // FS-NOTIF-11: Botkolik Radarı FCM Topic Dağıtımı (40.000 aboneye sınırsız, anlık ve sıfır maliyetli push)
+      if (authorTarget === 'botkolik') {
+        const botTopic = 'author_botkolik';
+        const botMerchant = deal.merchant ? ` (${deal.merchant})` : '';
+        const botPayload = {
+          topic: botTopic,
+          notification: {
+            title: `⚡ Botkolik Radarı${botMerchant}!`,
+            body: `${safeTitle}\n💰 ${formattedPrice}`
+          },
+          data: {
+            type: 'deal',
+            reason: 'author',
+            author: 'botkolik',
+            dealId: String(dealId),
+            title: safeTitle,
+            imageUrl: safeImageUrl,
+            price: String(deal.price !== undefined ? deal.price : ''),
+            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              channelId: 'sicak_firsatlar_general_v2',
+              sound: 'default',
+              color: '#FF6D00',
+              icon: '@mipmap/ic_launcher',
+              tag: `deal_${dealId}`,
+              defaultSound: true,
+              defaultVibrateTimings: true,
+              onlyAlertOnce: true
+            }
+          },
+          apns: {
+            headers: {
+              'apns-push-type': 'alert',
+              'apns-priority': '10',
+              'apns-collapse-id': `deal_${dealId}`
+            },
+            payload: {
+              aps: {
+                alert: {
+                  title: `⚡ Botkolik Radarı${botMerchant}!`,
+                  body: `${safeTitle}\n💰 ${formattedPrice}`
+                },
+                sound: 'default',
+                badge: 1,
+                'content-available': 1,
+                'interruption-level': 'active',
+                category: 'DEAL_NOTIFICATION'
+              }
+            }
+          }
+        };
+        await admin.messaging().send(botPayload).catch(e => functions.logger.warn(`⚠️ Botkolik topic push (${botTopic}) uyarısı:`, e.message));
+        functions.logger.info(`📢 Botkolik FCM konusuna (topic: ${botTopic}) push gönderildi.`);
       }
 
       // FS-25: Anahtar Kelime Radarı FCM Topic Dağıtımı (Sıfır Maliyetli, Sınırsız Ölçekli)
@@ -700,15 +786,15 @@ async function matchAndCreateDealNotifications(deal, dealId) {
             topic: kwTopic,
             notification: {
               title: `🎯 Radar: ${dispKw}`,
-              body: `${deal.title}\n💰 ${formattedPrice}`
+              body: `${safeTitle}\n💰 ${formattedPrice}`
             },
             data: {
               type: 'deal',
               reason: 'keyword',
               keyword: String(dispKw),
               dealId: String(dealId),
-              title: String(deal.title || ''),
-              imageUrl: String(deal.imageUrl || ''),
+              title: safeTitle,
+              imageUrl: safeImageUrl,
               price: String(deal.price !== undefined ? deal.price : ''),
               click_action: 'FLUTTER_NOTIFICATION_CLICK'
             },
@@ -721,19 +807,21 @@ async function matchAndCreateDealNotifications(deal, dealId) {
                 icon: '@mipmap/ic_launcher',
                 tag: `deal_${dealId}`,
                 defaultSound: true,
-                defaultVibrateTimings: true
+                defaultVibrateTimings: true,
+                onlyAlertOnce: true
               }
             },
             apns: {
               headers: {
                 'apns-push-type': 'alert',
-                'apns-priority': '10'
+                'apns-priority': '10',
+                'apns-collapse-id': `deal_${dealId}`
               },
               payload: {
                 aps: {
                   alert: {
                     title: `🎯 Radar: ${dispKw}`,
-                    body: `${deal.title}\n💰 ${formattedPrice}`
+                    body: `${safeTitle}\n💰 ${formattedPrice}`
                   },
                   sound: 'default',
                   badge: 1,
@@ -1763,9 +1851,25 @@ exports.onUserMessageCreated = functions.firestore
         return null;
       }
 
-      // Bildirim içeriği (Fırsat ekli ise özel zengin metin)
+      // FS-MSG-15: Kilit ekranı küfür/şüpheli içerik ve oltalama koruması
+      const isProfane = containsProfanity(content);
+      if (isProfane) {
+        functions.logger.warn(`🚨 [FS-MSG-15] Mesajda küfür/şüpheli içerik tespit edildi. Push bildirim gizlendi: Sender: ${senderId}, Receiver: ${receiverId}`);
+        createModerationMessage({
+          type: 'user_message',
+          userId: senderId,
+          userName: resolvedSenderName,
+          content: content,
+          dealId: message.dealId || null,
+          reason: 'Birebir mesajlaşmada küfür/hakaret/şüpheli içerik tespit edildi'
+        }).catch(err => functions.logger.error('❌ Moderasyon alarmı kaydedilemedi:', err));
+      }
+
+      // Bildirim içeriği (Fırsat ekli ise özel zengin metin, küfürlü ise güvenli placeholder)
       let resolvedBody = content;
-      if (message.dealTitle || message.dealId) {
+      if (isProfane) {
+        resolvedBody = 'Yeni bir mesaj aldınız';
+      } else if (message.dealTitle || message.dealId) {
         resolvedBody = message.dealTitle
           ? `"${message.dealTitle}" fırsatını paylaştı`
           : 'Bir fırsat paylaştı';
@@ -1779,6 +1883,10 @@ exports.onUserMessageCreated = functions.firestore
             ? message.createdAt
             : new Date().toISOString());
 
+      // FS-MSG-17: FCM Data payload'unun 4KB tavanını aşmasını önleyen güvenli metin kırpma
+      const safeTitle = `💬 ${String(resolvedSenderName || 'Bir Kullanıcı').slice(0, 80)}`;
+      const safeBody = String(notificationBody || 'Yeni bir mesajınız var').slice(0, 200);
+
       functions.logger.info(`📤 Mesaj bildirimi ${devices.length} cihaza gönderiliyor...`);
 
       const promises = devices.map(async (device) => {
@@ -1790,15 +1898,15 @@ exports.onUserMessageCreated = functions.firestore
           token: device.token,
           data: {
             type: 'message',
-            messageId: String(messageId || ''),
-            senderId: String(senderId || ''),
-            senderName: String(resolvedSenderName || ''),
-            senderImageUrl: String(senderImageUrl || ''),
-            messageText: String(notificationBody || ''),
-            receiverId: String(receiverId || ''),
+            messageId: String(messageId || '').slice(0, 100),
+            senderId: String(senderId || '').slice(0, 100),
+            senderName: String(resolvedSenderName || '').slice(0, 80),
+            senderImageUrl: String(senderImageUrl || '').slice(0, 500),
+            messageText: safeBody,
+            receiverId: String(receiverId || '').slice(0, 100),
             createdAt: createdAtStr,
-            notification_title: `💬 ${resolvedSenderName}`,
-            notification_body: String(notificationBody || ''),
+            notification_title: safeTitle,
+            notification_body: safeBody,
             click_action: 'FLUTTER_NOTIFICATION_CLICK',
           },
           android: {
@@ -1816,8 +1924,8 @@ exports.onUserMessageCreated = functions.firestore
             payload: {
               aps: {
                 alert: {
-                  title: `💬 ${resolvedSenderName}`,
-                  body: notificationBody,
+                  title: safeTitle,
+                  body: safeBody,
                 },
                 sound: 'default',
                 badge: 1,
@@ -2081,8 +2189,8 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
 
     // 2. KÜRESEL DUYURU KAYDI (Global Announcements - FS-02 Çift Katmanlı Feed)
     // Kupon bildiriminin tüm kullanıcıların Bildirim Merkezinde (AdminNotificationsScreen) anında görünmesini sağlar
+    const announcementId = `coupon_${kuponId}`;
     try {
-      const announcementId = `coupon_${kuponId}`;
       const announcementRef = admin.firestore().collection('globalAnnouncements').doc(announcementId);
       let expiresTimestamp;
       if (kupon.bitisTarihi) {
@@ -2158,22 +2266,11 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
       }
     }
 
-    // 4. Hedefli Mağaza ve Yazar Abonelikleri + Geriye Dönük Uyumluluk (In-App Doküman Yazımı)
+    // 4. Hedefli Mağaza ve Yazar Abonelikleri (FS-02 & FS-CF-07 Çift Katmanlı Feed Mimarisi)
+    // 100k kullanıcı ölçeğinde rastgele 150 kullanıcıya yazma döngüsü tasfiye edilmiştir.
+    // Tüm kullanıcılar kuponu zaten globalAnnouncements koleksiyonu üzerinden anında görür.
+    // Yalnızca mağaza kelimesini veya kupon yazarını açıkça takip eden kullanıcılara kişisel kayıt yazılır.
     const targetUserIds = new Set();
-
-    // Eski sürüm istemcilerin de kişisel bildirim kutusunda görebilmesi için azami 150 aktif kullanıcı
-    try {
-      const activeUsersSnap = await admin.firestore().collection('users')
-        .select()
-        .limit(150)
-        .get();
-      activeUsersSnap.forEach(d => {
-        if (d.id !== paylasanId) targetUserIds.add(d.id);
-      });
-    } catch (usersErr) {
-      functions.logger.warn('⚠️ Aktif kullanıcı listesi alınırken hata:', usersErr.message);
-    }
-
     const storeKeyword = normalize(magazaAdi).trim();
     const queries = [];
 
@@ -2259,7 +2356,7 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
       if (opCount > 0) {
         await batch.commit();
       }
-      functions.logger.info(`✅ ${finalTargetUserIds.length} kullanıcı için topluluk kuponu bildirimleri oluşturuldu.`);
+      functions.logger.info(`✅ ${finalTargetUserIds.length} abone için hedefli topluluk kuponu bildirimleri oluşturuldu.`);
     }
   } catch (err) {
     functions.logger.error('❌ Topluluk kuponu bildirimleri oluşturulurken hata:', err);
@@ -2354,33 +2451,30 @@ exports.onCouponUpdated = functions
     }
 
     // 4. TOPLULUK OYLAMA EŞİĞİ & ÇÖP KUPON YÖNETİMİ
-    // Soğuk oylar ile sıcak oylar arasındaki fark >= 5 ise:
-    // - Web kaynaklı kupon ise Firestore'dan kalıcı olarak silinir.
-    // - Topluluk kaynaklı aktif kupon ise 'gecersiz' durumuna çekilir.
+    // FS-KUP-P0-03: Soğuk oylar ile sıcak oylar arasındaki fark >= 5 ise:
+    // - Hem Web hem Topluluk kuponu kalıcı olarak SİLİNMEZ!
+    // - 'gecersiz' durumuna çekilir ve sonlanmaTarihi atanır.
+    // Böylece votes alt koleksiyonu korunur ve gece 04:00'te çalışan coupon_scraper aynı kodu web'de
+    // tekrar gördüğünde 0 oyla yepyeni olarak yeniden diriltemez (Zombie Resurrection kalkanı)!
     // Net skor < 5'e toparlandığında ve moderasyon engeli yoksa tekrar 'aktif' yapılır.
     const sicakOylar = Number(afterData.sicakOySayisi) || 0;
     const sogukOylar = Number(afterData.sogukOySayisi) || 0;
     const netSoguk = sogukOylar - sicakOylar;
 
     if (afterData.durum === 'aktif' && netSoguk >= 5) {
-      if (afterData.kaynakTipi === 'web') {
-        functions.logger.info(`🗑️ Web kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), votes alt koleksiyonu ve doküman siliniyor: ${kuponId}`);
-        const kuponRef = admin.firestore().collection('kuponlar').doc(kuponId);
-        await _deleteSubcollectionBatch(kuponRef.collection('votes'));
-        await kuponRef.delete();
-        return null;
-      } else {
-        functions.logger.info(`❄️ Topluluk kuponu aşırı soğuk oy aldı (fark: ${netSoguk}), 'gecersiz' yapılıyor: ${kuponId}`);
-        await admin.firestore().collection('kuponlar').doc(kuponId).update({
-          durum: 'gecersiz',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        return null;
-      }
-    } else if (afterData.durum === 'gecersiz' && netSoguk < 5 && !afterData.moderationFlag && !beforeData.moderationFlag) {
+      functions.logger.info(`❄️ Kupon (${afterData.kaynakTipi}) aşırı soğuk oy aldı (fark: ${netSoguk}), 'gecersiz' yapılıyor: ${kuponId}`);
+      await admin.firestore().collection('kuponlar').doc(kuponId).update({
+        durum: 'gecersiz',
+        sonlanmaNedeni: 'community_downvote',
+        sonlanmaTarihi: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return null;
+    } else if (afterData.durum === 'gecersiz' && afterData.sonlanmaNedeni === 'community_downvote' && netSoguk < 5 && !afterData.moderationFlag && !beforeData.moderationFlag) {
       functions.logger.info(`🔥 Kupon oylarla kurtarıldı (fark: ${netSoguk}), tekrar 'aktif' yapılıyor: ${kuponId}`);
       await admin.firestore().collection('kuponlar').doc(kuponId).update({
         durum: 'aktif',
+        sonlanmaNedeni: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       return null;
@@ -2418,16 +2512,7 @@ exports.onCouponDeleted = functions
     // 2. kuponlar/{kuponId}/votes alt koleksiyonunu temizle
     try {
       const kuponRef = admin.firestore().collection('kuponlar').doc(kuponId);
-      if (typeof admin.firestore().recursiveDelete === 'function') {
-        await admin.firestore().recursiveDelete(kuponRef.collection('votes'));
-      } else {
-        const votesSnap = await kuponRef.collection('votes').limit(500).get();
-        if (!votesSnap.empty) {
-          const batch = admin.firestore().batch();
-          votesSnap.docs.forEach((doc) => batch.delete(doc.reference));
-          await batch.commit();
-        }
-      }
+      await _deleteSubcollectionBatch(kuponRef.collection('votes'));
       functions.logger.info(`✅ kuponlar/${kuponId}/votes başarıyla temizlendi.`);
     } catch (voteErr) {
       functions.logger.warn(`⚠️ Kupon votes alt koleksiyonu silinirken hata: ${voteErr.message}`);
@@ -2449,6 +2534,36 @@ exports.onCouponDeleted = functions
       }
     }
 
+    return null;
+  }));
+
+/**
+ * @function onCatalogDeleted
+ * @category Realtime Event Trigger
+ * @description Katalog dokümanı silindiğinde (Web Admin veya cron ile), Firebase Storage'daki
+ * yetim kapak görselini (catalogs/{catalogId}_cover.webp) temizler (FS-AKT-P1-09).
+ * @trigger Firestore: kataloglar/{katalogId} (onDelete)
+ * @schedule Anlık
+ * @resources 256MB RAM / 60s Timeout
+ */
+exports.onCatalogDeleted = functions
+  .runWith({ timeoutSeconds: 60, memory: '256MB' })
+  .firestore
+  .document('kataloglar/{katalogId}')
+  .onDelete(wrapTrigger('onCatalogDeleted', async (snap, context) => {
+    const catalogId = context.params.katalogId;
+    functions.logger.info(`🗑️ Katalog silindi, Storage kapak görseli temizleniyor: ${catalogId}`);
+    try {
+      const bucket = admin.storage().bucket();
+      const coverFile = bucket.file(`catalogs/${catalogId}_cover.webp`);
+      const [exists] = await coverFile.exists().catch(() => [false]);
+      if (exists) {
+        await coverFile.delete();
+        functions.logger.info(`✅ Storage catalogs/${catalogId}_cover.webp başarıyla silindi.`);
+      }
+    } catch (err) {
+      functions.logger.warn(`⚠️ Katalog Storage kapak görseli silinirken hata (${catalogId}):`, err.message);
+    }
     return null;
   }));
 
@@ -4726,15 +4841,82 @@ async function _cleanupUserDataCore(userId) {
     functions.logger.error(`❌ Yorum silme hatası:`, err.message);
   }
 
-  // 5. Direkt mesajları sil (messages ve adminToUserMessages)
+  // 5. Direkt mesajlar & konuşmalar (GDPR/KVKK & Kanıt Karartmayı Önleyen Dünya Standardı):
+  // Masum karşı tarafların mesaj geçmişini yok etmeden, ayrılan kullanıcının kimlik verisini anonimleştirir.
   try {
-    const sentMsgCount = await deleteQueryInBatches(db.collection('messages').where('senderId', '==', userId));
-    const recvMsgCount = await deleteQueryInBatches(db.collection('messages').where('receiverId', '==', userId));
+    let anonymizedMsgCount = 0;
+    // 5.1 Gönderilen mesajlarda kullanıcı kimliğini anonimleştir ve deletedBy ekle
+    while (true) {
+      const sentMsgsSnap = await db.collection('messages')
+        .where('senderId', '==', userId)
+        .where('senderName', '!=', 'Silinmiş Kullanıcı')
+        .limit(200)
+        .get();
+      if (sentMsgsSnap.empty) break;
+
+      const batch = db.batch();
+      for (const msgDoc of sentMsgsSnap.docs) {
+        batch.update(msgDoc.ref, {
+          senderName: 'Silinmiş Kullanıcı',
+          senderImageUrl: '',
+          deletedBy: admin.firestore.FieldValue.arrayUnion(userId),
+        });
+        anonymizedMsgCount++;
+      }
+      await batch.commit();
+      if (sentMsgsSnap.size < 200) break;
+    }
+
+    // 5.2 Alınan mesajlarda kullanıcının görünümünden gizlemek için deletedBy ekle (karşı tarafın mesajı korunur)
+    while (true) {
+      const recvMsgsSnap = await db.collection('messages')
+        .where('receiverId', '==', userId)
+        .limit(200)
+        .get();
+      if (recvMsgsSnap.empty) break;
+
+      const batch = db.batch();
+      let updatedCount = 0;
+      for (const msgDoc of recvMsgsSnap.docs) {
+        const deletedByList = msgDoc.data().deletedBy || [];
+        if (!deletedByList.includes(userId)) {
+          batch.update(msgDoc.ref, {
+            deletedBy: admin.firestore.FieldValue.arrayUnion(userId),
+          });
+          updatedCount++;
+        }
+      }
+      if (updatedCount > 0) {
+        await batch.commit();
+      }
+      if (recvMsgsSnap.size < 200) break;
+    }
+
+    // 5.3 Konuşma (conversations) üst dokümanlarında katılımcı bilgisini anonimleştir
+    const convsSnap = await db.collection('conversations')
+      .where('participants', 'array-contains', userId)
+      .limit(100)
+      .get();
+    if (!convsSnap.empty) {
+      const convBatch = db.batch();
+      for (const convDoc of convsSnap.docs) {
+        convBatch.update(convDoc.ref, {
+          [`participantDetails.${userId}.name`]: 'Silinmiş Kullanıcı',
+          [`participantDetails.${userId}.avatar`]: '',
+          [`participantDetails.${userId}.isDeleted`]: true,
+          [`clearedAt.${userId}`]: admin.firestore.FieldValue.serverTimestamp(),
+          [`unreadCounts.${userId}`]: 0,
+        });
+      }
+      await convBatch.commit();
+    }
+
+    // 5.4 Yalnızca bu kullanıcıya ait sistem/admin mesajlarını güvenle sil
     const adminMsgCount = await deleteQueryInBatches(db.collection('adminToUserMessages').where('userId', '==', userId));
-    deletedStats.messages = sentMsgCount + recvMsgCount + adminMsgCount;
-    functions.logger.info(`✅ Mesajlar silindi (${deletedStats.messages} mesaj): ${userId}`);
+    deletedStats.messages = anonymizedMsgCount + adminMsgCount;
+    functions.logger.info(`✅ Mesajlar ve konuşmalar KVKK/kanıt korumalı olarak anonimleştirildi (${anonymizedMsgCount} anonimleştirildi, ${adminMsgCount} admin mesajı silindi): ${userId}`);
   } catch (err) {
-    functions.logger.error(`❌ Mesaj silme hatası:`, err.message);
+    functions.logger.error(`❌ Mesaj anonimleştirme/silme hatası:`, err.message);
   }
 
   // 6. Raporları sil (reports)
@@ -5508,7 +5690,43 @@ exports.onUserUpdated = functions
       functions.logger.error('❌ Yorum senkronizasyon hatası:', commentErr.message);
     }
 
-    // 2. Gönderilen Mesajları Senkronize Et (Limit 1200, 400'erli sayfalar)
+    // 2. FS-MSG-04: Sohbet Üst Dokümanlarını (Conversations) Senkronize Et
+    try {
+      const convSnap = await db.collection('conversations')
+        .where('participants', 'array-contains', userId)
+        .limit(200)
+        .get();
+
+      if (!convSnap.empty) {
+        const batch = db.batch();
+        let updateCount = 0;
+        convSnap.docs.forEach((doc) => {
+          const docData = doc.data() || {};
+          const details = docData.participantDetails || {};
+          const userDetail = details[userId] || {};
+          
+          if ((nameChanged && userDetail.displayName !== newName) || 
+              (photoChanged && userDetail.profileImageUrl !== newPhoto)) {
+            const updates = {
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+            if (nameChanged) updates[`participantDetails.${userId}.displayName`] = newName;
+            if (photoChanged) updates[`participantDetails.${userId}.profileImageUrl`] = newPhoto;
+            batch.update(doc.ref, updates);
+            updateCount++;
+          }
+        });
+
+        if (updateCount > 0) {
+          await batch.commit();
+          functions.logger.info(`💬 Sohbet başlıkları senkronizasyonu (${userId}): ${updateCount} sohbet güncellendi.`);
+        }
+      }
+    } catch (convErr) {
+      functions.logger.error('❌ Sohbet senkronizasyon hatası:', convErr.message);
+    }
+
+    // 3. Gönderilen Mesajları Senkronize Et (Limit 1200, 400'erli sayfalar)
     try {
       const baseSentQuery = db.collection('messages').where('senderId', '==', userId);
       const res = await syncCollectionWithPagination(baseSentQuery, (data) => {

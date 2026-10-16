@@ -159,7 +159,8 @@ async function fetchHtmlWithRetry(targetUrl, maxRetries = 3) {
 
     // Strategy A1 (Primary): Google Translate Proxy (Standard Query)
     try {
-      const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+      const sep = parsedUrl.search ? '&' : '?';
+      const translateProxyUrl = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}${sep}_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
       const proxyRes = await fetch(translateProxyUrl, {
         headers: {
           'User-Agent': ua,
@@ -173,16 +174,38 @@ async function fetchHtmlWithRetry(targetUrl, maxRetries = 3) {
         const html = await proxyRes.text();
         if (isValidHtml(html, 2500)) return html;
       } else if (proxyRes.status === 429) {
-        functions.logger.warn(`⚠️ Translate Proxy 429 Rate Limit for ${targetUrl} (Attempt ${attempt}). Backing off...`);
-        await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
+        functions.logger.warn(`⚠️ Translate Proxy 429 Rate Limit for ${targetUrl} (Attempt ${attempt}). Failing over to Yandex TurboPages Proxy...`);
       }
     } catch (e) {
       functions.logger.debug(`Stage A1 (Translate Proxy attempt ${attempt}) failed for ${targetUrl}:`, e.message);
     }
 
-    // Strategy A2: Google Translate Proxy (Web App Mode _x_tr_pto=wapp)
+    // Strategy A2 (Secondary Primary - Instant Failover): Yandex Translate TurboPages Proxy
     try {
-      const translateProxyWapp = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr&_x_tr_pto=wapp`;
+      const yandexUrl = `https://translate.yandex.ru/translate?url=${encodeURIComponent(targetUrl)}&lang=tr-tr`;
+      const yandexRes = await fetch(yandexUrl, {
+        headers: {
+          'User-Agent': getRandomUserAgent(),
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8'
+        },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (yandexRes.ok) {
+        const html = await yandexRes.text();
+        if (isValidHtml(html, 2500)) {
+          functions.logger.info(`✅ [Yandex Failover] Successfully fetched ${targetUrl} via Yandex TurboPages Proxy.`);
+          return html;
+        }
+      }
+    } catch (yandexErr) {
+      functions.logger.debug(`Stage A2 (Yandex Proxy attempt ${attempt}) failed for ${targetUrl}:`, yandexErr.message);
+    }
+
+    // Strategy A3: Google Translate Proxy (Web App Mode _x_tr_pto=wapp & Alternative Language Routing)
+    try {
+      const sep = parsedUrl.search ? '&' : '?';
+      const translateProxyWapp = `https://${proxyHost}${parsedUrl.pathname}${parsedUrl.search}${sep}_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=tr&_x_tr_pto=wapp`;
       const proxyRes2 = await fetch(translateProxyWapp, {
         headers: {
           'User-Agent': getRandomUserAgent(),
@@ -345,6 +368,58 @@ function parseDateFromUrl(url) {
 async function scrapeAndSaveCatalogs() {
   functions.logger.info('🚀 Starting guaranteed 100% catalog scraping flow for all stores...');
   const allScrapedCatalogs = [];
+  const successfullyScrapedStores = new Set();
+  const db = admin.firestore();
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ADIM 0: Akıllı Artımlı Kazıma Önbellek Motoru (Smart Incremental Cache Engine)
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Mevcut katalogları Firestore'dan baştan yükleyerek dünkü/geçerli broşürlerin
+  // sayfa detaylarının (113+ istek) her gece gereksiz yere tekrar çekilmesini önler.
+  // Bu sayede Translate Proxy / WAF üzerindeki istek hacmi %70+ azalır (429 Rate Limit sıfırlanır).
+  const existingCatalogMap = new Map();
+  let existingSnapshot = null;
+  let cacheHitCount = 0;
+  let cacheMissCount = 0;
+
+  try {
+    functions.logger.info('📦 [Smart Incremental] Pre-loading existing catalogs from Firestore...');
+    existingSnapshot = await db.collection('kataloglar').get();
+    for (const doc of existingSnapshot.docs) {
+      const data = doc.data() || {};
+      let startTimestamp = data.baslangicTarihi;
+      if (startTimestamp && !(startTimestamp instanceof admin.firestore.Timestamp)) {
+        if (startTimestamp.toDate) {
+          startTimestamp = admin.firestore.Timestamp.fromDate(startTimestamp.toDate());
+        } else {
+          startTimestamp = admin.firestore.Timestamp.fromDate(new Date(startTimestamp));
+        }
+      }
+      let endTimestamp = data.bitisTarihi;
+      if (endTimestamp && !(endTimestamp instanceof admin.firestore.Timestamp)) {
+        if (endTimestamp.toDate) {
+          endTimestamp = admin.firestore.Timestamp.fromDate(endTimestamp.toDate());
+        } else {
+          endTimestamp = admin.firestore.Timestamp.fromDate(new Date(endTimestamp));
+        }
+      }
+
+      existingCatalogMap.set(doc.id, {
+        katalogId: doc.id,
+        magazaKodu: (data.magazaKodu || doc.id.split('_')[0] || '').toLowerCase().trim(),
+        katalogBasligi: data.katalogBasligi || '',
+        baslangicTarihi: startTimestamp || data.baslangicTarihi,
+        bitisTarihi: endTimestamp || data.bitisTarihi,
+        sayfaResimleri: Array.isArray(data.sayfaResimleri) ? data.sayfaResimleri : [],
+        kapakResmi: data.kapakResmi || '',
+        originalKapakResmi: data.originalKapakResmi || data.kapakResmi || '',
+        storageCoverUrl: data.storageCoverUrl || null
+      });
+    }
+    functions.logger.info(`✅ [Smart Incremental] Cached ${existingCatalogMap.size} existing catalogs in memory.`);
+  } catch (cacheErr) {
+    functions.logger.warn('⚠️ [Smart Incremental] Pre-fetching failed, proceeding with full scrape fallback:', cacheErr.message);
+  }
 
   for (const store of STORES) {
     try {
@@ -363,9 +438,20 @@ async function scrapeAndSaveCatalogs() {
         const aTag = $list(el);
         let href = aTag.attr('href') || '';
         
-        // Clean translate.goog if present
+        // Clean proxy wrappers (turbopages.org, translate.yandex.*, .translate.goog) if present
         let cleanPath = href;
-        if (cleanPath.includes('.translate.goog')) {
+        if (cleanPath.includes('turbopages.org')) {
+          const parts = cleanPath.split(/\/https?\/(?:www\.)?akakce\.com/i);
+          if (parts.length > 1) {
+            cleanPath = parts[1];
+          }
+        } else if (cleanPath.includes('translate.yandex.')) {
+          try {
+            const u = new URL(cleanPath.startsWith('http') ? cleanPath : `https://${cleanPath}`);
+            const inner = u.searchParams.get('url');
+            if (inner) cleanPath = new URL(inner).pathname;
+          } catch (e) {}
+        } else if (cleanPath.includes('.translate.goog')) {
           try {
             const u = new URL(cleanPath.startsWith('http') ? cleanPath : `https://${cleanPath}`);
             cleanPath = u.pathname;
@@ -399,6 +485,16 @@ async function scrapeAndSaveCatalogs() {
           let coverImage = '';
           if (bgUrlMatch) {
             coverImage = bgUrlMatch[1];
+            if (coverImage.includes('turbopages.org')) {
+              const parts = coverImage.split(/\/https?\/(?:cdn\.akakce\.com|www\.akakce\.com)/i);
+              if (parts.length > 1) coverImage = 'https://cdn.akakce.com' + parts[1];
+            } else if (coverImage.includes('.translate.goog')) {
+              try {
+                const u = new URL(coverImage.startsWith('http') ? coverImage : 'https://' + coverImage);
+                coverImage = 'https://cdn.akakce.com' + u.pathname;
+              } catch (e) {}
+            }
+            coverImage = coverImage.split('?')[0].split('#')[0];
             if (coverImage.startsWith('//')) coverImage = 'https:' + coverImage;
           }
 
@@ -417,9 +513,53 @@ async function scrapeAndSaveCatalogs() {
       functions.logger.info(`Found ${catalogItems.length} brochures for ${store.name}.`);
 
       const storeBrochures = await mapConcurrent(catalogItems, 2, async (item) => {
+        const catalogId = `${store.code}_${item.brochureId}`;
+
+        // ─────────────────────────────────────────────────────────────
+        // AKILLI ARTIMLI KAZIMA: Önbellek Kontrolü (Cache Hit Koruması)
+        // ─────────────────────────────────────────────────────────────
+        if (existingCatalogMap.has(catalogId)) {
+          const cached = existingCatalogMap.get(catalogId);
+          const hasPages = Array.isArray(cached.sayfaResimleri) && cached.sayfaResimleri.length > 0;
+          const hasCover = typeof cached.kapakResmi === 'string' && cached.kapakResmi.length > 0;
+          const hasDates = cached.bitisTarihi != null;
+
+          if (hasPages && hasCover && hasDates) {
+            cacheHitCount++;
+            functions.logger.info(`   ⚡ [Incremental Hit] ${catalogId} önbellekten alındı (HTTP isteği tasarruf edildi).`);
+
+            let storageCoverUrl = cached.storageCoverUrl || null;
+            let kapakResmi = cached.kapakResmi;
+            if (!storageCoverUrl && kapakResmi && kapakResmi.includes('firebasestorage.googleapis.com')) {
+              storageCoverUrl = kapakResmi;
+            } else if (!storageCoverUrl && process.env.FUNCTIONS_EMULATOR !== 'true' && kapakResmi) {
+              storageCoverUrl = await uploadCoverToStorage(cached.originalKapakResmi || kapakResmi, catalogId);
+              if (storageCoverUrl) {
+                kapakResmi = storageCoverUrl;
+              }
+            }
+
+            return {
+              katalogId: catalogId,
+              magazaKodu: store.code,
+              katalogBasligi: item.titleSuffix || cached.katalogBasligi,
+              baslangicTarihi: cached.baslangicTarihi,
+              bitisTarihi: cached.bitisTarihi,
+              sayfaResimleri: cached.sayfaResimleri,
+              kapakResmi: kapakResmi,
+              originalKapakResmi: cached.originalKapakResmi || cached.kapakResmi,
+              storageCoverUrl: storageCoverUrl || null
+            };
+          }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // CACHE MISS: Yeni veya eksik broşür, detay sayfasını kazı
+        // ─────────────────────────────────────────────────────────────
+        cacheMissCount++;
         try {
           const detailUrl = item.href.startsWith('http') ? item.href : `https://www.akakce.com${item.href.startsWith('/') ? '' : '/'}${item.href}`;
-          functions.logger.info(`   📄 Scraping detail page: ${detailUrl}`);
+          functions.logger.info(`   📄 [Cache Miss - Scraping] Scraping detail page: ${detailUrl}`);
 
           const detailHtml = await fetchHtmlWithRetry(detailUrl, 3);
 
@@ -433,6 +573,16 @@ async function scrapeAndSaveCatalogs() {
             imgElements.each((i, el) => {
               let src = $detail(el).attr('data-src') || $detail(el).attr('src') || $detail(el).attr('data-original');
               if (src && !src.includes('t.gif') && (src.includes('/_bro/') || src.includes('cdn.akakce.com'))) {
+                if (src.includes('turbopages.org')) {
+                  const parts = src.split(/\/https?\/(?:cdn\.akakce\.com|www\.akakce\.com)/i);
+                  if (parts.length > 1) src = 'https://cdn.akakce.com' + parts[1];
+                } else if (src.includes('.translate.goog')) {
+                  try {
+                    const u = new URL(src.startsWith('http') ? src : 'https://' + src);
+                    src = 'https://cdn.akakce.com' + u.pathname;
+                  } catch (e) {}
+                }
+                src = src.split('?')[0].split('#')[0];
                 if (src.startsWith('//')) src = 'https:' + src;
                 src = src.replace('/_bro/l/', '/_bro/u/').replace('/_bro/y/', '/_bro/u/').replace('/_bro/m/', '/_bro/u/');
                 if (!sayfaResimleri.includes(src)) {
@@ -457,12 +607,24 @@ async function scrapeAndSaveCatalogs() {
               }
 
               let finalCover = (item.coverImage && !item.coverImage.includes('t.gif')) ? item.coverImage : sayfaResimleri[0];
+              if (finalCover.includes('turbopages.org')) {
+                const parts = finalCover.split(/\/https?\/(?:cdn\.akakce\.com|www\.akakce\.com)/i);
+                if (parts.length > 1) finalCover = 'https://cdn.akakce.com' + parts[1];
+              } else if (finalCover.includes('.translate.goog')) {
+                try {
+                  const u = new URL(finalCover.startsWith('http') ? finalCover : 'https://' + finalCover);
+                  finalCover = 'https://cdn.akakce.com' + u.pathname;
+                } catch (e) {}
+              }
+              finalCover = finalCover.split('?')[0].split('#')[0];
               if (finalCover.startsWith('//')) finalCover = 'https:' + finalCover;
               finalCover = finalCover.replace('/_bro/u/', '/_bro/l/').replace('/_bro/y/', '/_bro/l/').replace('/_bro/m/', '/_bro/l/');
 
-              const catalogId = `${store.code}_${item.brochureId}`;
               // FAZ 2 (FS-CF-08): Kapak görselini Firebase Storage'a yedekleme (Akakçe CDN 403 engeli kalkanı)
               const storageCoverUrl = await uploadCoverToStorage(finalCover, catalogId);
+
+              // Detay istekleri arasına nazik jitter ekle (Rate limit koruması)
+              await new Promise(r => setTimeout(r, 600 + Math.random() * 400));
 
               return {
                 katalogId: catalogId,
@@ -484,8 +646,9 @@ async function scrapeAndSaveCatalogs() {
       });
 
       allScrapedCatalogs.push(...storeBrochures.filter(Boolean));
-      // Mağazalar arası kısa bekleme (Rate limit ve WAF koruması)
-      await new Promise(r => setTimeout(r, 300));
+      successfullyScrapedStores.add(store.code.toLowerCase());
+      // Mağazalar arası akıllı jitter (Rate limit ve WAF koruması)
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
     } catch (storeErr) {
       functions.logger.error(`❌ Error scraping store ${store.name}:`, storeErr.message);
       await logErrorToFirestore('catalogs_coupons', 'Catalog Store Scrape Error', storeErr.message, storeErr.stack, 'warning', {
@@ -496,14 +659,14 @@ async function scrapeAndSaveCatalogs() {
     }
   }
 
+  functions.logger.info(`🎯 [Smart Incremental] Summary: ${cacheHitCount} brochures reused from cache, ${cacheMissCount} newly fetched.`);
+
   if (allScrapedCatalogs.length === 0) {
     await logErrorToFirestore('catalogs_coupons', 'Catalog Scrape Zero Result', 'Akakçe üzerinden hiçbir katalog çekilemedi. WAF engeli veya DOM yapısı değişmiş olabilir.', null, 'error', {
       category: 'catalogs_coupons'
     });
     return { success: false, count: 0, message: 'Hiç katalog kazınamadı.' };
   }
-
-  const db = admin.firestore();
 
   // 1. ADIM: Önce yeni katalogları upsert et (Atomic Merge - Sıfır Kesinti & Kesintisiz Görüntüleme)
   functions.logger.info('💾 Writing/updating newly scraped catalogs to Firestore...');
@@ -526,10 +689,18 @@ async function scrapeAndSaveCatalogs() {
   functions.logger.info(`Successfully updated ${allScrapedCatalogs.length} catalogs in Firestore.`);
 
   // 2. ADIM: Artık yayında olmayan eski katalogları tespit et ve sadece onları temizle
-  functions.logger.info('🧹 Reconciling and cleaning obsolete catalogs...');
+  // FS-AKT-P0-02: Yalnızca bu çalışmada BAŞARIYLA taranmış mağazaların eski broşürleri uzlaştırılır!
+  // Bir mağaza ağ hatası/WAF nedeniyle taranamadıysa, o mağazanın mevcut broşürleri ASLA silinmez.
+  functions.logger.info('🧹 Reconciling and cleaning obsolete catalogs for successfully scraped stores...');
   const newCatalogIdSet = new Set(allScrapedCatalogs.map(k => k.katalogId));
-  const existingSnapshot = await db.collection('kataloglar').select().get();
-  const obsoleteDocs = existingSnapshot.docs.filter(doc => !newCatalogIdSet.has(doc.id));
+  if (!existingSnapshot) {
+    existingSnapshot = await db.collection('kataloglar').select('magazaKodu', 'bitisTarihi').get();
+  }
+  const obsoleteDocs = existingSnapshot.docs.filter(doc => {
+    const data = doc.data() || {};
+    const storeCode = (data.magazaKodu || doc.id.split('_')[0] || '').toLowerCase();
+    return successfullyScrapedStores.has(storeCode) && !newCatalogIdSet.has(doc.id);
+  });
 
   const deleteChunks = [];
   for (let i = 0; i < obsoleteDocs.length; i += 400) {
@@ -548,7 +719,62 @@ async function scrapeAndSaveCatalogs() {
   }
   functions.logger.info(`Reconciled catalogs: ${obsoleteDocs.length} obsolete catalogs deleted.`);
 
-  return { success: true, count: allScrapedCatalogs.length, deletedCount: obsoleteDocs.length };
+  // 3. ADIM: 100k Ölçek Maliyet Kalkanı (FS-AKT-P1-05) - settings/aktuel_meta özet dokümanı oluştur
+  // AktuelMagazalarPage vitrininin her girişte 200 adet dev broşür dokümanını çekip
+  // günde 20 Milyon Firestore okuması ($360/ay) yapmasını engellemek için mağaza broşür sayılarını
+  // tek bir hafif meta dokümanında derleyip yayınlar.
+  functions.logger.info('📊 Compiling and writing settings/aktuel_meta summary document...');
+  const activeStoreCounts = {};
+  const now = new Date();
+  const turkeyNow = new Date(now.getTime() + (3 * 3600 * 1000));
+  const today = createTurkeyDate(turkeyNow.getUTCFullYear(), turkeyNow.getUTCMonth(), turkeyNow.getUTCDate(), 0, 0, 0, 0);
+
+  // 1. Yeni taranan katalogların aktif olanlarını say
+  for (const cat of allScrapedCatalogs) {
+    const code = (cat.magazaKodu || '').toLowerCase().trim();
+    if (code) {
+      if (cat.bitisTarihi) {
+        const expiryDate = cat.bitisTarihi.toDate ? cat.bitisTarihi.toDate() : new Date(cat.bitisTarihi);
+        if (!isNaN(expiryDate.getTime()) && expiryDate < today) continue;
+      }
+      activeStoreCounts[code] = (activeStoreCounts[code] || 0) + 1;
+    }
+  }
+
+  // 2. Bu turda WAF/ağ hatası nedeniyle taranamayan ancak Firestore'da mevcut aktif katalogları olan mağazaları koru
+  for (const doc of existingSnapshot.docs) {
+    const data = doc.data() || {};
+    const storeCode = (data.magazaKodu || doc.id.split('_')[0] || '').toLowerCase().trim();
+    if (storeCode && !successfullyScrapedStores.has(storeCode)) {
+      if (data.bitisTarihi) {
+        const expiryDate = data.bitisTarihi.toDate ? data.bitisTarihi.toDate() : new Date(data.bitisTarihi);
+        if (!isNaN(expiryDate.getTime()) && expiryDate < today) continue;
+      }
+      activeStoreCounts[storeCode] = (activeStoreCounts[storeCode] || 0) + 1;
+    }
+  }
+
+  const totalActive = Object.values(activeStoreCounts).reduce((a, b) => a + b, 0);
+
+  try {
+    await db.collection('settings').doc('aktuel_meta').set({
+      activeStoreCatalogCounts: activeStoreCounts,
+      totalActiveCatalogs: totalActive,
+      lastScrapedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    functions.logger.info(`✅ settings/aktuel_meta summary document updated successfully. (${totalActive} active catalogs across ${Object.keys(activeStoreCounts).length} stores)`);
+  } catch (metaErr) {
+    functions.logger.warn('⚠️ Error updating settings/aktuel_meta:', metaErr.message);
+  }
+
+  return { 
+    success: true, 
+    count: allScrapedCatalogs.length, 
+    deletedCount: obsoleteDocs.length,
+    cacheHits: cacheHitCount,
+    cacheMisses: cacheMissCount
+  };
 }
 
 module.exports = { STORES, scrapeAndSaveCatalogs };

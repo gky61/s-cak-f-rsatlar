@@ -29,12 +29,13 @@ function generateCouponDocId(coupon) {
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// Uygulamadaki 20 desteklenen mağaza
+// Uygulamadaki 20+ desteklenen mağaza
 const SUPPORTED_STORES = [
   'Trendyol', 'Hepsiburada', 'Amazon', 'N11', 'Pazarama',
   'Teknosa', 'MediaMarkt', 'Mavi', 'DeFacto', 'Zara',
   'Mango', 'Beymen', 'PttAVM', 'İncehesap', 'Idefix',
-  'Havit', 'Migros', 'Getir', 'Boyner'
+  'Havit', 'Migros', 'Getir', 'Boyner', 'CarrefourSA',
+  'Watsons', 'Gratis'
 ];
 
 // Slug → Uygulama mağaza adı eşleştirmesi (kuponla.com ve kuponburada.com için)
@@ -62,6 +63,10 @@ const SLUG_TO_STORE = {
   'migros': 'Migros',
   'getir': 'Getir',
   'boyner': 'Boyner',
+  'carrefoursa': 'CarrefourSA',
+  'carrefour': 'CarrefourSA',
+  'watsons': 'Watsons',
+  'gratis': 'Gratis',
 };
 
 // DonanimHaber mağaza → URL haritası
@@ -81,14 +86,43 @@ const DH_STORES_MAP = {
   'PttAVM': 'https://indirimkodu.donanimhaber.com/pttavm/',
   'İncehesap': 'https://indirimkodu.donanimhaber.com/incehesap/',
   'Migros': 'https://indirimkodu.donanimhaber.com/migros/',
-  'Getir': 'https://indirimkodu.donanimhaber.com/getir/'
+  'Getir': 'https://indirimkodu.donanimhaber.com/getir/',
+  'CarrefourSA': 'https://indirimkodu.donanimhaber.com/carrefoursa/',
+  'Watsons': 'https://indirimkodu.donanimhaber.com/watsons/',
+  'Gratis': 'https://indirimkodu.donanimhaber.com/gratis/'
+};
+
+// Kuponburada mağaza → URL haritası (Hedefli Mağaza Sayfaları - 150+ Doğrulanmış Kupon)
+const KB_STORES_MAP = {
+  'Trendyol': 'https://www.kuponburada.com/trendyol-indirim-kodu/',
+  'Hepsiburada': 'https://www.kuponburada.com/hepsiburada-indirim-kodu/',
+  'Amazon': 'https://www.kuponburada.com/amazon-indirim-kodu/',
+  'N11': 'https://www.kuponburada.com/n11-indirim-kodu/',
+  'Teknosa': 'https://www.kuponburada.com/teknosa-indirim-kodu/',
+  'MediaMarkt': 'https://www.kuponburada.com/mediamarkt-indirim-kodu/',
+  'Mavi': 'https://www.kuponburada.com/mavi-indirim-kodu/',
+  'DeFacto': 'https://www.kuponburada.com/defacto-indirim-kodu/',
+  'Mango': 'https://www.kuponburada.com/mango-indirim-kodu/',
+  'Beymen': 'https://www.kuponburada.com/beymen-indirim-kodu/',
+  'PttAVM': 'https://www.kuponburada.com/pttavm-indirim-kodu/',
+  'Idefix': 'https://www.kuponburada.com/idefix-indirim-kodu/',
+  'Migros': 'https://www.kuponburada.com/migros-indirim-kodu/',
+  'Getir': 'https://www.kuponburada.com/getir-indirim-kodu/',
+  'Boyner': 'https://www.kuponburada.com/boyner-indirim-kodu/',
+  'CarrefourSA': 'https://www.kuponburada.com/carrefoursa-indirim-kodu/',
+  'Watsons': 'https://www.kuponburada.com/watsons-indirim-kodu/',
+  'Gratis': 'https://www.kuponburada.com/gratis-indirim-kodu/'
 };
 
 // ─── Yardımcı Fonksiyonlar ──────────────────────────────────────────────────
 
 function resolveStoreName(slugOrName) {
   if (!slugOrName) return null;
-  const normalized = slugOrName.toLowerCase().trim();
+  const normalized = slugOrName
+    .toLowerCase()
+    .trim()
+    .replace(/-indirim-kodu/g, '')
+    .replace(/\.com(\.tr)?/g, '');
   if (SLUG_TO_STORE[normalized]) return SLUG_TO_STORE[normalized];
   for (const store of SUPPORTED_STORES) {
     if (normalized === store.toLowerCase()) return store;
@@ -104,7 +138,7 @@ function resolveStoreFromKuponlaName(storeNameText) {
     .replace(/\.com/gi, '')
     .trim();
   for (const store of SUPPORTED_STORES) {
-    if (cleaned.toLowerCase() === store.toLowerCase()) return store;
+    if (cleaned.toLowerCase() === store.toLowerCase() || cleaned.toLowerCase().startsWith(store.toLowerCase())) return store;
   }
   return resolveStoreName(cleaned) || null;
 }
@@ -130,6 +164,7 @@ async function safeFetch(url, headers = {}, timeoutMs = 10000) {
 async function scrapeDonanimHaber() {
   functions.logger.info('📡 [DonanimHaber] Scraping started...');
   const coupons = [];
+  const successfulStores = new Set();
 
   for (const [storeName, storeUrl] of Object.entries(DH_STORES_MAP)) {
     try {
@@ -140,6 +175,7 @@ async function scrapeDonanimHaber() {
         functions.logger.warn(`⚠️ [DonanimHaber] Failed to fetch page for ${storeName}.`);
         continue;
       }
+      successfulStores.add(storeName);
       const $ = cheerio.load(html);
 
       const expiredHeading = $('h2').filter((i, el) => $(el).text().includes('Geçmiş Kuponlar'));
@@ -202,8 +238,8 @@ async function scrapeDonanimHaber() {
     }
   }
 
-  functions.logger.info(`📡 [DonanimHaber] Finished. Scraped ${coupons.length} coupons.`);
-  return coupons;
+  functions.logger.info(`📡 [DonanimHaber] Finished. Scraped ${coupons.length} coupons across ${successfulStores.size} stores.`);
+  return { coupons, successfulStores: Array.from(successfulStores) };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -289,140 +325,130 @@ async function scrapeKuponla() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// KAYNAK 3: Kuponburada.com (LD+JSON Page 1 + AJAX Page 2)
+// KAYNAK 3: Kuponburada.com (Hedefli Mağaza Sayfaları + Keşfet Keşif Katmanı)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function scrapeKuponburada() {
-  functions.logger.info('📡 [Kuponburada] Scraping started (LD+JSON + AJAX Page 2)...');
+  functions.logger.info('📡 [Kuponburada] Store-targeted scraping started...');
   const coupons = [];
   const seenCodes = new Set();
+  const successfulStores = new Set();
 
-  // ── Sayfa 1: LD+JSON Ayrıştırma ─────────────────────────────────
-  try {
-    const page1Html = await safeFetch('https://www.kuponburada.com/kesfet/yeni-indirim-kuponlari/', {}, 15000);
-    if (page1Html) {
-      const $ = cheerio.load(page1Html);
+  // 1. ADIM: 15 Büyük Mağaza Sayfasını Hedefli Kazı (130+ Doğrulanmış Kupon)
+  for (const [storeName, storeUrl] of Object.entries(KB_STORES_MAP)) {
+    try {
+      const html = await safeFetch(storeUrl, {}, 10000);
+      if (!html) continue;
+      successfulStores.add(storeName);
 
-      $('script[type="application/ld+json"]').each((i, el) => {
+      const $ = cheerio.load(html);
+      let storeCount = 0;
+
+      $('li[data-coupon-type="code"]').each((i, el) => {
         try {
-          const jsonText = $(el).html();
-          if (!jsonText) return;
-          const parsed = JSON.parse(jsonText);
-          const items = parsed['@graph'] || (Array.isArray(parsed) ? parsed : [parsed]);
+          const $item = $(el);
+          const expired = $item.find('article').attr('data-coupon-expired');
+          if (expired === '1') return;
 
-          for (const item of items) {
-            if (item['@type'] === 'Offer') {
-              let couponCode = '';
-              if (item.identifier && item.identifier.propertyID === 'couponCode') {
-                couponCode = (item.identifier.value || '').trim();
-              }
-              if (!couponCode) continue;
+          const couponButton = $item.find('a.coupon-button');
+          const ariaLabel = couponButton.attr('aria-label') || couponButton.text() || '';
+          const codeMatch = ariaLabel.match(/Kod:\s*([^,\n\r]+)/i);
+          const couponCode = codeMatch ? codeMatch[1].trim() : '';
+          if (!couponCode) return;
 
-              const rawStoreName = (item.seller && item.seller.name) ? item.seller.name : '';
-              const storeName = resolveStoreName(rawStoreName);
-              if (!storeName) continue;
-
-              const title = (item.itemOffered && item.itemOffered.name) || item.name || `${storeName} İndirim Kodu`;
-              const description = item.disambiguatingDescription || item.description || (item.itemOffered && item.itemOffered.description) || '';
-
-              const codeKey = couponCode.toUpperCase();
-              if (!seenCodes.has(codeKey)) {
-                seenCodes.add(codeKey);
-                coupons.push({
-                  magazaAdi: storeName,
-                  baslik: title,
-                  aciklama: description,
-                  kuponKodu: couponCode,
-                  paylasanKullaniciId: 'admin',
-                  kaynakTipi: 'web',
-                  kaynakSite: 'kuponburada',
-                  sicakOySayisi: 0,
-                  sogukOySayisi: 0,
-                  durum: 'aktif'
-                });
-              }
-            }
+          const title = $item.find('h3').first().text().trim();
+          let description = $item.find('p').first().text().trim();
+          if (!description) {
+            description = $item.find('div.sr-only, .text-body, [class*="text-body"]').first().text().trim();
           }
-        } catch (ldErr) {
-          functions.logger.warn(`⚠️ [Kuponburada] LD+JSON parse error:`, ldErr.message);
+
+          const codeKey = `${storeName.toUpperCase()}_${couponCode.toUpperCase()}`;
+          if (!seenCodes.has(codeKey)) {
+            seenCodes.add(codeKey);
+            coupons.push({
+              magazaAdi: storeName,
+              baslik: title || `${storeName} İndirim Kodu`,
+              aciklama: description,
+              kuponKodu: couponCode,
+              paylasanKullaniciId: 'admin',
+              kaynakTipi: 'web',
+              kaynakSite: 'kuponburada',
+              sicakOySayisi: 0,
+              sogukOySayisi: 0,
+              durum: 'aktif'
+            });
+            storeCount++;
+          }
+        } catch (itemErr) {
+          functions.logger.warn(`⚠️ [Kuponburada] ${storeName} item parse error:`, itemErr.message);
         }
       });
-      functions.logger.info(`[Kuponburada] Page 1 (LD+JSON): Found ${coupons.length} unique code coupons.`);
+      functions.logger.debug(`[Kuponburada] ${storeName}: Extracted ${storeCount} coupons.`);
+      // Mağazalar arası nazik jitter (Rate limit koruması)
+      await new Promise(r => setTimeout(r, 100 + Math.random() * 100));
+    } catch (storeErr) {
+      functions.logger.warn(`⚠️ [Kuponburada] Failed for ${storeName}:`, storeErr.message);
     }
-  } catch (p1Err) {
-    functions.logger.error(`❌ [Kuponburada] Page 1 error:`, p1Err.message);
   }
 
-  // ── Sayfa 2: AJAX Endpoint İsteyi ──────────────────────────────
+  // 2. ADIM: /kesfet/ Akışından Yeni Yayınlanan Desteklenen Kuponları Yakala (Tamamlayıcı Katman)
   try {
-    const page2Raw = await safeFetch(
-      'https://www.kuponburada.com/kesfet/yeni-indirim-kuponlari/?page=2',
-      {
-        'X-Requested-With': 'XMLHttpRequest',
-        'Accept': 'application/json, text/javascript, */*; q=0.01'
-      },
-      15000
-    );
+    const kesfetHtml = await safeFetch('https://www.kuponburada.com/kesfet/', {}, 10000);
+    if (kesfetHtml) {
+      const $ = cheerio.load(kesfetHtml);
+      let kesfetAdded = 0;
 
-    if (page2Raw) {
-      const page2Json = JSON.parse(page2Raw);
-      if (page2Json && page2Json.html) {
-        const $2 = cheerio.load(page2Json.html);
-        let p2Count = 0;
+      $('li[data-coupon-type="code"]').each((i, el) => {
+        try {
+          const $item = $(el);
+          const expired = $item.find('article').attr('data-coupon-expired');
+          if (expired === '1') return;
 
-        $2('li[data-coupon-type="code"]').each((i, el) => {
-          try {
-            const $item = $2(el);
-            const expired = $item.find('article').attr('data-coupon-expired');
-            if (expired === '1') return;
+          const couponButton = $item.find('a.coupon-button');
+          const ariaLabel = couponButton.attr('aria-label') || couponButton.text() || '';
+          const codeMatch = ariaLabel.match(/Kod:\s*([^,\n\r]+)/i);
+          const couponCode = codeMatch ? codeMatch[1].trim() : '';
+          if (!couponCode) return;
 
-            const couponButton = $item.find('a.coupon-button');
-            const ariaLabel = couponButton.attr('aria-label') || '';
-            const codeMatch = ariaLabel.match(/Kod:\s*([^,]+)/);
-            const couponCode = codeMatch ? codeMatch[1].trim() : '';
-            if (!couponCode) return;
+          const brandSlug = couponButton.attr('data-brand-slug') || $item.find('article').attr('data-brand-slug') || '';
+          const storeName = resolveStoreName(brandSlug);
+          if (!storeName) return;
 
-            const brandSlug = couponButton.attr('data-brand-slug') || '';
-            const storeName = resolveStoreName(brandSlug);
-            if (!storeName) return;
-
-            const title = $item.find('h3').first().text().trim();
-            const srOnlyDivs = $item.find('div.sr-only');
-            let description = srOnlyDivs.length > 0 ? srOnlyDivs.first().text().trim() : '';
-            if (!description) {
-              description = $item.find('p.text-gray-600').first().text().trim();
-            }
-
-            const codeKey = couponCode.toUpperCase();
-            if (!seenCodes.has(codeKey)) {
-              seenCodes.add(codeKey);
-              coupons.push({
-                magazaAdi: storeName,
-                baslik: title || `${storeName} İndirim Kodu`,
-                aciklama: description,
-                kuponKodu: couponCode,
-                paylasanKullaniciId: 'admin',
-                kaynakTipi: 'web',
-                kaynakSite: 'kuponburada',
-                sicakOySayisi: 0,
-                sogukOySayisi: 0,
-                durum: 'aktif'
-              });
-              p2Count++;
-            }
-          } catch (itemErr) {
-            functions.logger.warn(`⚠️ [Kuponburada] Page 2 item parse error:`, itemErr.message);
+          const title = $item.find('h3').first().text().trim();
+          let description = $item.find('p').first().text().trim();
+          if (!description) {
+            description = $item.find('div.sr-only, .text-body, [class*="text-body"]').first().text().trim();
           }
-        });
-        functions.logger.info(`[Kuponburada] Page 2 (AJAX): Added ${p2Count} new unique code coupons.`);
+
+          const codeKey = `${storeName.toUpperCase()}_${couponCode.toUpperCase()}`;
+          if (!seenCodes.has(codeKey)) {
+            seenCodes.add(codeKey);
+            coupons.push({
+              magazaAdi: storeName,
+              baslik: title || `${storeName} İndirim Kodu`,
+              aciklama: description,
+              kuponKodu: couponCode,
+              paylasanKullaniciId: 'admin',
+              kaynakTipi: 'web',
+              kaynakSite: 'kuponburada',
+              sicakOySayisi: 0,
+              sogukOySayisi: 0,
+              durum: 'aktif'
+            });
+            kesfetAdded++;
+          }
+        } catch (e) {}
+      });
+      if (kesfetAdded > 0) {
+        functions.logger.info(`[Kuponburada] /kesfet/ stream added ${kesfetAdded} extra coupons.`);
       }
     }
-  } catch (p2Err) {
-    functions.logger.error(`❌ [Kuponburada] Page 2 AJAX error:`, p2Err.message);
+  } catch (kesfetErr) {
+    functions.logger.debug('[Kuponburada] /kesfet/ stream optional check skipped:', kesfetErr.message);
   }
 
-  functions.logger.info(`📡 [Kuponburada] Finished. Total scraped: ${coupons.length} coupons.`);
-  return coupons;
+  functions.logger.info(`📡 [Kuponburada] Finished. Total scraped: ${coupons.length} coupons across ${successfulStores.size} stores.`);
+  return { coupons, successfulStores: Array.from(successfulStores) };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -432,25 +458,29 @@ async function scrapeKuponburada() {
 async function scrapeAndSaveCoupons() {
   functions.logger.info('🚀 Multi-source coupon scraping started...');
   
-  const dhCoupons = await scrapeDonanimHaber();
+  const dhResult = await scrapeDonanimHaber();
+  const dhCoupons = dhResult.coupons || [];
+  const successfulDhStores = new Set(dhResult.successfulStores || []);
 
   const seenCodes = new Set();
   const allScrapedCoupons = [];
 
   for (const coupon of dhCoupons) {
-    const codeKey = coupon.kuponKodu.toUpperCase();
+    const codeKey = `${(coupon.magazaAdi || '').toUpperCase()}_${coupon.kuponKodu.toUpperCase()}`;
     if (!seenCodes.has(codeKey)) {
       seenCodes.add(codeKey);
       allScrapedCoupons.push(coupon);
     }
   }
-  functions.logger.info(`After DonanimHaber: ${allScrapedCoupons.length} unique coupons.`);
+  functions.logger.info(`After DonanimHaber: ${allScrapedCoupons.length} unique coupons across ${successfulDhStores.size} stores.`);
 
+  let kuponlaSucceeded = false;
   try {
     const kuponlaCoupons = await scrapeKuponla();
+    kuponlaSucceeded = true;
     let kuponlaAdded = 0;
     for (const coupon of kuponlaCoupons) {
-      const codeKey = coupon.kuponKodu.toUpperCase();
+      const codeKey = `${(coupon.magazaAdi || '').toUpperCase()}_${coupon.kuponKodu.toUpperCase()}`;
       if (!seenCodes.has(codeKey)) {
         seenCodes.add(codeKey);
         allScrapedCoupons.push(coupon);
@@ -466,18 +496,25 @@ async function scrapeAndSaveCoupons() {
     });
   }
 
+  let kuponburadaSucceeded = false;
+  const successfulKbStores = new Set();
   try {
-    const kuponburadaCoupons = await scrapeKuponburada();
+    const kbResult = await scrapeKuponburada();
+    const kuponburadaCoupons = Array.isArray(kbResult) ? kbResult : (kbResult.coupons || []);
+    if (kbResult.successfulStores) {
+      kbResult.successfulStores.forEach(s => successfulKbStores.add(s));
+    }
+    kuponburadaSucceeded = true;
     let kuponburadaAdded = 0;
     for (const coupon of kuponburadaCoupons) {
-      const codeKey = coupon.kuponKodu.toUpperCase();
+      const codeKey = `${(coupon.magazaAdi || '').toUpperCase()}_${coupon.kuponKodu.toUpperCase()}`;
       if (!seenCodes.has(codeKey)) {
         seenCodes.add(codeKey);
         allScrapedCoupons.push(coupon);
         kuponburadaAdded++;
       }
     }
-    functions.logger.info(`[Kuponburada] Added ${kuponburadaAdded} new unique coupons.`);
+    functions.logger.info(`[Kuponburada] Added ${kuponburadaAdded} new unique coupons across ${successfulKbStores.size} stores.`);
   } catch (err) {
     functions.logger.error(`❌ [Kuponburada] Entire source failed, skipping:`, err.message);
     await logErrorToFirestore('catalogs_coupons', 'Kuponburada Scrape Failed', err.message, err.stack, 'warning', {
@@ -498,7 +535,7 @@ async function scrapeAndSaveCoupons() {
 
   const db = admin.firestore();
 
-  // 1. ADIM: Mevcut web kuponlarını çekip oy sayılarını ve oluşturulma tarihlerini hafızaya al
+  // 1. ADIM: Mevcut web kuponlarını çekip oy sayılarını, mağazalarını, kaynaklarını ve tarihlerini hafızaya al
   // FS-KUP-02: Böylece deterministik ID ile güncellenen kuponların oyları ve orijinal tarihleri korunur!
   functions.logger.info('🔍 Fetching existing web coupons to preserve votes and timestamps...');
   const existingDocsSnapshot = await db.collection('kuponlar').where('kaynakTipi', '==', 'web').get();
@@ -507,10 +544,14 @@ async function scrapeAndSaveCoupons() {
     const data = doc.data();
     existingDocsMap.set(doc.id, {
       ref: doc.ref,
+      magazaAdi: data.magazaAdi || '',
+      kaynakSite: data.kaynakSite || '',
       sicakOySayisi: data.sicakOySayisi || 0,
       sogukOySayisi: data.sogukOySayisi || 0,
       olusturulmaTarihi: data.olusturulmaTarihi,
       durum: data.durum || 'aktif',
+      sonlanmaTarihi: data.sonlanmaTarihi || null,
+      sonlanmaNedeni: data.sonlanmaNedeni || null
     });
   }
 
@@ -532,6 +573,19 @@ async function scrapeAndSaveCoupons() {
       // Mevcut kuponun oylarını ve orijinal oluşturulma tarihini koru
       couponData.sicakOySayisi = existing.sicakOySayisi;
       couponData.sogukOySayisi = existing.sogukOySayisi;
+
+      // P0-KUP-01: Zombi Kupon Dirilme Koruması:
+      // Kullanıcı topluluğu veya admin tarafından 'gecersiz' kılınmış kuponları tekrar 'aktif' yapma!
+      if (existing.durum === 'gecersiz') {
+        couponData.durum = 'gecersiz';
+        if (existing.sonlanmaTarihi) {
+          couponData.sonlanmaTarihi = existing.sonlanmaTarihi;
+        }
+        if (existing.sonlanmaNedeni) {
+          couponData.sonlanmaNedeni = existing.sonlanmaNedeni;
+        }
+      }
+
       if (existing.olusturulmaTarihi) {
         couponData.olusturulmaTarihi = existing.olusturulmaTarihi;
       } else {
@@ -564,14 +618,32 @@ async function scrapeAndSaveCoupons() {
   }
   functions.logger.info(`Successfully upserted ${couponsToUpsert.length} coupons.`);
 
-  // 4. ADIM: Siteden tamamen kalkan eski kuponları güvenle temizle veya geçersiz işaretle
+  // 4. ADIM: Siteden kalkan eski kuponları temizle veya geçersiz işaretle (Kapsamlı Uzlaşma)
   // FS-KUP-02: Kullanıcı oyu olan kuponlar silinmez, 'gecersiz' yapılarak oyları ve votes alt koleksiyonu korunur.
   // Sıfır oyu olanlar ise veritabanını temiz tutmak için silinir.
-  functions.logger.info('🧹 Cleaning up stale web-scraped coupons from Firestore...');
+  functions.logger.info('🧹 Cleaning up stale web-scraped coupons from Firestore (Scoped Reconciliation)...');
   const staleDocs = [];
   for (const [id, info] of existingDocsMap.entries()) {
-    if (!newDocIdSet.has(id)) {
+    if (newDocIdSet.has(id)) continue;
+
+    // Kapsamlı Uzlaşma (Scoped Reconciliation):
+    // İlgili kaynak veya mağaza bu kazıma turunda taranamadıysa kuponu silme/geçersizleştirme!
+    let shouldEvaluateStale = false;
+    if (info.kaynakSite === 'donanimhaber') {
+      shouldEvaluateStale = successfulDhStores.has(info.magazaAdi);
+    } else if (info.kaynakSite === 'kuponla') {
+      shouldEvaluateStale = kuponlaSucceeded;
+    } else if (info.kaynakSite === 'kuponburada') {
+      shouldEvaluateStale = successfulKbStores.size > 0 ? successfulKbStores.has(info.magazaAdi) : kuponburadaSucceeded;
+    } else {
+      // Bilinmeyen / eski kayıtlar: en azından mağaza DH'de başarıyla tarandıysa
+      shouldEvaluateStale = successfulDhStores.has(info.magazaAdi);
+    }
+
+    if (shouldEvaluateStale) {
       staleDocs.push({ id, ...info });
+    } else {
+      functions.logger.info(`🛡️ [Kupon Scraper] Preserving coupon ${id} (${info.magazaAdi} / ${info.kaynakSite}) - source was not crawled.`);
     }
   }
 
@@ -586,7 +658,11 @@ async function scrapeAndSaveCoupons() {
       if (item.sicakOySayisi > 0 || item.sogukOySayisi > 0) {
         // Kullanıcı oyu varsa dokümanı silme; sadece henüz aktifse durumunu geçersiz yap (mükerrer yazma engeli)
         if (item.durum !== 'gecersiz') {
-          batch.update(item.ref, { durum: 'gecersiz', sonlanmaTarihi: admin.firestore.FieldValue.serverTimestamp() });
+          batch.update(item.ref, {
+            durum: 'gecersiz',
+            sonlanmaNedeni: 'scraper_stale',
+            sonlanmaTarihi: admin.firestore.FieldValue.serverTimestamp()
+          });
         }
       } else {
         // Hiç oyu olmayan çöp dokümanı güvenle sil

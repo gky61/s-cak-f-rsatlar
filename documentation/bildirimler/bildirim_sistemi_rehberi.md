@@ -321,13 +321,22 @@ Tüm fonksiyonlar [functions/index.js](file:///d:/firsatkolik/functions/index.js
 Mobil tarafta bildirim döngüsünü [NotificationService](file:///d:/firsatkolik/lib/services/notification_service.dart) ve bildirim merkezi akışını [FirestoreService](file:///d:/firsatkolik/lib/services/firestore_service.dart) yönetir:
 * **`initializeLocalNotifications()`:** Android ve iOS yerel bildirim eklentilerini başlatır ve 7 adet özel kanalı tanımlar.
 * **`saveFCMToken({String? userId})`:** Cihazın FCM token'ını alır, `userDevices/{userId}_{deviceId}` dokümanına kaydeder ve `onTokenRefresh` dinleyicisini kurar.
-* **`resubscribeToTopics()`:** Kullanıcı izinlerine ve ayarlarına göre FCM konularını dinamik senkronize eder:
+* **`resubscribeToTopics()` & `resubscribeAllKeywordTopics()`:** Kullanıcı izinlerine ve ayarlarına göre FCM konularını dinamik senkronize eder:
   * `sicak_firsatlar_general_v2`: Genel sistem duyuruları için (`pushMasterEnabled && dealNotificationsEnabled`).
   * `firsatkolik_marketing_v1`: Pazarlama kampanyaları için (`pushMasterEnabled && marketingNotificationsEnabled`).
   * `community_coupons`: Topluluk kuponları için (`pushMasterEnabled && communityNotificationsEnabled`).
   * `admin_deals`: Yalnızca admin kullanıcılar için.
-  * `cat_$cleanCat`: Takip edilen kategoriler için.
-* **`clearAllSubscriptions()` / `clearDeviceToken()`:** Çıkış yapıldığında veya hesap sıfırlandığında tüm konu aboneliklerinden çıkar ve FCM token'ını pasifleştirir.
+  * `cat_$cleanCat`: Takip edilen ana kategoriler için (`pushMasterEnabled && categoryNotificationsEnabled`).
+  * `cat_${cleanCat}_${cleanSub}`: Takip edilen alt kategoriler için doğrudan topic yayını.
+  * `kw_$cleanKw`: Takip edilen anahtar kelimeler için sıfır maliyetli sınırsız ölçekli topic yayını (`pushMasterEnabled && keywordNotificationsEnabled`).
+  * `author_botkolik`: Botkolik radarı fırsatları için sınırsız ölçekli topic yayını.
+* **`clearAllSubscriptions()` / `clearDeviceToken()`:** Çıkış yapıldığında veya hesap sıfırlandığında `notificationSubscriptions` dokümanları üzerinden tüm aktif topic aboneliklerinden (`cat_*`, `kw_*`, `author_*`, `author_botkolik`, `kw_*`) temiz çıkış yapar ve bellek önbelleklerini sıfırlar (`invalidateSubscriptionCaches`).
+* **100k DAU Felaket Dayanıklılığı Kalkanları (FS-NOTIF-01 - 15):**
+  * **Unicode 'İ' Normalizasyonu:** Türkçe büyük 'İ', 'I', 'ı' harflerini ve tüm aksanlı harfleri ASCII 'i'ye dönüştürerek backend ile bit-level binary uyum sağlar (`normalizeKeyword`).
+  * **Çoklu Kullanıcı İzolasyonlu Bellek Önbelleği (5 dk TTL):** `_cachedUserId == userId` kontrolüyle kullanıcılar arası veri sızıntısını engelleyen sıfır Firestore maliyetli önbellek mekanizması.
+  * **Multi-Push Echo Storm Kalkanı:** Aynı `dealId` için 60 saniyelik sliding window (`_isRecentDealHandled`) ile mükerrer ön plan afişlerini bastırır.
+  * **İstemci Tarafı Sessiz Saat & Tercih Filtresi:** Topic üzerinden doğrudan gelen push'larda kullanıcının sessiz saatlerinde (`isQuietHoursNow`) veya kapalı tercihinde bildirimi bastırır.
+  * **APNs Collapse-ID & Android Tag:** `deal_${dealId}` etiketiyle kilit ekranında fırsat başına tek bildirim gösterilir.
 * **Dual-Layer In-App Feed (`FirestoreService.getUserNotificationsStream`):** Kişisel bildirimler (`users/{uid}/notifications`) ile son 15 günün aktif genel duyurularını (`globalAnnouncements`) istemci tarafında birleştirir. `SharedPreferences` üzerinde okundu (`read_announcements`) ve silindi (`dismissed_announcements`) durumlarını sıfır veritabanı maliyetiyle yönetir.
 
 ### Derin Linkleme, Yönlendirme Motoru (`resolveRouting`) ve Chat-Hijacking Koruması:
@@ -401,6 +410,12 @@ Apple iOS ve Android cihazlarda uygulama ikonu üzerindeki rozet sayısını ve 
 * **iOS (`AppDelegate.swift`):** `UIApplication.shared.applicationIconBadgeNumber` ve iOS 16+ `UNUserNotificationCenter.setBadgeCount(count)` çağrıları yapılarak işletim sistemi rozet sayısı Firestore'daki toplam okunmamış içerikle (`AppBadgeService`) anlık eşitlenir.
 * **Android (`MainActivity.kt`):** `clearBadge` tetiklendiğinde `NotificationManager.cancelAll()` çalıştırılarak bildirim tepsisi temizlenir ve başlatıcı (launcher) bildirim noktası (dot) anında söndürülür.
 * **Tetikleyiciler:** Uygulama açılışı (`resumed`), Bildirim Merkezi (`AdminNotificationsScreen`), Mesajlaşma (`MessageScreen`, `MessagesListScreen`) ve Oturum Kapatma (`signOut`).
+
+### 8.4 ⚡ 100k DAU Hafif Bildirim Sayacı ve Çift Sayım (Dedup) Kalkanı (`getUnreadNotificationCountStream`):
+* **Read Avalanche Önleyici:** Ana sayfadaki bildirim ikonu için 100 kişisel doküman + 15 küresel duyuru yerine, maksimum 20 okunmamış kişisel doküman (`where('read', isEqualTo: false)`) ve 5 aktif küresel duyuru hafifçe dinlenir.
+* **FS-02 Mükerrer Sayım Kalkanı:** Hem kişisel bildirim dokümanı hem küresel duyurusu olan kayıtlar (kuponlar ve admin duyuruları) dedup anahtarı (`announcementId` / `normalizedId`) üzerinden tekilleştirilir; kullanıcı zilde gördüğü okunmamış sayısı ile Bildirim Merkezi sekmesinde gördüğü sayının birebir aynı olmasını sağlar.
+* **Yazar ve Kelime Takip Senkronizasyonu:** Kullanıcı bir yazarı takip ettiğinde/takipten çıktığında `UserService` anında `FirebaseMessaging` topic aboneliğini günceller; takipten çıkan kullanıcılara hayalet bildirim gitmesi engellenir.
+* **Kelime Radarı Uyarı Banner'ı:** `KeywordTrackingScreen` içinde bildirim izinleri kapalıyken kullanıcıya amber renkli rehberlik banner'ı sunulur.
 
 ---
 
@@ -521,16 +536,14 @@ Flutter birim testleri `flutter test` ile çalışır. `functions/tests/*.js` do
 
 | Test Dosyası | Kapsam | Komut |
 | :--- | :--- | :--- |
+| **`test/notification_preferences_and_100k_scale_test.dart`** | 100k DAU bildirim tercihleri, FS-PREF-01..15 felaket korumaları, hafif sayaç akışı, yazar topic senkronizasyonu ve SharedPreferences disk önbellek birim testleri (21 Test) | `flutter test test/notification_preferences_and_100k_scale_test.dart` |
+| **`test/keyword_and_category_scale_test.dart`** | Anahtar kelime ve kategori takibi 100k ölçek, sessiz saat matrisi, multi-push echo storm kalkanı ve güvenlik kuralları birim testleri (20 Test) | `flutter test test/keyword_and_category_scale_test.dart` |
+| **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (20 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/announcement_cloud_sync_and_dedup_test.dart`** | Bildirim ve küresel duyuru bulut senkronizasyonu, evrensel ID çözücü, deduplication ve yerel/bulut filtreleme testleri (6 Test) | `flutter test test/announcement_cloud_sync_and_dedup_test.dart` |
 | **`functions/tests/test_coupon_deletion_contract.js`** | Kupon silme ve red durumlarında küresel duyuru kalıcı silinmesi ve onCouponDeleted trigger sözleşmesi (3 Test) | `node functions/tests/test_coupon_deletion_contract.js` |
 | **`test/notification_routing_test.dart`** | Bildirim tıklama, yönlendirme ve Chat-Hijacking koruma sözleşmesi (30 Test) | `flutter test test/notification_routing_test.dart` |
 | **`test/notification_ui_ux_test.dart`** | UI/UX, yönlendirme, başlık temizleme, fallback, karşılıklı dışlayıcı durum çözümleme ve In-App Banner rozet birim testleri (13 Test) | `flutter test test/notification_ui_ux_test.dart` |
-| **`test/messaging_and_anti_spam_test.dart`** | Anti-spam (5s/max 3 msg), deterministik notifId & tag, payload parser, instant seeding & dedup birim testleri (20 Test) | `flutter test test/messaging_and_anti_spam_test.dart` |
 | **`test/notification_logic_test.dart`** | Flutter birim testleri, serileştirme (toMap/fromFirestore), Master Switch State Preservation (3 Test) | `flutter test test/notification_logic_test.dart` |
-| **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
-| **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
-| **`functions/tests/test_all_notification_scenarios.js`** | Uçtan uca senaryo script'i: senaryoları ve varyasyonlarını gerçek Firestore üzerinde dener | `node functions/tests/test_all_notification_scenarios.js` |
-| **`functions/tests/test_emergency_controls.js`** | 6 Acil Durum Kontrolü: Global bildirim şalteri, fırsat ve yorum acil kapatma, bot kontrolleri | `node functions/tests/test_emergency_controls.js` |
 | **`functions/tests/test_notification_settings.js`** | 5 Test Paketi & 18 Alt Senaryo: Master Switch OFF/ON, Alt kanal engelleri, Sessiz saatler, Yorum muafiyeti, Kategori limitleri, Cihaz kontrolü | `node functions/tests/test_notification_settings.js` |
 | **`functions/tests/test_notifications_menu.js`** | Bildirim Merkezi testleri: Fırsat Onay, Fırsat Red, Deduplication (Kelime > Yazar > Kategori) önceliklendirme ve dinamik içerik dönüşümü, Yorum Yanıt | `node functions/tests/test_notifications_menu.js` |
 | **`functions/tests/test_all_notification_scenarios.js`** | Uçtan uca senaryo script'i: senaryoları ve varyasyonlarını gerçek Firestore üzerinde dener | `node functions/tests/test_all_notification_scenarios.js` |

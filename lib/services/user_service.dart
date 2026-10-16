@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:http/http.dart' as http;
 import '../models/user.dart';
 import '../models/deal.dart';
 import '../utils/badge_helper.dart';
 import 'deal_service.dart';
 import 'auth_service.dart';
+import 'notification_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -362,6 +364,16 @@ class UserService {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // FS-PREF-03 & FS-PREF-04: Cihazı yazar FCM konusuna tercih denetimli abone yap
+      if (!kIsWeb) {
+        try {
+          final prefs = await NotificationService().getNotificationPreferences();
+          if (prefs.pushMasterEnabled && prefs.dealNotificationsEnabled) {
+            await FirebaseMessaging.instance.subscribeToTopic('author_$sanitizedKey');
+          }
+        } catch (_) {}
+      }
     } catch (e) {
       _log('Takip hatası: $e');
       rethrow;
@@ -386,6 +398,13 @@ class UserService {
       final sanitizedKey = followingId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
       final subId = '${followerId}_author_$sanitizedKey';
       await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+
+      // FS-PREF-03: Takipten çıkıldığında yazar FCM konusundan cihaz aboneliğini kesin olarak sil (Hayalet Bildirim Önleyici)
+      if (!kIsWeb) {
+        try {
+          await FirebaseMessaging.instance.unsubscribeFromTopic('author_$sanitizedKey');
+        } catch (_) {}
+      }
     } catch (e) {
       _log('Takipten çıkma hatası: $e');
       rethrow;
@@ -427,8 +446,22 @@ class UserService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        // FS-PREF-03 & FS-PREF-04: Tercih denetimli yazar FCM konusuna abone yap
+        if (!kIsWeb) {
+          try {
+            final prefs = await NotificationService().getNotificationPreferences();
+            if (prefs.pushMasterEnabled && prefs.dealNotificationsEnabled) {
+              await FirebaseMessaging.instance.subscribeToTopic('author_$sanitizedKey');
+            }
+          } catch (_) {}
+        }
       } else {
         await _firestore.collection('notificationSubscriptions').doc(subId).delete();
+        if (!kIsWeb) {
+          try {
+            await FirebaseMessaging.instance.unsubscribeFromTopic('author_$sanitizedKey');
+          } catch (_) {}
+        }
       }
     } catch (e) { rethrow; }
   }

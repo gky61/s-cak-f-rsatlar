@@ -7,12 +7,14 @@ import '../models/deal.dart';
 import '../models/comment.dart';
 import '../models/message.dart';
 import '../models/admin_to_user_message.dart';
+import '../models/conversation.dart';
 import '../models/user.dart';
 import 'deal_service.dart';
 import 'user_service.dart';
 import 'message_service.dart';
 import 'comment_service.dart';
 import 'system_log_service.dart';
+import 'app_badge_service.dart';
 
 export 'deal_service.dart' show DealSubmitResult, DealBusinessException, DealPendingApprovalException, DealAlreadySharedException;
 
@@ -743,6 +745,25 @@ class FirestoreService {
     return controller.stream;
   }
   
+  Stream<List<Conversation>> getConversationsStream(String uid, {int limit = 40}) =>
+      _messageService.getConversationsStream(uid, limit: limit);
+  Stream<int> getUnreadTotalMessageCountStream(String uid) =>
+      _messageService.getUnreadTotalMessageCountStream(uid);
+  Future<List<Message>> loadOlderMessages({
+    required String currentUserId,
+    required String otherUserId,
+    required DateTime oldestCreatedAt,
+    DateTime? clearedAt,
+    int limit = 30,
+  }) =>
+      _messageService.loadOlderMessages(
+        currentUserId: currentUserId,
+        otherUserId: otherUserId,
+        oldestCreatedAt: oldestCreatedAt,
+        clearedAt: clearedAt,
+        limit: limit,
+      );
+
   Stream<List<Message>> getConversationStream(String u1, String u2, {int limit = 60}) =>
       _messageService.getConversationStream(u1, u2, limit: limit);
   Future<void> toggleReaction({required String messageId, required String userId, required String emoji}) =>
@@ -752,6 +773,8 @@ class FirestoreService {
   Future<void> softDeleteMessageForUser(String messageId, String userId) => _messageService.softDeleteMessageForUser(messageId, userId);
   Future<bool> deleteMessageForEveryone(String messageId, String currentUserId) => _messageService.deleteMessageForEveryone(messageId, currentUserId);
   Future<void> deleteUserMessage(String id) => _messageService.deleteUserMessage(id);
+  Future<void> clearConversationForUser(String u1, String u2) =>
+      _messageService.clearConversationForUser(u1, u2);
   Future<void> deleteConversationPermanently(String u1, String u2) =>
       _messageService.deleteConversationPermanently(u1, u2);
   Future<int> getUnreadMessageCount(String uid) => _messageService.getUnreadMessageCount(uid);
@@ -1131,10 +1154,141 @@ class FirestoreService {
           emitMerged();
         });
       },
-      onCancel: () {
-        userSub?.cancel();
-        globalSub?.cancel();
-        changeSub?.cancel();
+      onCancel: () async {
+        await userSub?.cancel();
+        await globalSub?.cancel();
+        await changeSub?.cancel();
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+      },
+    );
+
+    return controller.stream;
+  }
+
+  /// FS-PREF-02: 100k DAU İçin Ultra Hafif Okunmamış Bildirim Sayacı Akışı (HomeScreen Zil Rozeti İçin)
+  /// 100+15 dokümanlık ağır feed indirmesi yerine sadece okunmamış kişisel bildirimleri (limit 20)
+  /// ve aktif küresel duyuruları hafifçe denetleyerek rozet sayısını döner.
+  /// FS-02 Dedup Kalkanı: Hem kişisel hem küresel duyurusu olan bildirimleri tek sayar; hayalet rozetleri engeller.
+  Stream<int> getUnreadNotificationCountStream(String userId) {
+    if (userId.isEmpty) return Stream.value(0);
+
+    late StreamController<int> controller;
+    StreamSubscription? userSub;
+    StreamSubscription? globalSub;
+    StreamSubscription? changeSub;
+
+    List<Map<String, dynamic>> unreadPersonalDocs = [];
+    List<String> activeGlobalIds = [];
+
+    Future<void> emitCount() async {
+      if (controller.isClosed) return;
+      try {
+        final readSet = await _getReadAnnouncements(userId);
+        final dismissedSet = await _getDismissedAnnouncements(userId);
+
+        // 1. Kişisel bildirimleri oku/gizle durumuna göre filtrele ve dedup anahtarlarını topla
+        final personalDedupKeys = <String>{};
+        int validPersonalCount = 0;
+
+        for (final doc in unreadPersonalDocs) {
+          final id = doc['id'] as String? ?? '';
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          final announcementId = doc['announcementId'] as String? ?? '';
+
+          // Eğer bu kişisel doküman küresel bir duyurunun kopyasıysa ve okunmuş/gizlenmişse sayma
+          if (dismissedSet.contains(id) ||
+              dismissedSet.contains(normalizedId) ||
+              (announcementId.isNotEmpty &&
+                  (dismissedSet.contains(announcementId) ||
+                      dismissedSet.contains('manual_$announcementId')))) {
+            continue;
+          }
+          if (readSet.contains(id) ||
+              readSet.contains(normalizedId) ||
+              (announcementId.isNotEmpty &&
+                  (readSet.contains(announcementId) ||
+                      readSet.contains('manual_$announcementId')))) {
+            continue;
+          }
+
+          final dedupKey = announcementId.isNotEmpty ? announcementId : (normalizedId.isNotEmpty ? normalizedId : id);
+          if (dedupKey.isNotEmpty) {
+            personalDedupKeys.add(dedupKey);
+            personalDedupKeys.add(id);
+            personalDedupKeys.add(normalizedId);
+          }
+          validPersonalCount++;
+        }
+
+        // 2. Küresel duyuruları say: Hem okunmuş/gizlenmişleri ele, HEM DE kişisel dokümanlarda zaten olanları ele (FS-02 Dedup)
+        int validGlobalCount = 0;
+        for (final id in activeGlobalIds) {
+          final normalizedId = id.startsWith('manual_') ? id.substring(7) : id;
+          if (dismissedSet.contains(id) || dismissedSet.contains(normalizedId)) continue;
+          if (readSet.contains(id) || readSet.contains(normalizedId)) continue;
+          if (personalDedupKeys.contains(id) || personalDedupKeys.contains(normalizedId)) {
+            // Zaten kişisel okunmamış bildirim olarak sayıldı, mükerrer sayımı önle!
+            continue;
+          }
+          validGlobalCount++;
+        }
+
+        final total = validPersonalCount + validGlobalCount;
+        if (!controller.isClosed) {
+          controller.add(total);
+        }
+      } catch (_) {
+        if (!controller.isClosed) {
+          controller.add(unreadPersonalDocs.length);
+        }
+      }
+    }
+
+    controller = StreamController<int>(
+      onListen: () {
+        // Sadece okunmamış kişisel bildirimleri dinle (maksimum 20 doküman)
+        userSub = firestore
+            .collection('users')
+            .doc(userId)
+            .collection('notifications')
+            .where('read', isEqualTo: false)
+            .limit(20)
+            .snapshots()
+            .listen((snapshot) {
+          unreadPersonalDocs = snapshot.docs.map((d) {
+            final data = d.data();
+            return {
+              'id': d.id,
+              'announcementId': data['announcementId'] as String? ?? '',
+            };
+          }).toList();
+          emitCount();
+        }, onError: (_) => emitCount());
+
+        // Küresel duyuruları hafifçe dinle (maksimum 5 doküman)
+        globalSub = firestore
+            .collection('globalAnnouncements')
+            .where('active', isEqualTo: true)
+            .limit(5)
+            .snapshots()
+            .listen((snapshot) {
+          activeGlobalIds = snapshot.docs.map((d) => d.id).toList();
+          emitCount();
+        }, onError: (_) => emitCount());
+
+        changeSub = _announcementChangeController.stream.listen((_) {
+          emitCount();
+        });
+      },
+      onCancel: () async {
+        await userSub?.cancel();
+        await globalSub?.cancel();
+        await changeSub?.cancel();
+        if (!controller.isClosed) {
+          await controller.close();
+        }
       },
     );
 
@@ -1268,26 +1422,31 @@ class FirestoreService {
       } catch (_) {}
     }
 
-    // 2. Kişisel okunmamış bildirimleri Firestore'da güncelle
-    final snapshot = await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .where('read', isEqualTo: false)
-        .limit(400)
-        .get();
+    // 2. FS-PREF-10 & FS-PREF-16: Kişisel okunmamış bildirimleri sayfalı (while loop) tüketerek tümünü okundu yap
+    while (true) {
+      final snapshot = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .where('read', isEqualTo: false)
+          .limit(400)
+          .get();
 
-    if (snapshot.docs.isEmpty) return;
+      if (snapshot.docs.isEmpty) break;
 
-    for (var i = 0; i < snapshot.docs.length; i += 400) {
-      final end = (i + 400 > snapshot.docs.length) ? snapshot.docs.length : i + 400;
-      final chunk = snapshot.docs.sublist(i, end);
       final batch = firestore.batch();
-      for (final doc in chunk) {
+      for (final doc in snapshot.docs) {
         batch.update(doc.reference, {'read': true});
       }
       await batch.commit();
+
+      if (snapshot.docs.length < 400) break;
     }
+
+    // FS-PREF-13: Tüm bildirimler okundu işaretlendiğinde uygulama rozetini de sıfırla
+    try {
+      await AppBadgeService.instance.clearBadge();
+    } catch (_) {}
   }
 
   Future<void> deleteNotification(String userId, String notificationId) async {
@@ -1423,24 +1582,30 @@ class FirestoreService {
       } catch (_) {}
     }
 
-    // 2. Kişisel bildirimleri Firestore'da sil
-    final snapshot = await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('notifications')
-        .limit(400)
-        .get();
-    if (snapshot.docs.isEmpty) return;
+    // 2. FS-PREF-10 & FS-PREF-16: Kişisel bildirimleri sayfalı (while loop) tüketerek tümünü sil
+    while (true) {
+      final snapshot = await firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .limit(400)
+          .get();
 
-    for (var i = 0; i < snapshot.docs.length; i += 400) {
-      final end = (i + 400 > snapshot.docs.length) ? snapshot.docs.length : i + 400;
-      final chunk = snapshot.docs.sublist(i, end);
+      if (snapshot.docs.isEmpty) break;
+
       final batch = firestore.batch();
-      for (final doc in chunk) {
+      for (final doc in snapshot.docs) {
         batch.delete(doc.reference);
       }
       await batch.commit();
+
+      if (snapshot.docs.length < 400) break;
     }
+
+    // FS-PREF-13: Tüm bildirimler silindiğinde uygulama rozetini de sıfırla
+    try {
+      await AppBadgeService.instance.clearBadge();
+    } catch (_) {}
   }
 
   // ===========================================================================

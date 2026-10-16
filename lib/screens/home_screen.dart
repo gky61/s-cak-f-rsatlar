@@ -438,14 +438,11 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      // Kullanıcı mesajları için stream
+      // Kullanıcı mesajları için optimize stream (FS-MSG-01: 250 dokümanlık havuz yerine sadece conversations sayaç dinleyicisi)
       _messageCountSubscription?.cancel();
-      _messageCountSubscription = _firestoreService.getUserMessagesStream(currentUserId).listen(
-        (messages) {
+      _messageCountSubscription = _firestoreService.getUnreadTotalMessageCountStream(currentUserId).listen(
+        (unreadCount) {
           if (mounted) {
-            final unreadCount = messages
-                .where((m) => m.receiverId == currentUserId && !m.isRead)
-                .length;
             setState(() {
               _unreadMessageCount = unreadCount;
             });
@@ -454,17 +451,14 @@ class _HomeScreenState extends State<HomeScreen> {
         onError: (err) => _log('⚠️ HomeScreen unread message count stream error: $err'),
       );
 
-      // Bildirim kutusu (Notifications Center) için stream
+      // Bildirim kutusu (Notifications Center) için ultra hafif sayaç stream'i (FS-PREF-02)
       _unreadNotificationsSubscription?.cancel();
-      _unreadNotificationsSubscription = _firestoreService.getUserNotificationsStream(currentUserId).listen(
-        (notifications) {
-          if (mounted) {
-            final unreadCount = notifications.where((n) => n['read'] != true).length;
-            if (_unreadNotificationCount != unreadCount) {
-              setState(() {
-                _unreadNotificationCount = unreadCount;
-              });
-            }
+      _unreadNotificationsSubscription = _firestoreService.getUnreadNotificationCountStream(currentUserId).listen(
+        (unreadCount) {
+          if (mounted && _unreadNotificationCount != unreadCount) {
+            setState(() {
+              _unreadNotificationCount = unreadCount;
+            });
           }
         },
         onError: (err) => _log('⚠️ HomeScreen unread notification count stream error: $err'),

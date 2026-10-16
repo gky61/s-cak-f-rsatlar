@@ -135,9 +135,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     });
 
     try {
-      for (final cat in _filteredCategories) {
-        await _notificationService.subscribeToCategory(cat.id);
-      }
+      await Future.wait(_filteredCategories.map((cat) => _notificationService.subscribeToCategory(cat.id)));
       _notificationService.requestPermission();
       if (mounted) {
         _showCustomSnackBar(
@@ -170,9 +168,7 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     });
 
     try {
-      for (final cat in _filteredCategories) {
-        await _notificationService.unsubscribeFromCategory(cat.id);
-      }
+      await Future.wait(_filteredCategories.map((cat) => _notificationService.unsubscribeFromCategory(cat.id)));
       if (mounted) {
         _showCustomSnackBar(
           message: 'Tüm kategori takipleri temizlendi',
@@ -202,14 +198,16 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
         _notificationService.requestPermission();
       } else {
         await _notificationService.unsubscribeFromCategory(categoryId);
-        final category = _filteredCategories.firstWhere((c) => c.id == categoryId);
-        for (final subCat in category.subcategories) {
-          if (_subCategoryStates[categoryId]?.contains(subCat) == true) {
-            await _notificationService.unsubscribeFromSubCategory(categoryId, subCat);
-            _subCategoryStates[categoryId]?.remove(subCat);
+        final category = _filteredCategories.cast<Category?>().firstWhere((c) => c?.id == categoryId, orElse: () => null);
+        if (category != null) {
+          for (final subCat in category.subcategories) {
+            if (_subCategoryStates[categoryId]?.contains(subCat) == true) {
+              await _notificationService.unsubscribeFromSubCategory(categoryId, subCat);
+              _subCategoryStates[categoryId]?.remove(subCat);
+            }
           }
         }
-        setState(() {});
+        if (mounted) setState(() {});
       }
     } catch (e) {
       _log('Kategori değiştirme hatası: $e');

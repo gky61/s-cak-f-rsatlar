@@ -409,6 +409,7 @@ class NotificationService {
       await prefs.remove(_prefFcmDocId);
       await prefs.remove(_prefFcmToken);
       await prefs.remove(_prefFcmTimestamp);
+      invalidateSubscriptionCaches();
     } catch (e) {
       _log('⚠️ Error clearing device token: $e');
     }
@@ -419,21 +420,47 @@ class NotificationService {
     return '${uid}_${type}_$sanitizedKey';
   }
 
+  // FS-NOTIF-09: 100k DAU Ölçeğinde Bellek Önbelleği (5 Dakika TTL, Çoklu Kullanıcı İzolasyonlu)
+  String? _cachedUserId;
+  List<String>? _cachedNotificationKeywords;
+  DateTime? _cachedNotificationKeywordsExpiry;
+
+  List<String>? _cachedFollowedCategories;
+  DateTime? _cachedFollowedCategoriesExpiry;
+
+  List<String>? _cachedFollowedSubCategories;
+  DateTime? _cachedFollowedSubCategoriesExpiry;
+
+  static const Duration _subscriptionCacheTtl = Duration(minutes: 5);
+
+  /// Abonelik önbelleklerini anında geçersiz kılan temizleyici
+  void invalidateSubscriptionCaches() {
+    _cachedUserId = null;
+    _cachedNotificationKeywords = null;
+    _cachedNotificationKeywordsExpiry = null;
+    _cachedFollowedCategories = null;
+    _cachedFollowedCategoriesExpiry = null;
+    _cachedFollowedSubCategories = null;
+    _cachedFollowedSubCategoriesExpiry = null;
+  }
+
+  /// FS-NOTIF-08: Türkçe Büyük 'İ' ve ASCII Karakter Uyumlu Evrensel Normalizasyon Kalkanı
   String normalizeKeyword(String text) {
     return text
-        .toLowerCase()
-        .replaceAll('ç', 'c')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ı', 'i')
-        .replaceAll('ö', 'o')
-        .replaceAll('ş', 's')
-        .replaceAll('ü', 'u')
-        .replaceAll('Ç', 'c')
-        .replaceAll('Ğ', 'g')
         .replaceAll('İ', 'i')
+        .replaceAll('I', 'i')
+        .replaceAll('ı', 'i')
+        .replaceAll('Ç', 'c')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ğ', 'g')
+        .replaceAll('ğ', 'g')
         .replaceAll('Ö', 'o')
+        .replaceAll('ö', 'o')
         .replaceAll('Ş', 's')
+        .replaceAll('ş', 's')
         .replaceAll('Ü', 'u')
+        .replaceAll('ü', 'u')
+        .toLowerCase()
         .replaceAll(RegExp(r'[^\w\s]'), '')
         .trim();
   }
@@ -467,6 +494,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Kategori topic abonelik uyarısı: $topicErr');
       }
+      invalidateSubscriptionCaches();
       _log('✅ Category subscription added: $categoryId');
     } catch (e) {
       _log('❌ Category subscription add error: $e');
@@ -487,6 +515,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Kategori topic abonelikten çıkış uyarısı: $topicErr');
       }
+      invalidateSubscriptionCaches();
       _log('✅ Category subscription deleted: $categoryId');
     } catch (e) {
       _log('❌ Category subscription delete error: $e');
@@ -524,6 +553,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Alt kategori topic abonelik uyarısı: $topicErr');
       }
+      invalidateSubscriptionCaches();
       _log('✅ Subcategory subscription added: $key');
     } catch (e) {
       _log('❌ Subcategory subscription add error: $e');
@@ -545,6 +575,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Alt kategori topic abonelikten çıkış uyarısı: $topicErr');
       }
+      invalidateSubscriptionCaches();
       _log('✅ Subcategory subscription deleted: $key');
     } catch (e) {
       _log('❌ Subcategory subscription delete error: $e');
@@ -552,10 +583,19 @@ class NotificationService {
     }
   }
 
-  // --- Takip Edilen Kategorileri Getir ---
-  Future<List<String>> getFollowedCategories() async {
+  // --- Takip Edilen Kategorileri Getir (FS-NOTIF-09: Önbellekli Hibrit Çözücü) ---
+  Future<List<String>> getFollowedCategories({bool forceRefresh = false}) async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return [];
+
+    if (!forceRefresh &&
+        _cachedUserId == userId &&
+        _cachedFollowedCategories != null &&
+        _cachedFollowedCategoriesExpiry != null &&
+        DateTime.now().isBefore(_cachedFollowedCategoriesExpiry!)) {
+      return List<String>.from(_cachedFollowedCategories!);
+    }
+
     try {
       final snap = await _firestore
           .collection('notificationSubscriptions')
@@ -563,19 +603,47 @@ class NotificationService {
           .where('type', isEqualTo: 'category')
           .where('enabled', isEqualTo: true)
           .get();
-      return snap.docs
-          .map((doc) => doc.data()['key'] as String)
-          .where((key) => !key.contains(':'))
-          .toList();
+
+      final cats = <String>[];
+      final subCats = <String>[];
+      for (final doc in snap.docs) {
+        final key = doc.data()['key'] as String? ?? '';
+        if (key.isEmpty) continue;
+        if (key.contains(':')) {
+          subCats.add(key);
+        } else {
+          cats.add(key);
+        }
+      }
+
+      _cachedUserId = userId;
+      _cachedFollowedCategories = cats;
+      _cachedFollowedSubCategories = subCats;
+      final now = DateTime.now();
+      _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
+      _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+
+      return List<String>.from(cats);
     } catch (e) {
       _log('Error getting followed categories: $e');
-      return [];
+      return (_cachedUserId == userId && _cachedFollowedCategories != null)
+          ? List<String>.from(_cachedFollowedCategories!)
+          : [];
     }
   }
 
-  Future<List<String>> getFollowedSubCategories() async {
+  Future<List<String>> getFollowedSubCategories({bool forceRefresh = false}) async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return [];
+
+    if (!forceRefresh &&
+        _cachedUserId == userId &&
+        _cachedFollowedSubCategories != null &&
+        _cachedFollowedSubCategoriesExpiry != null &&
+        DateTime.now().isBefore(_cachedFollowedSubCategoriesExpiry!)) {
+      return List<String>.from(_cachedFollowedSubCategories!);
+    }
+
     try {
       final snap = await _firestore
           .collection('notificationSubscriptions')
@@ -583,13 +651,32 @@ class NotificationService {
           .where('type', isEqualTo: 'category')
           .where('enabled', isEqualTo: true)
           .get();
-      return snap.docs
-          .map((doc) => doc.data()['key'] as String)
-          .where((key) => key.contains(':'))
-          .toList();
+
+      final cats = <String>[];
+      final subCats = <String>[];
+      for (final doc in snap.docs) {
+        final key = doc.data()['key'] as String? ?? '';
+        if (key.isEmpty) continue;
+        if (key.contains(':')) {
+          subCats.add(key);
+        } else {
+          cats.add(key);
+        }
+      }
+
+      _cachedUserId = userId;
+      _cachedFollowedCategories = cats;
+      _cachedFollowedSubCategories = subCats;
+      final now = DateTime.now();
+      _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
+      _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+
+      return List<String>.from(subCats);
     } catch (e) {
       _log('Error getting followed subcategories: $e');
-      return [];
+      return (_cachedUserId == userId && _cachedFollowedSubCategories != null)
+          ? List<String>.from(_cachedFollowedSubCategories!)
+          : [];
     }
   }
 
@@ -1064,6 +1151,29 @@ class NotificationService {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _foregroundMessageListener;
   static final Set<String> _handledInAppMessageIds = <String>{};
 
+  // FS-NOTIF-02: 4x Multi-Push Echo Storm Kalkanı (Aynı dealId için 60 sn sliding window tekilleştirme)
+  static final Map<String, DateTime> _recentlyHandledDealNotifTimes = <String, DateTime>{};
+
+  static bool isRecentDealHandledForTesting(String dealId) => _isRecentDealHandled(dealId);
+  static void markRecentDealHandledForTesting(String dealId) => _markRecentDealHandled(dealId);
+  static void clearRecentDealHandledForTesting() => _recentlyHandledDealNotifTimes.clear();
+
+  static bool _isRecentDealHandled(String dealId) {
+    if (dealId.isEmpty) return false;
+    final now = DateTime.now();
+    _recentlyHandledDealNotifTimes.removeWhere((_, time) => now.difference(time).inSeconds > 60);
+    final lastTime = _recentlyHandledDealNotifTimes[dealId];
+    if (lastTime != null && now.difference(lastTime).inSeconds <= 60) {
+      return true;
+    }
+    return false;
+  }
+
+  static void _markRecentDealHandled(String dealId) {
+    if (dealId.isEmpty) return;
+    _recentlyHandledDealNotifTimes[dealId] = DateTime.now();
+  }
+
   static void _addHandledMessageId(String id) {
     if (id.isEmpty) return;
     if (_handledInAppMessageIds.length > 200) {
@@ -1205,34 +1315,60 @@ class NotificationService {
       await unsubscribeFromMarketingTopic();
       await _messaging.unsubscribeFromTopic('all_deals');
       
-      // Kullanıcının takip ettiği kategorilerden çık
+      // FS-NOTIF-12: Kullanıcının notificationSubscriptions altındaki tüm aktif topic'lerinden temiz çıkış
       final userId = _auth.currentUser?.uid;
       if (userId != null) {
-        final userDoc = await _firestore.collection('users').doc(userId).get();
-        if (userDoc.exists) {
-          final data = userDoc.data();
-          
-          // Kategorilerden çık
-          final categories = data?['followedCategories'] as List<dynamic>? ?? [];
-          for (final category in categories) {
-            try {
-              await _messaging.unsubscribeFromTopic('category_$category');
-            } catch (_) {}
-          }
-          
-          // Alt kategorilerden çık
-          final subCategories = data?['followedSubCategories'] as List<dynamic>? ?? [];
-          for (final subCat in subCategories) {
-            try {
-              final parts = subCat.toString().split(':');
-              if (parts.length == 2) {
-                final sanitized = _sanitizeTopicName(parts[1]);
-                await _messaging.unsubscribeFromTopic('subcategory_${parts[0]}_$sanitized');
+        try {
+          final subsSnap = await _firestore
+              .collection('notificationSubscriptions')
+              .where('uid', isEqualTo: userId)
+              .get();
+          for (final doc in subsSnap.docs) {
+            final data = doc.data();
+            final type = data['type'] as String? ?? '';
+            final key = (data['key'] ?? data['displayValue'] ?? '').toString();
+            if (type == 'category') {
+              final cleanCat = key.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+              await _messaging.unsubscribeFromTopic('cat_$cleanCat').catchError((_) {});
+            } else if (type == 'keyword') {
+              final cleanKw = _sanitizeKeywordForTopic(key);
+              if (cleanKw.isNotEmpty) {
+                await _messaging.unsubscribeFromTopic('kw_$cleanKw').catchError((_) {});
               }
-            } catch (_) {}
+            } else if (type == 'author') {
+              final sanitizedAuthor = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+              await _messaging.unsubscribeFromTopic('author_$sanitizedAuthor').catchError((_) {});
+            }
           }
+        } catch (e) {
+          _log('⚠️ notificationSubscriptions topic temizleme hatası: $e');
         }
+
+        // Botkolik genel konusundan da çık
+        await _messaging.unsubscribeFromTopic('author_botkolik').catchError((_) {});
+
+        // Eski geriye dönük uyumluluk temizlikleri
+        try {
+          final userDoc = await _firestore.collection('users').doc(userId).get();
+          if (userDoc.exists) {
+            final data = userDoc.data();
+            final categories = data?['followedCategories'] as List<dynamic>? ?? [];
+            for (final category in categories) {
+              await _messaging.unsubscribeFromTopic('category_$category').catchError((_) {});
+              final cleanCat = category.toString().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+              await _messaging.unsubscribeFromTopic('cat_$cleanCat').catchError((_) {});
+            }
+            final subCategories = data?['followedSubCategories'] as List<dynamic>? ?? [];
+            for (final subCat in subCategories) {
+              final cleanSub = subCat.toString().toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+              await _messaging.unsubscribeFromTopic('cat_$cleanSub').catchError((_) {});
+            }
+          }
+        } catch (_) {}
       }
+
+      // In-memory abonelik önbelleklerini temizle
+      invalidateSubscriptionCaches();
       
       // Keyword listener'ı durdur
       _stopKeywordListener();
@@ -1703,13 +1839,19 @@ class NotificationService {
         await unsubscribeFromCommunityTopic();
       }
 
-      // 4. FS-25: Anahtar Kelime Radarı Dinamik Konuları (kw_<keyword>)
+      // 4. FS-25 & FS-NOTIF-03: Anahtar Kelime Radarı Dinamik Konuları (kw_<keyword>)
+      // Yalnızca kullanıcı ana şalteri ve kelime bildirimlerini açık tutuyorsa abone ol, kapalıysa unsub yap!
       try {
+        final shouldSubscribeKeywords = prefs.pushMasterEnabled && prefs.keywordNotificationsEnabled;
         final keywords = await getNotificationKeywords();
         for (final kw in keywords) {
           final cleanKw = _sanitizeKeywordForTopic(kw);
           if (cleanKw.isNotEmpty) {
-            await _messaging.subscribeToTopic('kw_$cleanKw').catchError((_) {});
+            if (shouldSubscribeKeywords) {
+              await _messaging.subscribeToTopic('kw_$cleanKw').catchError((_) {});
+            } else {
+              await _messaging.unsubscribeFromTopic('kw_$cleanKw').catchError((_) {});
+            }
           }
         }
       } catch (kwErr) {
@@ -1741,6 +1883,33 @@ class NotificationService {
         }
       } catch (catSyncErr) {
         _log('⚠️ Category topics resubscribe error: $catSyncErr');
+      }
+
+      // 6. Takip Edilen Yazar FCM Konuları (author_<authorId> / author_botkolik)
+      try {
+        final userId = _auth.currentUser?.uid;
+        if (userId != null) {
+          final authorSubsSnap = await _firestore
+              .collection('notificationSubscriptions')
+              .where('uid', isEqualTo: userId)
+              .where('type', isEqualTo: 'author')
+              .where('enabled', isEqualTo: true)
+              .get();
+          for (final doc in authorSubsSnap.docs) {
+            final authorKey = (doc.data()['key'] ?? '').toString();
+            final sanitizedAuthor = authorKey.toLowerCase().replaceAll(RegExp(r'[^a-z0-9-]'), '-');
+            if (sanitizedAuthor.isNotEmpty) {
+              final isAuthorPushActive = prefs.pushMasterEnabled && prefs.dealNotificationsEnabled;
+              if (isAuthorPushActive) {
+                await _messaging.subscribeToTopic('author_$sanitizedAuthor').catchError((_) {});
+              } else {
+                await _messaging.unsubscribeFromTopic('author_$sanitizedAuthor').catchError((_) {});
+              }
+            }
+          }
+        }
+      } catch (authorSyncErr) {
+        _log('⚠️ Author topics resubscribe error: $authorSyncErr');
       }
     } catch (e) {
       _log('❌ resubscribeToTopics hatası: $e');
@@ -2503,6 +2672,38 @@ class NotificationService {
         }
       }
 
+      // FS-NOTIF-02: 4x Multi-Push Echo Storm Kalkanı (Aynı dealId için 60 sn sliding window tekilleştirme)
+      if (dealId.isNotEmpty) {
+        if (_isRecentDealHandled(dealId)) {
+          _log('🛡️ Aynı fırsat için mükerrer ön plan bildirimi bastırıldı (dealId: $dealId, reason: $reason)');
+          return;
+        }
+        _markRecentDealHandled(dealId);
+      }
+
+      // FS-NOTIF-01: Kullanıcı Tercihleri ve Sessiz Saat Kalkanı (Client-Side Zero-Cost Filter)
+      try {
+        final prefs = await getNotificationPreferences();
+        if (!prefs.pushMasterEnabled) {
+          _log('🔕 Master bildirim şalteri kapalı, ön plan bildirim bastırıldı.');
+          return;
+        }
+        if (prefs.isQuietHoursNow()) {
+          _log('🔕 Kullanıcı sessiz saatlerinde (${prefs.quietHoursStart}-${prefs.quietHoursEnd}), ön plan bildirim bastırıldı.');
+          return;
+        }
+        if ((type == 'keyword' || reason == 'keyword') && !prefs.keywordNotificationsEnabled) {
+          _log('🔕 Kelime bildirimleri tercihlerde kapalı, ön plan bildirim bastırıldı.');
+          return;
+        }
+        if ((type == 'deal' || reason == 'category') && !prefs.categoryNotificationsEnabled && !prefs.dealNotificationsEnabled) {
+          _log('🔕 Fırsat/Kategori bildirimleri tercihlerde kapalı, ön plan bildirim bastırıldı.');
+          return;
+        }
+      } catch (prefErr) {
+        _log('⚠️ Tercih denetimi hatası: $prefErr');
+      }
+
       // B. Yönetici Admin panelindeyse ve onay bekleyen fırsat/kupon bildirimi geldiyse bastır
       if (isAdminScreenActive && (type == 'admin_deal' || reason == 'admin_deal' || type == 'admin_coupon' || reason == 'admin_coupon')) {
         _log('🛡️ Yönetici zaten admin ekranında, onay bekleyen fırsat/kupon ön plan bildirimi bastırıldı.');
@@ -3171,10 +3372,21 @@ class NotificationService {
     }
   }
 
-  // --- Notification Preferences ---
+  // --- Notification Preferences (FS-PREF-09: Çift Katmanlı Disk & Firestore Senkronizasyon Kalkanı) ---
   Future<NotificationPreferences> getNotificationPreferences() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return NotificationPreferences.defaultPreferences();
+
+    // 1. Önce SharedPreferences yerel önbelleğini kontrol et
+    NotificationPreferences? cachedPrefs;
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final rawJson = sp.getString('cached_notification_preferences_$userId');
+      if (rawJson != null && rawJson.isNotEmpty) {
+        cachedPrefs = NotificationPreferences.fromJson(jsonDecode(rawJson) as Map<String, dynamic>);
+      }
+    } catch (_) {}
+
     try {
       final doc = await _firestore
           .collection('users')
@@ -3182,9 +3394,22 @@ class NotificationService {
           .collection('notificationPreferences')
           .doc('main')
           .get();
-      return NotificationPreferences.fromFirestore(doc);
+
+      if (doc.exists) {
+        final firestorePrefs = NotificationPreferences.fromFirestore(doc);
+        // Yerel önbelleğe de güncelle
+        try {
+          final sp = await SharedPreferences.getInstance();
+          await sp.setString('cached_notification_preferences_$userId', jsonEncode(firestorePrefs.toJson()));
+        } catch (_) {}
+        return firestorePrefs;
+      } else if (cachedPrefs != null) {
+        return cachedPrefs;
+      }
+      return NotificationPreferences.defaultPreferences();
     } catch (e) {
-      _log('Preferences get error: $e');
+      _log('Preferences get error (using cache if available): $e');
+      if (cachedPrefs != null) return cachedPrefs;
       return NotificationPreferences.defaultPreferences();
     }
   }
@@ -3193,6 +3418,13 @@ class NotificationService {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
     try {
+      // 1. Önce yerel SharedPreferences'a mühürle (Ağ kesilse dahi ayar buharlaşmaz)
+      try {
+        final sp = await SharedPreferences.getInstance();
+        await sp.setString('cached_notification_preferences_$userId', jsonEncode(prefs.toJson()));
+      } catch (_) {}
+
+      // 2. Firestore buluta yaz
       await _firestore
           .collection('users')
           .doc(userId)
@@ -3201,7 +3433,7 @@ class NotificationService {
           .set(prefs.toMap(), SetOptions(merge: true));
       _log('✅ Notification preferences updated in Firestore');
       
-      // Kategori aboneliklerini tercihe göre güncelle (abone ol veya aboneliği kaldır)
+      // Kategori ve yazar aboneliklerini tercihe göre güncelle (abone ol veya aboneliği kaldır)
       await resubscribeToTopics();
     } catch (e) {
       _log('❌ Preferences update error: $e');
@@ -3227,10 +3459,19 @@ class NotificationService {
     }
   }
 
-  // --- Anahtar Kelime Abonelikleri ---
-  Future<List<String>> getNotificationKeywords() async {
+  // --- Anahtar Kelime Abonelikleri (FS-NOTIF-09: Önbellekli Hibrit Çözücü) ---
+  Future<List<String>> getNotificationKeywords({bool forceRefresh = false}) async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return [];
+
+    if (!forceRefresh &&
+        _cachedUserId == userId &&
+        _cachedNotificationKeywords != null &&
+        _cachedNotificationKeywordsExpiry != null &&
+        DateTime.now().isBefore(_cachedNotificationKeywordsExpiry!)) {
+      return List<String>.from(_cachedNotificationKeywords!);
+    }
+
     try {
       final snap = await _firestore
           .collection('notificationSubscriptions')
@@ -3238,10 +3479,16 @@ class NotificationService {
           .where('type', isEqualTo: 'keyword')
           .where('enabled', isEqualTo: true)
           .get();
-      return snap.docs.map((doc) => doc.data()['displayValue'] as String).toList();
+      final keywords = snap.docs.map((doc) => doc.data()['displayValue'] as String).toList();
+      _cachedUserId = userId;
+      _cachedNotificationKeywords = keywords;
+      _cachedNotificationKeywordsExpiry = DateTime.now().add(_subscriptionCacheTtl);
+      return List<String>.from(keywords);
     } catch (e) {
       _log('Error getting keyword subscriptions: $e');
-      return [];
+      return (_cachedUserId == userId && _cachedNotificationKeywords != null)
+          ? List<String>.from(_cachedNotificationKeywords!)
+          : [];
     }
   }
 
@@ -3266,17 +3513,27 @@ class NotificationService {
       });
       _log('✅ Keyword subscription added: $keyword');
 
-      // FS-25: Dinamik FCM Topic Aboneliği (150 limit tavanını aşan sıfır maliyetli kalkan)
+      // FS-25 & FS-NOTIF-03: Tercih denetimli dinamik FCM Topic aboneliği
       if (!kIsWeb) {
-        final cleanKw = _sanitizeKeywordForTopic(normalized);
-        if (cleanKw.isNotEmpty) {
-          final kwTopic = 'kw_$cleanKw';
-          await _messaging.subscribeToTopic(kwTopic).catchError((e) {
-            _log('⚠️ Keyword topic ($kwTopic) subscribe error: $e');
-          });
-          _log('📢 [FCM-Topic] Kelime konusuna abone olundu: $kwTopic');
+        try {
+          final prefs = await getNotificationPreferences();
+          final cleanKw = _sanitizeKeywordForTopic(normalized);
+          if (cleanKw.isNotEmpty) {
+            final kwTopic = 'kw_$cleanKw';
+            if (prefs.pushMasterEnabled && prefs.keywordNotificationsEnabled) {
+              await _messaging.subscribeToTopic(kwTopic).catchError((e) {
+                _log('⚠️ Keyword topic ($kwTopic) subscribe error: $e');
+              });
+              _log('📢 [FCM-Topic] Kelime konusuna abone olundu: $kwTopic');
+            } else {
+              _log('ℹ️ Kelime bildirimi tercihlerde kapalı olduğu için topic aboneliği açılmadı: $kwTopic');
+            }
+          }
+        } catch (topicErr) {
+          _log('⚠️ Kelime topic kontrol uyarısı: $topicErr');
         }
       }
+      invalidateSubscriptionCaches();
     } catch (e) {
       _log('❌ Keyword subscription add error: $e');
       rethrow;
@@ -3303,6 +3560,7 @@ class NotificationService {
           _log('📢 [FCM-Topic] Kelime konusundan çıkıldı: $kwTopic');
         }
       }
+      invalidateSubscriptionCaches();
     } catch (e) {
       _log('❌ Keyword subscription remove error: $e');
       rethrow;
@@ -3319,12 +3577,15 @@ class NotificationService {
         .replaceAll(RegExp(r'^_+|_+$'), '');
   }
 
-  /// FS-25: Aktif anahtar kelime aboneliklerini FCM topic'lerine yeniden bağla (Cihaz değişikliği / yeniden kurulum / yükseltme sonrası kalkan)
+  /// FS-25 & FS-NOTIF-03: Aktif anahtar kelime aboneliklerini FCM topic'lerine güvenli senkronize et
   Future<void> resubscribeAllKeywordTopics() async {
     if (kIsWeb) return;
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
     try {
+      final prefs = await getNotificationPreferences();
+      final shouldSubscribe = prefs.pushMasterEnabled && prefs.keywordNotificationsEnabled;
+
       final snap = await _firestore
           .collection('notificationSubscriptions')
           .where('uid', isEqualTo: userId)
@@ -3339,12 +3600,18 @@ class NotificationService {
         final cleanKw = _sanitizeKeywordForTopic(rawKey);
         if (cleanKw.isNotEmpty) {
           final kwTopic = 'kw_$cleanKw';
-          await _messaging.subscribeToTopic(kwTopic).catchError((e) {
-            _log('⚠️ Keyword topic ($kwTopic) resubscribe error: $e');
-          });
+          if (shouldSubscribe) {
+            await _messaging.subscribeToTopic(kwTopic).catchError((e) {
+              _log('⚠️ Keyword topic ($kwTopic) resubscribe error: $e');
+            });
+          } else {
+            await _messaging.unsubscribeFromTopic(kwTopic).catchError((e) {
+              _log('⚠️ Keyword topic ($kwTopic) unsubscribe error: $e');
+            });
+          }
         }
       }
-      _log('✅ FS-25: ${snap.docs.length} aktif kelime konusu FCM ile senkronize edildi.');
+      _log('✅ FS-25: ${snap.docs.length} aktif kelime konusu FCM ile senkronize edildi (shouldSubscribe=$shouldSubscribe).');
     } catch (e) {
       _log('⚠️ resubscribeAllKeywordTopics hatası: $e');
     }
