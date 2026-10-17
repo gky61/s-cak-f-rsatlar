@@ -44,6 +44,8 @@ if (!PROJECT_ID) {
   process.exit(1);
 }
 
+const ENVIRONMENT = ((process.env.PROJECT_ID || '').includes('prod') || process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod') ? 'prod' : 'dev';
+
 // Firebase Admin başlat
 // Cloud Run ve Docker container'da ortam kimlik doğrulamasını kullanır
 if (!admin.apps.length) {
@@ -149,6 +151,50 @@ let isPollingInProgress = false; // P0: Eşzamanlı polling çakışmasını eng
 const inFlightUrls = new Map(); // P1: cleanUrl -> timestamp (Aynı anda işlenen URL'lerin yarış durumu kilidi)
 const IN_FLIGHT_TIMEOUT_MS = 30000; // 30 saniye maksimum in-flight bekleme zaman aşımı
 
+// Otonom Sağlık, Watchdog & Deadlock Kırıcı Değişkenleri
+let currentPollCycleId = 0;
+let pollingStartTime = 0;
+let lastPollCycleCompletedAt = Date.now();
+let lastPollDurationMs = 0;
+let consecutiveDeadlocks = 0;
+let totalDeadlockRecoveries = 0;
+const POLLING_DEADLOCK_TIMEOUT_MS = 90000; // 90 saniye
+const MAX_CONSECUTIVE_DEADLOCKS = 3;
+let lastRestartTrigger = 0;
+let lastForcePollTrigger = 0;
+
+/**
+ * Herhangi bir asenkron Promise'i verilen süre içinde güvenle sonlandıran mutlak zaman aşımı koruyucusu.
+ */
+function withTimeout(promise, ms, fallbackValue = null, operationName = 'Async Operation') {
+  let timer;
+  let hasTimedOut = false;
+
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      hasTimedOut = true;
+      console.warn(`⏱️ [TIMEOUT] ${operationName} ${ms}ms içinde tamamlanamadı, fallback değeriyle devam ediliyor.`);
+      resolve(fallbackValue);
+    }, ms);
+  });
+
+  const wrappedPromise = Promise.resolve(promise)
+    .then((result) => {
+      clearTimeout(timer);
+      return result;
+    })
+    .catch((error) => {
+      clearTimeout(timer);
+      if (hasTimedOut) {
+        console.warn(`⚠️ [TIMEOUT HANDLER] Geç gelen hata güvenle yutuldu (${operationName}):`, error?.message || error);
+        return fallbackValue;
+      }
+      throw error;
+    });
+
+  return Promise.race([wrappedPromise, timeoutPromise]);
+}
+
 // Sayaçlar ve Durum Değişkenleri
 let msgCount = 0;
 let dealCount = 0;
@@ -247,7 +293,20 @@ async function sendHeartbeat() {
     }
 
     const isHealthy = isClientConnected && authStatus === 'authorized';
-    const currentStatus = botEnabled ? (isHealthy ? 'online' : 'degraded') : 'paused';
+    const pollAgeMs = Date.now() - lastPollCycleCompletedAt;
+    const isPollingStuck = isPollingInProgress && ((Date.now() - pollingStartTime) > POLLING_DEADLOCK_TIMEOUT_MS);
+    const isPollCycleStale = botEnabled && (pollAgeMs > 5 * 60 * 1000);
+
+    let currentStatus = 'online';
+    if (!botEnabled) {
+      currentStatus = 'paused';
+    } else if (isPollingStuck || isPollCycleStale) {
+      currentStatus = 'stuck';
+    } else if (!isHealthy) {
+      currentStatus = 'degraded';
+    } else {
+      currentStatus = 'online';
+    }
 
     await statusRef.set({
       lastHeartbeatAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -256,6 +315,12 @@ async function sendHeartbeat() {
       mtprotoConnected: isClientConnected,
       mtprotoAuthStatus: authStatus,
       lastMessageTime: lastMessageTime ? admin.firestore.Timestamp.fromDate(lastMessageTime) : null,
+      lastPollCompletedAt: admin.firestore.Timestamp.fromDate(new Date(lastPollCycleCompletedAt)),
+      lastPollDurationMs: lastPollDurationMs,
+      isPollingStuck: isPollingStuck || isPollCycleStale,
+      totalDeadlockRecoveries: totalDeadlockRecoveries,
+      consecutiveDeadlocks: consecutiveDeadlocks,
+      pollingCycleAgeSec: Math.round(pollAgeMs / 1000),
       msgCount: msgCount,
       dealCount: dealCount,
       dupCount: dupCount,
@@ -264,7 +329,7 @@ async function sendHeartbeat() {
       countersDate: countersDate,
       monitoredChannels: CHANNELS
     }, { merge: true });
-    console.log(`💓 Heartbeat sent successfully! Status: ${currentStatus} (MTProto: ${isClientConnected ? 'CONNECTED' : 'DISCONNECTED'}, Auth: ${authStatus})`);
+    console.log(`💓 Heartbeat gönderildi! Status: ${currentStatus} (MTProto: ${isClientConnected ? 'CONNECTED' : 'DISCONNECTED'}, Auth: ${authStatus}, Son Tarama: ${Math.round(pollAgeMs / 1000)}s önce)`);
   } catch (err) {
     console.error('❌ Heartbeat gönderim hatası:', err.message);
   }
@@ -364,6 +429,8 @@ async function executeSystemCleanup() {
   }
 }
 
+let isInitialSettingsSnapshot = true;
+
 function initSettingsListener() {
   console.log('👂 Firestore settings/telegramBot real-time dinleyicisi başlatılıyor...');
   if (settingsUnsubscribe) {
@@ -376,11 +443,38 @@ function initSettingsListener() {
       botEnabled = data.botEnabled !== false;
       console.log(`⚙️ Firestore Ayarları: botEnabled = ${botEnabled}`);
 
-      // Temizlik Tetikleyici Kontrolü
-      if (data.cleanVmTrigger && data.cleanVmTrigger > lastCleanVmTrigger) {
-        lastCleanVmTrigger = data.cleanVmTrigger;
-        console.log(`🧹 Sunucu Temizliği Tetiklendi! (Trigger ID: ${data.cleanVmTrigger})`);
-        executeSystemCleanup().catch(console.error);
+      if (isInitialSettingsSnapshot) {
+        lastRestartTrigger = data.restartTrigger || Date.now();
+        lastForcePollTrigger = data.forcePollTrigger || Date.now();
+        lastCleanVmTrigger = data.cleanVmTrigger || Date.now();
+        isInitialSettingsSnapshot = false;
+        console.log(`⚙️ Başlangıç Firestore Ayarları senkronize edildi (Tetikleyici başlangıç eşikleri sabitlendi).`);
+      } else {
+        // Uzaktan Yeniden Başlatma Tetikleyicisi (Remote Restart Trigger)
+        if (data.restartTrigger && data.restartTrigger > lastRestartTrigger) {
+          lastRestartTrigger = data.restartTrigger;
+          console.warn(`🔄 [REMOTE COMMAND] Admin panelinden yeniden başlatma sinyali alındı! (ID: ${data.restartTrigger})`);
+          setTimeout(async () => {
+            try {
+              await stopBot();
+            } catch (_) {}
+            process.exit(0);
+          }, 1000);
+        }
+
+        // Anlık Kanal Taraması Tetikleyicisi (Force Poll Trigger)
+        if (data.forcePollTrigger && data.forcePollTrigger > lastForcePollTrigger) {
+          lastForcePollTrigger = data.forcePollTrigger;
+          console.log(`⚡ [REMOTE COMMAND] Admin panelinden anlık kanal taraması tetiklendi! (ID: ${data.forcePollTrigger})`);
+          pollMonitoredChannels().catch(console.error);
+        }
+
+        // Temizlik Tetikleyici Kontrolü
+        if (data.cleanVmTrigger && data.cleanVmTrigger > lastCleanVmTrigger) {
+          lastCleanVmTrigger = data.cleanVmTrigger;
+          console.log(`🧹 Sunucu Temizliği Tetiklendi! (Trigger ID: ${data.cleanVmTrigger})`);
+          executeSystemCleanup().catch(console.error);
+        }
       }
 
       // Dinamik Kanal Yönetimi Kontrolü
@@ -1712,11 +1806,41 @@ async function pollMonitoredChannels() {
   if (!client || !isRunning || !botEnabled) return;
 
   if (isPollingInProgress) {
-    console.log('⏳ Önceki kanal takip (polling) döngüsü henüz tamamlanmadı, çakışmayı önlemek için bu tur atlandı.');
-    return;
+    const elapsed = Date.now() - pollingStartTime;
+    if (elapsed > POLLING_DEADLOCK_TIMEOUT_MS) {
+      consecutiveDeadlocks++;
+      totalDeadlockRecoveries++;
+      console.error(`🚨 [DEADLOCK DETECTED] Polling döngüsü ${Math.round(elapsed / 1000)}s süredir takılı kaldı! Kilidi kırıyoruz ve kurtarma yapıyoruz... (Ardışık: ${consecutiveDeadlocks}/${MAX_CONSECUTIVE_DEADLOCKS}, Toplam: ${totalDeadlockRecoveries})`);
+      
+      // Firestore systemErrors koleksiyonuna bildirim yaz
+      try {
+        db.collection('systemErrors').add({
+          type: 'TELEGRAM_BOT_DEADLOCK',
+          environment: ENVIRONMENT,
+          message: `Telegram polling döngüsü ${Math.round(elapsed / 1000)}s süredir kilitlendi. Otonom kilit kırıcı devrede.`,
+          consecutiveDeadlocks: consecutiveDeadlocks,
+          totalDeadlockRecoveries: totalDeadlockRecoveries,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+      } catch (_) {}
+
+      // Eğer ardışık 3 kez deadlock oluyorsa, process'i yeniden başlat (Docker restart policy konteyneri temiz ayağa kaldırır)
+      if (consecutiveDeadlocks >= MAX_CONSECUTIVE_DEADLOCKS) {
+        console.error(`💀 [CRITICAL] Ardışık ${consecutiveDeadlocks} kez deadlock oluştu. Süreç temiz yeniden başlatma için sonlandırılıyor (exit 1)...`);
+        process.exit(1);
+      }
+
+      // Kilidi zorla aç
+      isPollingInProgress = false;
+    } else {
+      console.log(`⏳ Önceki kanal takip (polling) döngüsü henüz tamamlanmadı (${Math.round(elapsed / 1000)}s), çakışmayı önlemek için bu tur atlandı.`);
+      return;
+    }
   }
 
+  const cycleId = ++currentPollCycleId;
   isPollingInProgress = true;
+  pollingStartTime = Date.now();
   try {
     const processedInputs = new Set();
 
@@ -1736,45 +1860,57 @@ async function pollMonitoredChannels() {
               accessHash: BigInt(channelInfo.accessHash)
             });
 
-            const diff = await client.invoke(new Api.updates.GetChannelDifference({
-              force: false,
-              channel: inputChannel,
-              filter: new Api.ChannelMessagesFilterEmpty(),
-              pts: currentPts,
-              limit: 10
-            }));
+            const diff = await withTimeout(
+              client.invoke(new Api.updates.GetChannelDifference({
+                force: false,
+                channel: inputChannel,
+                filter: new Api.ChannelMessagesFilterEmpty(),
+                pts: currentPts,
+                limit: 10
+              })),
+              15000,
+              null,
+              `GetChannelDifference [${channelInfo.title}]`
+            );
 
-            // PTS güncelle
-            const newPts = diff.pts || diff.dialog?.pts;
-            if (newPts) {
-              channelPtsMap.set(cleanId, newPts);
-            }
-
-            // Yeni mesajlar var mı?
-            if (diff.newMessages && diff.newMessages.length > 0) {
-              for (const msg of diff.newMessages) {
-                // Dedup kontrolü
-                const dedupKey = `${cleanId}_${msg.id}`;
-                if (processedMsgIds.has(dedupKey)) continue;
-                processedMsgIds.add(dedupKey);
-
-                console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via ChannelDiff)`);
-
-                const fakeEvent = {
-                  message: msg,
-                  chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
-                };
-                await handleTelegramMessageEvent(fakeEvent);
+            if (diff) {
+              // PTS güncelle
+              const newPts = diff.pts || diff.dialog?.pts;
+              if (newPts) {
+                channelPtsMap.set(cleanId, newPts);
               }
-            }
 
-            // Dedup setini temiz tut
-            if (processedMsgIds.size > 500) {
-              const arr = [...processedMsgIds];
-              processedMsgIds = new Set(arr.slice(arr.length - 250));
-            }
+              // Yeni mesajlar var mı?
+              if (diff.newMessages && diff.newMessages.length > 0) {
+                for (const msg of diff.newMessages) {
+                  // Dedup kontrolü
+                  const dedupKey = `${cleanId}_${msg.id}`;
+                  if (processedMsgIds.has(dedupKey)) continue;
+                  processedMsgIds.add(dedupKey);
 
-            continue; // Başarılı - sonraki kanala geç
+                  console.log(`⚡ [${channelInfo.title}] Yeni mesaj yakalandı! (ID: ${msg.id} via ChannelDiff)`);
+
+                  const fakeEvent = {
+                    message: msg,
+                    chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
+                  };
+                  await withTimeout(
+                    handleTelegramMessageEvent(fakeEvent),
+                    45000,
+                    null,
+                    `handleTelegramMessageEvent ChannelDiff [${channelInfo.title}]`
+                  );
+                }
+              }
+
+              // Dedup setini temiz tut
+              if (processedMsgIds.size > 500) {
+                const arr = [...processedMsgIds];
+                processedMsgIds = new Set(arr.slice(arr.length - 250));
+              }
+
+              continue; // Başarılı - sonraki kanala geç
+            }
           } catch (eDiff) {
             // getChannelDifference başarısız olursa getMessages fallback'e düş
             if (!eDiff.message?.includes('CHANNEL_PRIVATE')) {
@@ -1784,7 +1920,12 @@ async function pollMonitoredChannels() {
         }
 
         // FALLBACK: getMessages ile polling (PTS yoksa veya ChannelDiff başarısız olduysa)
-        const messages = await client.getMessages(channelInfo.input, { limit: 2 });
+        const messages = await withTimeout(
+          client.getMessages(channelInfo.input, { limit: 2 }),
+          15000,
+          null,
+          `getMessages [${channelInfo.title}]`
+        );
         if (!messages || !messages.length) continue;
 
         const lastSeenId = lastSeenMessageIds.get(cleanId) || 0;
@@ -1810,7 +1951,12 @@ async function pollMonitoredChannels() {
             message: msg,
             chatId: msg.peerId?.channelId ? `-100${msg.peerId.channelId}` : channelInfo.id
           };
-          await handleTelegramMessageEvent(fakeEvent);
+          await withTimeout(
+            handleTelegramMessageEvent(fakeEvent),
+            45000,
+            null,
+            `handleTelegramMessageEvent Fallback [${channelInfo.title}]`
+          );
         }
       } catch (ePoll) {
         // Polling hataları yutulur
@@ -1819,7 +1965,14 @@ async function pollMonitoredChannels() {
   } catch (eGlobalPoll) {
     console.warn('⚠️ pollMonitoredChannels genel döngü uyarısı:', eGlobalPoll.message);
   } finally {
-    isPollingInProgress = false;
+    if (cycleId === currentPollCycleId) {
+      isPollingInProgress = false;
+      lastPollCycleCompletedAt = Date.now();
+      lastPollDurationMs = Date.now() - pollingStartTime;
+      consecutiveDeadlocks = 0;
+    } else {
+      console.warn(`⚠️ [DEADLOCK RECOVERY] Eski polling döngüsü (#${cycleId}) tamamlandı; yeni döngü (#${currentPollCycleId}) aktif olduğu için kilit durumu korunuyor.`);
+    }
   }
 }
 
@@ -1981,10 +2134,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parsedUrl.pathname === '/health' || parsedUrl.pathname === '/') {
-    // P1-01 (R-INF-03): Minimal sağlık kontrolü. CHANNELS dizisi ve iç sistem detayları gizlenmiştir.
-    sendJson(200, {
-      status: 'ok',
+    const pollAgeMs = Date.now() - lastPollCycleCompletedAt;
+    const isPollingStuck = isPollingInProgress && ((Date.now() - pollingStartTime) > POLLING_DEADLOCK_TIMEOUT_MS);
+    const isStartingUp = isStarting || process.uptime() < 120;
+    const isPollCycleStale = botEnabled && isRunning && (pollAgeMs > 5 * 60 * 1000);
+    const isHealthy = (isRunning || isStartingUp) && !isPollingStuck && !isPollCycleStale;
+    const statusCode = isHealthy ? 200 : 503;
+
+    sendJson(statusCode, {
+      status: isHealthy ? 'ok' : 'unhealthy',
       bot_running: isRunning,
+      bot_enabled: botEnabled,
+      is_polling_stuck: isPollingStuck || isPollCycleStale,
+      poll_cycle_age_sec: Math.round(pollAgeMs / 1000),
+      last_poll_duration_ms: lastPollDurationMs,
+      consecutive_deadlocks: consecutiveDeadlocks,
+      total_deadlock_recoveries: totalDeadlockRecoveries,
       uptime: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
     });

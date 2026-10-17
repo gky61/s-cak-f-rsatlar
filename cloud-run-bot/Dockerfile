@@ -32,8 +32,8 @@ EXPOSE 8080
 # Run as non-root user
 USER node
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+# Health check (12 kanal MTProto senkronizasyonu için 120s başlangıç payı)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
   CMD node -e "require('http').get('http://localhost:8080/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
 # Start the bot with V8 garbage collection enabled

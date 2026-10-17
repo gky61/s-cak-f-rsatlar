@@ -106,10 +106,15 @@ graph TD
 * 🟢 **Adım 2.5: Google AdMob `app-ads.txt` Doğrulaması**  
   *URL:* `https://firsatkolik.app/app-ads.txt`  
   *İçerik:* `google.com, pub-6853997017739651, DIRECT, f08c47fec0942fa0` (Yayında doğrulanmıştır).
-* 🟢 **Adım 2.6: Otonom Telegram Botu & GCP Free Tier VM İzolasyonu**  
-  *VM:* `telegram-bot-server` (`34.135.181.112`, `e2-micro`, `us-central1-a`) — RUNNING.  
+* 🟢 **Adım 2.6: Otonom Telegram Botu, GCP Free Tier VM İzolasyonu & 7/24 Otonom Kurtarma (Self-Healing Watchdog)**  
+  *VM:* `telegram-bot-server` (`34.135.181.112`, `e2-micro`, `us-central1-a`) — RUNNING (Docker Healthy).  
   *Konteynerler & Portlar:* `dev-bot` (Port 8081, DEV Firestore), `prod-bot` (Port 8082, PROD Firestore).  
   *Ortam İzolasyonu:* `/home/murat/app/prod-bot/.env` dosyasında `PROJECT_ID=firsatkolik-prod-e6eae` ve `GOOGLE_APPLICATION_CREDENTIALS=/app/prod_firebase_key.json` tanımlıdır; `dev-bot`'un PROD'a yazması engellenmiştir. Test araçları (`create_test_data.js`, `/simulate`) PROD çalışma ortamında kilitlenmiştir.  
+  *7/24 Otonom Kurtarma & Deadlock Kırıcı (Lansman Kalkanı):*  
+    - `withTimeout` mikro koruyucuları: URL çözümleme (25s), Microlink çekimi (10s), genel kazıma (40s), MTProto `GetChannelDifference` (15s) ve mesaj işleme (45s) katmanlarında askıda kalan istekleri güvenle düşürür.  
+    - Deadlock Breaker: Polling döngüsü 90s üzerinde kilitli kalırsa mutex kilidi otonom kırılır, `systemErrors` koleksiyonuna yazılır; art arda 3 deadlock durumunda `process.exit(1)` tetiklenerek Docker'ın `--restart always` politikasıyla taze bellek ve bağlantıyla sıfırdan ayağa kaldırılır.  
+    - Dürüst Sağlık Kontrolü (Docker Healthcheck): `/health` endpoint'i döngü takıldığında HTTP 503 döndürerek Docker daemon'a anında görünürlük sağlar.  
+    - Web Admin Uzaktan Yönetim: "Konteyneri Yeniden Başlat" (`restartTrigger`), "Anında Tara" (`forcePollTrigger`), dinamik uyarı banner'ı ve bağımsız kanal döngüsü telemetrisi entegre edildi.  
   *SRE & VM Bellek Kalkanı:* 969 MB RAM'li e2-micro VM'de bellek sızıntısı ve Docker log şişmesini önlemek için her gece 04:00 TSİ'de `clean_vm.sh` Linux Crontab otonom bakım görevi çalışmaktadır; Web Admin üzerinden V8 GC tetiklenebilir (`CLEAN_VM_MIMARISI.md`).
 * 🟢 **Adım 2.7: Firestore Bileşik İndeksleri (`deals`, `comments`, `kuponlar`)**  
   1. `deals` İndeksi: `isExpired ASCENDING` + `createdAt DESCENDING` (İstemcinin anasayfa akışındaki `failed-precondition` hatası için eklendi).  

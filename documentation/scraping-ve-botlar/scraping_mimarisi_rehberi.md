@@ -463,6 +463,26 @@ Telegram botu ve istemci tarafı, mükerrer fırsat paylaşımlarını engellerk
 5. **İkili Sorgu & Geriye Dönük Uyumluluk (Dual Safety Net):**
    - Post-scrape aşamasında hem `finalCleanUrl` (kanonik ana model) hem de `rawCleanUrl` (varyant linki) Firestore üzerinde sorgulanır. Böylece sistem geçmişte varyant linkiyle kaydedilmiş eski fırsatları da eksiksiz yakalar.
 
+### 9.2. ⚡ 7/24 Otonom Sağlık, Deadlock Kırıcı (Watchdog) ve Uzaktan Orkestrasyon
+
+Botun e2-micro VM sunucusunda harici asılı kalmalar (WAF/DDoS duvarı, askıda soketler, yavaş HTTP istekleri) yüzünden döngü kilitlenmelerine maruz kalmaması için 5 katmanlı otonom koruma kalkanı uygulanmıştır:
+
+1. **Mutlak Asenkron Hard Timeout Kalkanı (`withTimeout`):**
+   - Tüm ağ, yönlendirme (`resolveUrlRedirects`), Microlink API, kazıma (`scrapeProductFromUrl`) ve Telegram MTProto (`GetChannelDifference`, `getMessages`, `handleTelegramMessageEvent`) çağrıları mutlak zaman aşımı sarmalayıcısı (`withTimeout`) ile korunur.
+   - Zaman aşımı dolduktan sonra arka planda geç tamamlanan/hata veren Promise'ler (`hasTimedOut = true`) güvenle yutularak `unhandledRejection` çökmesi engellenir.
+2. **Otonom Deadlock Kırıcı (Lock Breaker & Process Killer):**
+   - Polling döngüsü (`isPollingInProgress`) 90 saniyeden uzun süre kilitli kalırsa (`POLLING_DEADLOCK_TIMEOUT_MS = 90000`), kilit otonom olarak kırılır, Firestore `systemErrors` koleksiyonuna telemetri yazılır ve yeni döngünün başlamasına izin verilir.
+   - Eğer ardışık kilitlenme 3 kez (`MAX_CONSECUTIVE_DEADLOCKS = 3`) tekrarlanırsa, süreç temiz bir `process.exit(1)` ile sonlandırılır. Docker `restart: always` politikası sayesinde konteyner 3-5 saniye içinde sıfır bellek sızıntısıyla yeniden ayağa kalkar.
+3. **Çok Kademeli Döngü Nesil Sayacı (`currentPollCycleId`):**
+   - Her polling döngüsüne artan benzersiz bir nesil kimliği (`cycleId`) atanır. Kilit kırıldıktan sonra gecikmeli tamamlanan eski döngülerin, aktif yeni döngünün kilidini haksız yere serbest bırakması (mutex lock theft) engellenir.
+4. **Gerçek Zamanlı Uzaktan Orkestrasyon (`settings/telegramBot`):**
+   - Web Admin Paneli üzerinden sunucuya SSH yapmaya gerek kalmadan:
+     - `restartTrigger`: Konteyneri temiz yeniden başlatır (`process.exit(0)` -> Docker auto-restart).
+     - `forcePollTrigger`: Tüm 12 Telegram kanalında anlık arama/kazıma tetikler.
+     - `cleanVmTrigger`: Node.js V8 bellek ve önbellek çöp toplama (GC) optimizasyonunu çalıştırır.
+5. **Konteyner Başlangıç Sıçrama Kalkanı (`isInitialSettingsSnapshot`):**
+   - Konteyner yeniden başladığında Firestore'daki geçmiş tetikleyicileri (`restartTrigger`, `forcePollTrigger`) başlangıç eşiği olarak eşitler; böylece botun sonsuz yeniden başlama döngüsüne girmesi matematiksel olarak engellenir.
+
 ---
 
 ## 10. 🧠 Kategori Tespit Motoru ve Reklam Mevzuatı Uyumu

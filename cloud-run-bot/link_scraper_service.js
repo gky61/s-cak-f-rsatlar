@@ -29,6 +29,39 @@ async function safeExecCurl(args, options = {}) {
   }
 }
 
+/**
+ * Herhangi bir asenkron Promise'i verilen süre içinde güvenle sonlandıran mutlak zaman aşımı koruyucusu.
+ * Ağ soketleri veya stream okumaları asılı kalsa dahi fonksiyonun kilitlenmesini imkansız kılar.
+ */
+function withTimeout(promise, ms, fallbackValue = null, operationName = 'Async Operation') {
+  let timer;
+  let hasTimedOut = false;
+
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      hasTimedOut = true;
+      console.warn(`⏱️ [TIMEOUT] ${operationName} ${ms}ms içinde tamamlanamadı, güvenli fallback ile devam ediliyor.`);
+      resolve(fallbackValue);
+    }, ms);
+  });
+
+  const wrappedPromise = Promise.resolve(promise)
+    .then((result) => {
+      clearTimeout(timer);
+      return result;
+    })
+    .catch((error) => {
+      clearTimeout(timer);
+      if (hasTimedOut) {
+        console.warn(`⚠️ [TIMEOUT HANDLER] Geç gelen hata güvenle yutuldu (${operationName}):`, error?.message || error);
+        return fallbackValue;
+      }
+      throw error;
+    });
+
+  return Promise.race([wrappedPromise, timeoutPromise]);
+}
+
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
 
 function checkIsAmazonWarehouse(url) {
@@ -369,8 +402,13 @@ function cleanTeknosaProductUrl(rawUrl) {
   }
 }
 
-/** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür */
+/** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür (Mutlak 25sn Hard Timeout Korumalı) */
 async function resolveUrlRedirects(url) {
+  if (!url || typeof url !== 'string') return url;
+  return withTimeout(_resolveUrlRedirectsInternal(url), 25000, url, `resolveUrlRedirects(${url.substring(0, 40)})`);
+}
+
+async function _resolveUrlRedirectsInternal(url) {
   let targetUrl = extractAdjustFallback(url);
 
   // P1-04 (R-INF-11) SSRF Koruması: Yerel ağ, bulut metadata ve iç IP'ler tüm yönlendirme akışlarında derhal engellenir
@@ -642,15 +680,22 @@ async function resolveUrlRedirects(url) {
     if (response.status === 403 || isBotBlocked(resolvedUrl)) {
       console.warn(`[RESOLVE-REDIRECT] ⚠️ Direct fetch 403/WAF döndü (${targetUrl}). Microlink API fallback ile çözülüyor...`);
       try {
-        const microRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`, {
-          signal: AbortSignal.timeout(10000)
-        });
-        if (microRes.ok) {
-          const microData = await microRes.json();
-          if (microData.data && microData.data.url) {
-            console.log(`[RESOLVE-REDIRECT] ✅ Microlink ile başarıyla çözüldü: ${microData.data.url}`);
-            resolvedUrl = microData.data.url;
+        const microPromise = (async () => {
+          const microRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`, {
+            signal: AbortSignal.timeout(8000)
+          });
+          if (microRes.ok) {
+            const microData = await microRes.json();
+            if (microData.data && microData.data.url) {
+              return microData.data.url;
+            }
           }
+          return null;
+        })();
+        const microResolved = await withTimeout(microPromise, 10000, null, 'Microlink Direct Resolution');
+        if (microResolved) {
+          console.log(`[RESOLVE-REDIRECT] ✅ Microlink ile başarıyla çözüldü: ${microResolved}`);
+          resolvedUrl = microResolved;
         }
       } catch (microErr) {
         console.warn(`[RESOLVE-REDIRECT] ⚠️ Microlink redirect resolution hatası: ${microErr.message}`);
@@ -679,16 +724,22 @@ async function resolveUrlRedirects(url) {
   } catch (err) {
     console.warn(`[RESOLVE-REDIRECT] ⚠️ Yönlendirme çözülemedi (${err.message}), Microlink fallback deneniyor...`);
     try {
-      const microRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`, {
-        signal: AbortSignal.timeout(10000)
-      });
-      if (microRes.ok) {
-        const microData = await microRes.json();
-        if (microData.data && microData.data.url) {
-          const resolved = extractAdjustFallback(microData.data.url);
-          console.log(`[RESOLVE-REDIRECT] ✅ Microlink catch fallback ile çözüldü: ${resolved}`);
-          return resolved;
+      const microCatchPromise = (async () => {
+        const microRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}`, {
+          signal: AbortSignal.timeout(8000)
+        });
+        if (microRes.ok) {
+          const microData = await microRes.json();
+          if (microData.data && microData.data.url) {
+            return extractAdjustFallback(microData.data.url);
+          }
         }
+        return null;
+      })();
+      const microCatchResolved = await withTimeout(microCatchPromise, 10000, null, 'Microlink Catch Fallback');
+      if (microCatchResolved) {
+        console.log(`[RESOLVE-REDIRECT] ✅ Microlink catch fallback ile çözüldü: ${microCatchResolved}`);
+        return microCatchResolved;
       }
     } catch (_) {}
     return targetUrl;
@@ -720,30 +771,34 @@ function isBotBlocked(htmlText) {
 async function microlinkFetchHtml(targetUrl, originalUrl, fetchStartTime, prerender = false) {
   console.log(`[FETCH-HTML] 🔧 Microlink API ile çekiliyor: ${targetUrl} (Prerender: ${prerender})`);
   try {
-    let microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
-    if (prerender) {
-      microUrl += '&prerender=true';
-    }
-    const r = await fetch(microUrl, { signal: AbortSignal.timeout(18000) });
-    const duration = Date.now() - fetchStartTime;
-    console.log(`[FETCH-HTML] ⚡ Microlink cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${r.status}`);
-
-    if (r.ok) {
-      const data = await r.json();
-      const htmlText = data.data?.html || '';
-      console.log(`[FETCH-HTML] Microlink HTML boyutu: ${htmlText.length} karakter`);
-      if (htmlText.length > 1000) {
-        if (isBotBlocked(htmlText)) {
-          console.warn(`[FETCH-HTML] ❌ Microlink cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
-          checkForBotBlockers(htmlText, originalUrl);
-          return null;
-        }
-        checkForBotBlockers(htmlText, originalUrl);
-        return htmlText;
+    const microFetchPromise = (async () => {
+      let microUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&data.html.selector=html&data.html.type=html`;
+      if (prerender) {
+        microUrl += '&prerender=true';
       }
-    }
-    console.error(`[FETCH-HTML] ❌ Microlink Başarısız. Durum Kodu: ${r.status}`);
-    return null;
+      const r = await fetch(microUrl, { signal: AbortSignal.timeout(18000) });
+      const duration = Date.now() - fetchStartTime;
+      console.log(`[FETCH-HTML] ⚡ Microlink cevabı geldi! Süre: ${duration}ms, Durum Kodu: ${r.status}`);
+
+      if (r.ok) {
+        const data = await r.json();
+        const htmlText = data.data?.html || '';
+        console.log(`[FETCH-HTML] Microlink HTML boyutu: ${htmlText.length} karakter`);
+        if (htmlText.length > 1000) {
+          if (isBotBlocked(htmlText)) {
+            console.warn(`[FETCH-HTML] ❌ Microlink cevabı bot engelleyici/WAF sayfası içeriyor: ${originalUrl}`);
+            checkForBotBlockers(htmlText, originalUrl);
+            return null;
+          }
+          checkForBotBlockers(htmlText, originalUrl);
+          return htmlText;
+        }
+      }
+      console.error(`[FETCH-HTML] ❌ Microlink Başarısız. Durum Kodu: ${r.status}`);
+      return null;
+    })();
+
+    return await withTimeout(microFetchPromise, 22000, null, `microlinkFetchHtml(${targetUrl})`);
   } catch (e) {
     console.error(`[FETCH-HTML] ❌ Microlink Hatası: ${e.message}`);
     return null;
@@ -1411,8 +1466,19 @@ function checkForBotBlockers(htmlText, url) {
   }
 }
 
-/** Verilen URL için ürün bilgilerini çeker */
+/** Verilen URL için ürün bilgilerini çeker (Mutlak 40sn Hard Timeout Korumalı) */
 async function scrapeProductFromUrl(url) {
+  return withTimeout(_scrapeProductFromUrlInternal(url), 40000, {
+    url,
+    canonicalUrl: null,
+    title: null,
+    price: null,
+    imageUrl: null,
+    breadcrumbs: []
+  }, `scrapeProductFromUrl(${url ? url.substring(0, 40) : ''})`);
+}
+
+async function _scrapeProductFromUrlInternal(url) {
   const startTime = Date.now();
   console.log(`\n============================================================`);
   console.log(`[SCRAPE-SERVICE] 🚀 Ürün Scrape Başlatıldı: ${url}`);

@@ -3111,10 +3111,22 @@
                                 </label>
                             </div>
 
+                            <!-- Force Poll Button -->
+                            <button id="botDetailForcePollBtn" onclick="window.forcePollTelegramChannels && window.forcePollTelegramChannels()" class="flex items-center justify-center gap-1.5 rounded-xl h-10 px-3.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-sm shadow-blue-500/20 cursor-pointer" title="Tüm Telegram Kanallarını Anında Tara">
+                                <span class="material-symbols-outlined text-[18px]">radar</span>
+                                <span>Anında Tara</span>
+                            </button>
+
                             <!-- Clean VM Trigger Button -->
                             <button id="botDetailCleanVmBtn" onclick="window.triggerCleanVmFromBotView && window.triggerCleanVmFromBotView()" class="flex items-center justify-center gap-1.5 rounded-xl h-10 px-4 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm shadow-amber-500/20 cursor-pointer">
                                 <span class="material-symbols-outlined text-[18px]">cleaning_services</span>
                                 <span>RAM & Bellek Temizle</span>
+                            </button>
+
+                            <!-- Remote Restart Button -->
+                            <button id="botDetailRestartBtn" onclick="window.restartTelegramBotRemote && window.restartTelegramBotRemote()" class="flex items-center justify-center gap-1.5 rounded-xl h-10 px-3.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm shadow-rose-600/20 cursor-pointer" title="GCE VM Konteynerini Uzaktan Yeniden Başlat">
+                                <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                                <span>Konteyneri Yeniden Başlat</span>
                             </button>
 
                             <!-- Refresh Button -->
@@ -3122,6 +3134,20 @@
                                 <span class="material-symbols-outlined text-[18px]">sync</span>
                             </button>
                         </div>
+                    </div>
+
+                    <!-- Deadlock / Degraded Alert Banner (Dinamik) -->
+                    <div id="botDeadlockAlertBanner" class="hidden p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <span class="material-symbols-outlined text-2xl text-amber-500 shrink-0">warning</span>
+                            <div class="flex flex-col text-xs sm:text-sm">
+                                <span class="font-bold text-amber-900 dark:text-amber-200" id="botDeadlockAlertTitle">Telegram Polling Döngüsü Takıldı!</span>
+                                <span class="text-amber-700 dark:text-amber-400" id="botDeadlockAlertDesc">Son kanal döngüsü beklenenden uzun sürdü. Otonom kilit kırıcı devrede. Gerekirse yukarıdaki "Konteyneri Yeniden Başlat" butonunu kullanabilirsiniz.</span>
+                            </div>
+                        </div>
+                        <button onclick="window.restartTelegramBotRemote && window.restartTelegramBotRemote()" class="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer">
+                            Hemen Yeniden Başlat
+                        </button>
                     </div>
 
                     <!-- 6 Bento Telemetry Cards -->
@@ -3137,6 +3163,7 @@
                             <div class="flex flex-col">
                                 <span class="text-2xl font-black text-slate-900 dark:text-white" id="botDetailMsgCount">0</span>
                                 <span class="text-[11px] text-slate-400 dark:text-slate-500 truncate mt-0.5" id="botDetailLastMsgTime">Son: Henüz yok</span>
+                                <span class="text-[10px] text-primary dark:text-blue-400 truncate mt-0.5" id="botDetailLastPollTime">Tarama: Aktif</span>
                             </div>
                         </div>
 

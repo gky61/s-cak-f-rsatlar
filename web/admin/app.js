@@ -14592,7 +14592,11 @@ window.loadTelegramBotDetailedView = loadTelegramBotDetailedView;
 
 function renderBotDetailTelemetry(data) {
     const lastHb = data.lastHeartbeatAt?.toDate ? data.lastHeartbeatAt.toDate() : (data.lastHeartbeatAt ? new Date(data.lastHeartbeatAt._seconds * 1000) : null);
-    const isOnline = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000) && (data.status === 'online');
+    const isAlive = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000);
+    const isStuck = data.status === 'stuck' || data.isPollingStuck === true;
+    const isPaused = data.status === 'paused' || data.botEnabled === false;
+    const isDegraded = data.status === 'degraded';
+    const isOnline = isAlive && !isStuck && !isPaused && !isDegraded && (data.status === 'online');
     const environment = data.environment || 'DEV';
     const isProd = environment.toUpperCase() === 'PROD';
 
@@ -14609,15 +14613,38 @@ function renderBotDetailTelemetry(data) {
         }
     }
 
-    // Status badge
+    // Status badge & Deadlock Alert Banner
     const statusBadge = document.getElementById('botDetailStatusBadge');
+    const alertBanner = document.getElementById('botDeadlockAlertBanner');
+    const alertTitle = document.getElementById('botDeadlockAlertTitle');
+    const alertDesc = document.getElementById('botDeadlockAlertDesc');
+
     if (statusBadge) {
-        if (isOnline) {
+        if (isStuck) {
+            statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-300 dark:border-amber-800';
+            statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500 animate-bounce"></span>Döngü Takıldı';
+        } else if (isPaused) {
+            statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border border-slate-300 dark:border-slate-700';
+            statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span>Durduruldu';
+        } else if (isDegraded) {
+            statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-800';
+            statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-500"></span>Bağlantı Sorunu';
+        } else if (isOnline) {
             statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800';
             statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>Çevrimiçi';
         } else {
             statusBadge.className = 'inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400 border border-red-300 dark:border-red-800';
             statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span>Çevrimdışı';
+        }
+    }
+
+    if (alertBanner) {
+        if (isStuck) {
+            alertBanner.classList.remove('hidden');
+            if (alertTitle) alertTitle.textContent = '⚠️ Telegram Polling Döngüsü Takıldı!';
+            if (alertDesc) alertDesc.textContent = `Polling döngüsü beklenenden uzun sürdü. Otonom kilit kırıcı devrede (Kurtarma: ${data.totalDeadlockRecoveries || 0} kez). Gerekirse yukarıdaki "Konteyneri Yeniden Başlat" butonunu kullanabilirsiniz.`;
+        } else {
+            alertBanner.classList.add('hidden');
         }
     }
 
@@ -14657,9 +14684,20 @@ function renderBotDetailTelemetry(data) {
         setEl('botDetailLastMsgTime', 'Son: Henüz yok');
     }
 
-    // Error badge
-    if (errCount === 0) {
+    // Last polling cycle completed time (bağımsız kanal döngüsü telemetrisi)
+    const lastPoll = data.lastPollCompletedAt?.toDate ? data.lastPollCompletedAt.toDate() : (data.lastPollCompletedAt ? new Date(data.lastPollCompletedAt._seconds * 1000) : null);
+    if (lastPoll) {
+        const durationSec = data.lastPollDurationMs ? (data.lastPollDurationMs / 1000).toFixed(1) : '1.0';
+        setEl('botDetailLastPollTime', `Tarama: ${formatRelativeTime(lastPoll)} (${durationSec}s)`);
+    } else {
+        setEl('botDetailLastPollTime', 'Tarama: Döngü Aktif');
+    }
+
+    // Error & Recovery badge
+    if (errCount === 0 && (!data.totalDeadlockRecoveries || data.totalDeadlockRecoveries === 0)) {
         setHtml('botDetailErrorBadge', '<span class="text-emerald-600 dark:text-emerald-400">0 Hata • Stabil</span>');
+    } else if (data.totalDeadlockRecoveries && data.totalDeadlockRecoveries > 0) {
+        setHtml('botDetailErrorBadge', `<span class="text-amber-500 font-semibold">${errCount} Hata • ${data.totalDeadlockRecoveries} Kurtarma</span>`);
     } else {
         setHtml('botDetailErrorBadge', `<span class="text-rose-500">${errCount} Hata Oluştu</span>`);
     }
@@ -14826,8 +14864,13 @@ function updateSidebarBotPulse(data) {
     const pulse = document.getElementById('sidebarBotPulse');
     if (!pulse) return;
     const lastHb = data.lastHeartbeatAt?.toDate ? data.lastHeartbeatAt.toDate() : (data.lastHeartbeatAt ? new Date(data.lastHeartbeatAt._seconds * 1000) : null);
-    const isOnline = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000) && (data.status === 'online');
-    if (isOnline) {
+    const isAlive = lastHb && (Math.abs(Date.now() - lastHb.getTime()) < 15 * 60 * 1000);
+    const isStuck = data.status === 'stuck' || data.isPollingStuck === true;
+
+    if (isStuck) {
+        pulse.className = 'size-2 rounded-full bg-amber-500 animate-bounce';
+        pulse.title = 'Bot Polling Döngüsü Takıldı';
+    } else if (isAlive && data.status === 'online') {
         pulse.className = 'size-2 rounded-full bg-emerald-500 animate-pulse';
         pulse.title = 'Bot Çevrimiçi';
     } else {
@@ -15056,6 +15099,72 @@ window.triggerCleanVmFromBotView = async function() {
             if (btnCard) {
                 btnCard.disabled = false;
                 if (btnCard.dataset.originalHtml) btnCard.innerHTML = btnCard.dataset.originalHtml;
+            }
+        }, 3000);
+    }
+};
+
+// ---------- Remote Restart Bot (Konteyner Yeniden Başlatma) ----------
+
+window.restartTelegramBotRemote = async function() {
+    if (!confirm('Telegram botunu uzaktan yeniden başlatmak istediğinize emin misiniz?\n\nKonteyner güvenli bir şekilde kapatılıp Docker tarafından 3-5 saniye içinde temiz bir şekilde ayağa kaldırılacaktır.')) return;
+
+    const btn = document.getElementById('botDetailRestartBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Yeniden Başlatılıyor...</span>`;
+    }
+
+    try {
+        await db.collection('settings').doc('telegramBot').set({
+            restartTrigger: Date.now()
+        }, { merge: true });
+
+        if (typeof showSuccess === 'function') {
+            showSuccess('Yeniden başlatma sinyali iletildi! Konteyner 3-5 saniye içinde temiz bir şekilde ayağa kalkacak.');
+        }
+    } catch (e) {
+        if (typeof showError === 'function') {
+            showError('Yeniden başlatma tetiklenemedi: ' + e.message);
+        }
+    } finally {
+        setTimeout(() => {
+            if (btn) {
+                btn.disabled = false;
+                if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+            }
+        }, 5000);
+    }
+};
+
+// ---------- Force Poll Channels (Anında Kanal Taraması) ----------
+
+window.forcePollTelegramChannels = async function() {
+    const btn = document.getElementById('botDetailForcePollBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Taranıyor...</span>`;
+    }
+
+    try {
+        await db.collection('settings').doc('telegramBot').set({
+            forcePollTrigger: Date.now()
+        }, { merge: true });
+
+        if (typeof showSuccess === 'function') {
+            showSuccess('Anlık kanal taraması tetiklendi! Kanallar taranıyor.');
+        }
+    } catch (e) {
+        if (typeof showError === 'function') {
+            showError('Kanal taraması tetiklenemedi: ' + e.message);
+        }
+    } finally {
+        setTimeout(() => {
+            if (btn) {
+                btn.disabled = false;
+                if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
             }
         }, 3000);
     }
