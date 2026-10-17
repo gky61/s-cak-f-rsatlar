@@ -38,7 +38,7 @@ if (!PROJECT_ID) {
         }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 }
 if (!PROJECT_ID) {
   console.error('❌ KRİTİK HATA (P1-03 / R-INF-10): PROJECT_ID ortam değişkeni veya servis hesabı anahtarı bulunamadı! Fail-closed güvenlik kalkanı devrede, bot başlatılamaz.');
@@ -303,10 +303,8 @@ async function sendHeartbeat() {
       currentStatus = 'paused';
     } else if (isPollingStuck || isPollCycleStale) {
       currentStatus = 'stuck';
-    } else if (!isHealthy) {
-      currentStatus = 'degraded';
     } else {
-      currentStatus = 'online';
+      currentStatus = isHealthy ? 'online' : 'degraded';
     }
 
     await statusRef.set({
@@ -458,7 +456,7 @@ function initSettingsListener() {
           setTimeout(async () => {
             try {
               await stopBot();
-            } catch (_) {}
+            } catch (_) { }
             process.exit(0);
           }, 1000);
         }
@@ -1801,7 +1799,7 @@ async function pollMonitoredChannels() {
       consecutiveDeadlocks++;
       totalDeadlockRecoveries++;
       console.error(`🚨 [DEADLOCK DETECTED] Polling döngüsü ${Math.round(elapsed / 1000)}s süredir takılı kaldı! Kilidi kırıyoruz ve kurtarma yapıyoruz... (Ardışık: ${consecutiveDeadlocks}/${MAX_CONSECUTIVE_DEADLOCKS}, Toplam: ${totalDeadlockRecoveries})`);
-      
+
       // Firestore systemErrors koleksiyonuna bildirim yaz
       try {
         db.collection('systemErrors').add({
@@ -1811,8 +1809,8 @@ async function pollMonitoredChannels() {
           consecutiveDeadlocks: consecutiveDeadlocks,
           totalDeadlockRecoveries: totalDeadlockRecoveries,
           timestamp: admin.firestore.FieldValue.serverTimestamp()
-        }).catch(() => {});
-      } catch (_) {}
+        }).catch(() => { });
+      } catch (_) { }
 
       // Eğer ardışık 3 kez deadlock oluyorsa, process'i yeniden başlat (Docker restart policy konteyneri temiz ayağa kaldırır)
       if (consecutiveDeadlocks >= MAX_CONSECUTIVE_DEADLOCKS) {

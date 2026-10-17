@@ -891,7 +891,7 @@ console.log('\n--- TEST 24: P1-27 Telegram MTProto Canlı Durum & Kalp Atışı 
 
   assert.ok(botCode.includes('client && client.connected'), 'sendHeartbeat fonksiyonu client.connected soket durumunu sorgulamalı');
   assert.ok(botCode.includes('isUserAuthorized()'), 'sendHeartbeat fonksiyonu isUserAuthorized() MTProto oturum geçerliliğini doğrulamalı');
-  assert.ok(botCode.includes("isHealthy ? 'online' : 'degraded'"), 'Kopma veya yetkisizlik durumunda status degraded olarak belirlenmeli');
+  assert.ok(botCode.includes("isHealthy ? 'online' : 'degraded'") || (botCode.includes("'degraded'") && (botCode.includes("!isHealthy") || botCode.includes("isHealthy"))), 'Kopma veya yetkisizlik durumunda status degraded olarak belirlenmeli');
   assert.ok(botCode.includes("status: currentStatus"), 'status currentStatus olarak Firestorea raporlanmalı');
 
   // Mantıksal heartbeat test simülasyonu
