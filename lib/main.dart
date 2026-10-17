@@ -585,6 +585,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _themeService.addListener(_onThemeChanged);
+    // Cold start rozet senkronizasyonu: Uygulama açıldığında işletim sistemi rozetini Firestore ile anında mutabık kıl
+    AppBadgeService.instance.syncBadgeWithFirestore(forceSync: true);
   }
 
   @override
@@ -593,8 +595,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // Uygulama ön plana geldiğinde admin ise admin bildirim topic'ine yeniden abone ol
       NotificationService().ensureAdminTopicSubscriptionIfAdmin();
-      // Uygulama ön plana geldiğinde uygulama ikonu rozetini senkronize et
-      AppBadgeService.instance.syncBadgeWithFirestore();
+      // Uygulama ön plana geldiğinde uygulama ikonu rozetini zorunlu senkronize et (ghost badge engelleyici)
+      AppBadgeService.instance.syncBadgeWithFirestore(forceSync: true);
     }
   }
 
@@ -853,7 +855,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       
       // Canlı rozet senkronizasyonunu başlat ve mevcut durumu çek
       AppBadgeService.instance.startRealtimeBadgeSync(userId);
-      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId, forceSync: true);
       
       // Admin ise, aboneliği doğrula
       if (isAdmin) {
@@ -879,7 +881,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _blockedUserListener?.cancel();
         _blockedUserListener = null;
         AppBadgeService.instance.stopRealtimeBadgeSync();
-        AppBadgeService.instance.clearBadge();
+        AppBadgeService.instance.clearBadge(force: true);
       }
       _lastUserId = currentUserId;
       AnalyticsService.instance.setUser(currentUserId);
@@ -946,7 +948,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _blockedUserListener = null;
           AnalyticsService.instance.setUser(null);
           AppBadgeService.instance.stopRealtimeBadgeSync();
-          AppBadgeService.instance.clearBadge();
+          AppBadgeService.instance.clearBadge(force: true);
         }
         _lastUserId = null;
         _log('No user logged in (Guest Mode Active)');

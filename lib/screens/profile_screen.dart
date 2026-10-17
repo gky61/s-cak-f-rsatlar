@@ -326,10 +326,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
-            final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
+            final username = AuthService.resolveDefaultUsername(currentUser);
+            final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
+                ? currentUser.displayName!.trim()
+                : username;
             final newUser = AppUser(
               uid: currentUser.uid,
               username: username,
+              nickname: effNickname,
               profileImageUrl: currentUser.photoURL ?? '',
               points: 0,
               dealCount: 0,
@@ -338,6 +342,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               searchKeywords: DealSearchEngine.generateUserSearchKeywords(
                 username: username,
                 displayName: currentUser.displayName,
+                nickname: effNickname,
               ),
             );
             try {
@@ -383,10 +388,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (_isOwnProfile) {
             final currentUser = _authService.currentUser;
             if (currentUser != null) {
-              final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
+              final username = AuthService.resolveDefaultUsername(currentUser);
+              final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
+                  ? currentUser.displayName!.trim()
+                  : username;
               final fallbackUser = AppUser(
                 uid: currentUser.uid,
                 username: username,
+                nickname: effNickname,
                 profileImageUrl: currentUser.photoURL ?? '',
                 points: 0,
                 dealCount: 0,
@@ -395,6 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 searchKeywords: DealSearchEngine.generateUserSearchKeywords(
                   username: username,
                   displayName: currentUser.displayName,
+                  nickname: effNickname,
                 ),
               );
               if (mounted) {
@@ -413,10 +423,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (_isOwnProfile) {
           final currentUser = _authService.currentUser;
           if (currentUser != null) {
-            final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
+            final username = AuthService.resolveDefaultUsername(currentUser);
+            final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
+                ? currentUser.displayName!.trim()
+                : username;
             final newUser = AppUser(
               uid: currentUser.uid,
               username: username,
+              nickname: effNickname,
               profileImageUrl: currentUser.photoURL ?? '',
               points: 0,
               dealCount: 0,
@@ -425,6 +439,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               searchKeywords: DealSearchEngine.generateUserSearchKeywords(
                 username: username,
                 displayName: currentUser.displayName,
+                nickname: effNickname,
               ),
             );
             try {
@@ -926,7 +941,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _showEditUsernameDialog(BuildContext context) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final textController = TextEditingController(text: _user?.username ?? '');
+    final currentUsername = _user?.username ?? '';
+    final initialText = AuthService.needsNameSetup(currentUsername, email: _authService.currentUser?.email)
+        ? ''
+        : currentUsername;
+    final textController = TextEditingController(text: initialText);
 
     final result = await showDialog<String>(
       context: context,
@@ -1031,8 +1050,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _log('⚠️ Firebase Auth displayName güncelleme hatası: $authError');
       }
 
-      // 2. Firestore'daki username, nickname ve searchKeywords'ü güncelle
-      // Not: nickname alanı da güncellenmeli, aksi halde eski değer görünür
+      // 2. Firestore'daki username, displayName, nickname ve searchKeywords'ü senkronize güncelle
       final searchKeywords = DealSearchEngine.generateUserSearchKeywords(
         username: newUsername,
         displayName: newUsername,
@@ -1043,11 +1061,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .doc(user.uid)
           .set({
         'username': newUsername,
-        'nickname': newUsername, // nickname'i de aynı değerle güncelle
+        'displayName': newUsername,
+        'nickname': newUsername,
         'searchKeywords': searchKeywords,
       }, SetOptions(merge: true));
 
-      _log('✅ Firestore username, nickname ve searchKeywords güncellendi: $newUsername');
+      // 3. Apple Sign-In yerel önbelleğini de yeni isimle kalıcı güncelle (reinstall / re-auth dirilme koruması)
+      unawaited(_authService.updateAppleSavedDisplayName(user.uid, newUsername));
+
+      _log('✅ Firestore username, displayName, nickname ve searchKeywords güncellendi: $newUsername');
 
       // 3. Kullanıcı verilerini yeniden yükle
       await _loadUserData();
@@ -1434,6 +1456,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ],
           ),
+
+          if (_isOwnProfile && AuthService.needsNameSetup(_user?.username, email: _authService.currentUser?.email)) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () => _showEditUsernameDialog(context),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: isDark ? 0.20 : 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.35),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_note_rounded, size: 14, color: primaryColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      'İsminizi Belirleyin',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 10),
 

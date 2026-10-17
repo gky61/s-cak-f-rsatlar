@@ -52,22 +52,23 @@ class _SupportHubScreenState extends State<SupportHubScreen> {
 
   /// Kullanıcının arayüzde görünecek en temiz ismi (Örn: Elif Güven)
   String? get _userDisplayName {
+    final email = _authService.currentUser?.email;
     final appDisplayName = _currentUser?.displayName.trim();
     if (appDisplayName != null &&
         appDisplayName.isNotEmpty &&
-        appDisplayName != 'Kullanıcı') {
+        !AuthService.needsNameSetup(appDisplayName, email: email)) {
       return appDisplayName;
     }
     final appUsername = _currentUser?.username.trim();
     if (appUsername != null &&
         appUsername.isNotEmpty &&
-        appUsername != 'Kullanıcı') {
+        !AuthService.needsNameSetup(appUsername, email: email)) {
       return appUsername;
     }
     final fbDisplayName = _authService.currentUser?.displayName?.trim();
     if (fbDisplayName != null &&
         fbDisplayName.isNotEmpty &&
-        fbDisplayName != 'Kullanıcı') {
+        !AuthService.needsNameSetup(fbDisplayName, email: email)) {
       return fbDisplayName;
     }
     return null;

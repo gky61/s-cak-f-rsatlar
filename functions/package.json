@@ -8,7 +8,7 @@
     "node": "22"
   },
   "scripts": {
-    "test": "node tests/test_rules_and_security_contracts.js && node tests/test_faz1_disaster_prevention_contracts.js && node tests/test_faz2_disaster_prevention_contracts.js && node tests/test_lifecycle_cleanup_contracts.js && node tests/test_hardened_security_and_fanout_contracts.js && node tests/test_coupon_deletion_contract.js && node tests/test_smart_incremental_catalog_scraper.js",
+    "test": "node tests/test_rules_and_security_contracts.js && node tests/test_faz1_disaster_prevention_contracts.js && node tests/test_faz2_disaster_prevention_contracts.js && node tests/test_lifecycle_cleanup_contracts.js && node tests/test_hardened_security_and_fanout_contracts.js && node tests/test_coupon_deletion_contract.js && node tests/test_smart_incremental_catalog_scraper.js && node tests/test_coupon_curation_contract.js",
     "deploy": "firebase deploy --only functions",
     "serve": "firebase emulators:start --only functions"
   },

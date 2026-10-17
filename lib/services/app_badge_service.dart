@@ -46,6 +46,7 @@ class AppBadgeService {
   }
 
   int _currentBadgeCount = 0;
+  bool _isNativeBadgeZero = false;
 
   DateTime? _lastSyncTime;
   String? _lastSyncUserId;
@@ -53,21 +54,29 @@ class AppBadgeService {
 
   int get currentBadgeCount => _currentBadgeCount;
 
-  /// Rozet sayısını doğrudan belirle (Değer aynıysa gereksiz native çağrıyı engeller)
+  /// Native taraftaki (iOS / Android) gerçek rozet sayısını sorgular
+  Future<int> getNativeBadgeCount() async {
+    if (kIsWeb) return 0;
+    try {
+      final res = await _channel.invokeMethod<int>('getBadge');
+      return res ?? 0;
+    } catch (_) {
+      return _currentBadgeCount;
+    }
+  }
+
+  /// Rozet sayısını doğrudan belirle (Hedef 0 ise kesin clearBadge çağırır)
   Future<void> setBadge(int count) async {
     if (kIsWeb) return;
     final targetCount = count < 0 ? 0 : count;
 
     if (targetCount == 0) {
-      await clearBadge();
+      await clearBadge(force: true);
       return;
     }
 
-    if (_currentBadgeCount == targetCount) {
-      return; // Değer değişmediyse native çağrıyı atla
-    }
-
     _currentBadgeCount = targetCount;
+    _isNativeBadgeZero = false;
 
     try {
       await _channel.invokeMethod('setBadge', {'count': targetCount});
@@ -77,16 +86,17 @@ class AppBadgeService {
     }
   }
 
-  /// Rozeti tamamen sıfırla (Zaten sıfırsa mükerrer native çağrıları ve logları engeller)
-  Future<void> clearBadge({bool force = false}) async {
+  /// Rozeti tamamen sıfırla (İşletim sistemi SpringBoard ve yerel bildirimleri koşulsuz temizler)
+  Future<void> clearBadge({bool force = true}) async {
     if (kIsWeb) return;
-    if (!force && _currentBadgeCount == 0) {
-      return; // Zaten temiz ise gereksiz native IPC çağrısı yapma
+    if (!force && _currentBadgeCount == 0 && _isNativeBadgeZero) {
+      return; // Zaten doğrulanmış şekilde sıfırsa gereksiz IPC çağrısı yapma
     }
     _currentBadgeCount = 0;
 
     try {
       await _channel.invokeMethod('clearBadge');
+      _isNativeBadgeZero = true;
     } catch (e) {
       _log('⚠️ Native clearBadge hatası: $e');
     }
@@ -108,7 +118,7 @@ class AppBadgeService {
     if (kIsWeb) return 0;
     final uid = targetUserId ?? _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
-      await clearBadge();
+      await clearBadge(force: true);
       return 0;
     }
 
@@ -237,7 +247,7 @@ class AppBadgeService {
       _log('📊 Firestore senkronizasyonu: $unreadNotifs bildirim + $unreadMessages mesaj + $unreadAdminMessages admin + $unreadAnnouncements duyuru = Toplam $totalUnread');
 
       if (totalUnread <= 0) {
-        await clearBadge();
+        await clearBadge(force: true);
       } else {
         await setBadge(totalUnread);
       }
@@ -263,6 +273,7 @@ class AppBadgeService {
   void stopRealtimeBadgeSync() {
     _lastSyncTime = null;
     _lastSyncUserId = null;
+    _isNativeBadgeZero = false;
     _log('🛑 Canlı rozet dinleyicileri durduruldu');
   }
 }

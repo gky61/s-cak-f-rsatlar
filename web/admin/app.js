@@ -10789,8 +10789,9 @@ function renderNotificationLogsTable() {
         let matchesStatus = true;
         if (currentNotifFilter !== 'all') {
             if (currentNotifFilter === 'sent') matchesStatus = (status === 'sent' || status === 'success');
+            else if (currentNotifFilter === 'delivered_via_topic') matchesStatus = (status === 'delivered_via_topic' || status === 'delivered_via_batch_topic');
             else if (currentNotifFilter === 'skipped_quiet_hours') matchesStatus = status.startsWith('skipped_quiet_hours');
-            else if (currentNotifFilter === 'skipped_category_limit') matchesStatus = status.startsWith('skipped_category_limit');
+            else if (currentNotifFilter === 'skipped_category_limit') matchesStatus = (status.startsWith('skipped_') && (status.includes('limit') || status.includes('cooldown') || status.includes('burst')));
             else if (currentNotifFilter === 'disabled_by_user') matchesStatus = (status === 'disabled_by_user_master_switch' || status.startsWith('disabled_by_user_group'));
             else if (currentNotifFilter === 'disabled_by_system') matchesStatus = status === 'disabled_by_system_master_switch';
             else if (currentNotifFilter === 'no_active_devices') matchesStatus = (status === 'no_active_devices' || status === 'skipped_no_active_devices');
@@ -10839,12 +10840,22 @@ function renderNotificationLogsTable() {
         const pushStatus = data.pushStatus || 'pending';
         if (pushStatus === 'success' || pushStatus === 'sent') {
             statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Gönderildi</span>`;
+        } else if (pushStatus === 'delivered_via_topic' || pushStatus === 'delivered_via_batch_topic') {
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-950/30 dark:text-sky-400" title="FCM Topic üzerinden toplu dağıtıldı"><span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>Topic Yayını</span>`;
         } else if (pushStatus === 'pending') {
             statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>Bekliyor</span>`;
         } else if (pushStatus.startsWith('skipped_quiet_hours')) {
             statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400" title="Kullanıcının sessiz saat ayarı aktif"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Sessiz Saat</span>`;
-        } else if (pushStatus.startsWith('skipped_category_limit')) {
-            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-400" title="Kullanıcının saatlik veya günlük kategori limiti aşıldı"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
+        } else if (pushStatus.startsWith('skipped_') && (pushStatus.includes('limit') || pushStatus.includes('cooldown') || pushStatus.includes('burst'))) {
+            const limitTitle = pushStatus === 'skipped_keyword_limit' ? 'Kelime bildirim limiti aşıldı' :
+                               pushStatus === 'skipped_author_limit' ? 'Yazar bildirim limiti aşıldı' :
+                               pushStatus === 'skipped_comment_rate_limit' ? 'Yorum bildirim kotası aşıldı' :
+                               pushStatus === 'skipped_marketing_limit' ? 'Günlük pazarlama limiti aşıldı' :
+                               pushStatus === 'skipped_deal_burst_cooldown' ? 'Burst aralığı (30s) koruması' :
+                               pushStatus === 'skipped_deal_hourly_total_limit' ? 'Saatlik fırsat tavanı aşıldı' :
+                               pushStatus === 'skipped_admin_message_rate_limit' ? 'Admin mesaj kotası aşıldı' :
+                               'Hız sınırı veya anti-spam kotası aşıldı';
+            statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-400" title="${limitTitle}"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
         } else if (pushStatus === 'disabled_by_user_master_switch' || pushStatus.startsWith('disabled_by_user_group')) {
             statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400" title="Kullanıcı bu bildirim grubunu kapatmış"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Tercih Kapalı</span>`;
         } else if (pushStatus === 'disabled_by_system_master_switch') {
@@ -10945,10 +10956,22 @@ function openNotificationDetail(id) {
     const pushStatus = item.pushStatus || 'pending';
     if (pushStatus === 'success' || pushStatus === 'sent') {
         statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Gönderildi</span>`;
+    } else if (pushStatus === 'delivered_via_topic' || pushStatus === 'delivered_via_batch_topic') {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-400"><span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>Topic Yayını</span>`;
+    } else if (pushStatus === 'pending') {
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>Bekliyor</span>`;
     } else if (pushStatus.startsWith('skipped_quiet_hours')) {
         statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Sessiz Saat</span>`;
-    } else if (pushStatus.startsWith('skipped_category_limit')) {
-        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-400"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
+    } else if (pushStatus.startsWith('skipped_') && (pushStatus.includes('limit') || pushStatus.includes('cooldown') || pushStatus.includes('burst'))) {
+        const limitTitle = pushStatus === 'skipped_keyword_limit' ? 'Kelime bildirim limiti aşıldı' :
+                           pushStatus === 'skipped_author_limit' ? 'Yazar bildirim limiti aşıldı' :
+                           pushStatus === 'skipped_comment_rate_limit' ? 'Yorum bildirim kotası aşıldı' :
+                           pushStatus === 'skipped_marketing_limit' ? 'Günlük pazarlama limiti aşıldı' :
+                           pushStatus === 'skipped_deal_burst_cooldown' ? 'Burst aralığı (30s) koruması' :
+                           pushStatus === 'skipped_deal_hourly_total_limit' ? 'Saatlik fırsat tavanı aşıldı' :
+                           pushStatus === 'skipped_admin_message_rate_limit' ? 'Admin mesaj kotası aşıldı' :
+                           'Hız sınırı veya anti-spam kotası aşıldı';
+        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-400" title="${limitTitle}"><span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>Limit Aşıldı</span>`;
     } else if (pushStatus === 'disabled_by_user_master_switch' || pushStatus.startsWith('disabled_by_user_group')) {
         statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800/60 dark:text-gray-400"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Tercih Kapalı</span>`;
     } else if (pushStatus === 'disabled_by_system_master_switch') {
@@ -11203,7 +11226,7 @@ async function loadNotificationStats() {
                 const dynamicCounts = {};
                 recentNotifsSnap.forEach(doc => {
                     const data = doc.data();
-                    if (data.pushStatus === 'sent' || data.pushStatus === 'success') {
+                    if (data.pushStatus === 'sent' || data.pushStatus === 'success' || data.pushStatus === 'delivered_via_topic' || data.pushStatus === 'delivered_via_batch_topic') {
                         const dt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
                         const y = dt.getFullYear();
                         const m = String(dt.getMonth() + 1).padStart(2, '0');
@@ -11222,7 +11245,7 @@ async function loadNotificationStats() {
         } catch (cgErr) {
             console.warn('⚠️ collectionGroup live count fallback note:', cgErr.message);
             cachedNotificationsList.forEach(data => {
-                if (data.pushStatus === 'sent' || data.pushStatus === 'success') {
+                if (data.pushStatus === 'sent' || data.pushStatus === 'success' || data.pushStatus === 'delivered_via_topic' || data.pushStatus === 'delivered_via_batch_topic') {
                     const dt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
                     const y = dt.getFullYear();
                     const m = String(dt.getMonth() + 1).padStart(2, '0');
@@ -13066,7 +13089,7 @@ function loadCoupons() {
     try {
         couponsUnsubscribe = db.collection('kuponlar')
             .orderBy('olusturulmaTarihi', 'desc')
-            .limit(150)
+            .limit(1000)
             .onSnapshot((snapshot) => {
                 coupons = snapshot.docs.map(doc => {
                     const data = doc.data();
@@ -13878,7 +13901,7 @@ function loadCatalogs() {
     try {
         catalogsUnsubscribe = db.collection('kataloglar')
             .orderBy('baslangicTarihi', 'desc')
-            .limit(150)
+            .limit(500)
             .onSnapshot((snapshot) => {
                 catalogs = snapshot.docs.map(doc => {
                     const data = doc.data();

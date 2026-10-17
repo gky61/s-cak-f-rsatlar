@@ -210,6 +210,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _loadUnreadMessageCounts();
         if (user != null) {
           _notificationService.saveFCMToken(userId: user.uid);
+          _notificationService.resubscribeToTopics().catchError((_) {});
         }
         setState(() {});
       }
@@ -486,6 +487,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             setState(() {
               _unreadNotificationCount = unreadCount;
             });
+          }
+          if (unreadCount == 0 && _unreadMessageCount == 0 && _unreadAdminMessageCount == 0) {
+            AppBadgeService.instance.clearBadge(force: true);
           }
         },
         onError: (err) => _log('⚠️ HomeScreen unread notification count stream error: $err'),
@@ -1764,7 +1768,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                         builder: (_) => const AdminNotificationsScreen(),
                                       ),
                                     ).then((_) {
-                                      AppBadgeService.instance.syncBadgeWithFirestore();
+                                      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: _authService.currentUser?.uid, forceSync: true);
                                     });
                                   }
                                   return;
@@ -1775,7 +1779,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     builder: (_) => const AdminNotificationsScreen(),
                                   ),
                                 ).then((_) {
-                                  AppBadgeService.instance.syncBadgeWithFirestore();
+                                  AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: _authService.currentUser?.uid, forceSync: true);
                                 });
                               },
                               isDark: isDark,

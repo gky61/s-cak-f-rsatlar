@@ -124,6 +124,7 @@ service cloud.firestore {
       // Giriş yapmış ve engellenmemiş kullanıcılar fırsat ekleyebilir (deal ban kontrolü ve alan doğrulama)
       // P1-12 (R-AUTH-06): createdAt için 5 dakikalık tolerans penceresi
       // P1-15 (R-AUTH-13): Bot/sistem kimliği gaspını (postedBy != botkolik, isUserSubmitted) engelleyen allowlist
+      // FS-DEAL-02, FS-DEAL-03, FS-DEAL-16: Katı şema, boyut sınırları, güvenli URL protokolü ve XSS kalkanı
       allow create: if canWrite() && 
                     !exists(/databases/$(database)/documents/dealBannedUsers/$(request.auth.uid)) &&
                     (isAdmin() || (
@@ -139,10 +140,46 @@ service cloud.firestore {
                       (!('isEditorPick' in request.resource.data) || request.resource.data.isEditorPick == false) &&
                       (!('isApproved' in request.resource.data) || request.resource.data.isApproved == false || 
                        (exists(/databases/$(database)/documents/settings/app) && get(/databases/$(database)/documents/settings/app).data.dealApprovalRequired == false)) &&
+                      (!('status' in request.resource.data) || request.resource.data.status in ['pending', 'active']) &&
                       (!('createdAt' in request.resource.data) || (
                         request.resource.data.createdAt is timestamp &&
                         request.resource.data.createdAt >= request.time - duration.value(5, 'm') &&
                         request.resource.data.createdAt <= request.time + duration.value(5, 'm')
+                      )) &&
+                      // Şema ve Boyut Doğrulaması (FS-DEAL-02)
+                      request.resource.data.title is string &&
+                      request.resource.data.title.size() >= 3 &&
+                      request.resource.data.title.size() <= 300 &&
+                      (!('description' in request.resource.data) || (
+                        request.resource.data.description is string &&
+                        request.resource.data.description.size() <= 3500
+                      )) &&
+                      request.resource.data.price is number &&
+                      request.resource.data.price >= 0 &&
+                      request.resource.data.price <= 50000000 &&
+                      request.resource.data.store is string &&
+                      request.resource.data.store.size() >= 1 &&
+                      request.resource.data.store.size() <= 100 &&
+                      request.resource.data.category is string &&
+                      request.resource.data.category.size() >= 2 &&
+                      request.resource.data.category.size() <= 100 &&
+                      (!('cleanUrl' in request.resource.data) || (
+                        request.resource.data.cleanUrl is string &&
+                        request.resource.data.cleanUrl.size() <= 3000
+                      )) &&
+                      // Güvenli URL ve XSS Kalkanı (FS-DEAL-03 & FS-DEAL-16)
+                      request.resource.data.link is string &&
+                      request.resource.data.link.size() >= 10 &&
+                      request.resource.data.link.size() <= 3000 &&
+                      request.resource.data.link.matches('^https?://.+') &&
+                      !request.resource.data.link.matches('^(javascript|data|file|vbscript):.*') &&
+                      (!('imageUrl' in request.resource.data) || (
+                        request.resource.data.imageUrl is string &&
+                        (request.resource.data.imageUrl == '' || (
+                          request.resource.data.imageUrl.size() <= 3000 &&
+                          request.resource.data.imageUrl.matches('^https?://.+') &&
+                          !request.resource.data.imageUrl.matches('^(javascript|data|file|vbscript):.*')
+                        ))
                       ))
                     ));
       

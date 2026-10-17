@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_preferences.dart';
 import 'analytics_service.dart';
 import 'auth_service.dart';
+import 'app_badge_service.dart';
 import 'system_log_service.dart';
 
 import '../main.dart'; // navigatorKey için
@@ -947,6 +948,7 @@ class NotificationService {
     try {
       if (!kIsWeb) {
         await _localNotifications.cancelAll();
+        await AppBadgeService.instance.clearBadge(force: true);
         _log('🧹 Bildirim merkezi ve rozetler temizlendi.');
       }
     } catch (e) {
@@ -3479,7 +3481,10 @@ class NotificationService {
           .where('type', isEqualTo: 'keyword')
           .where('enabled', isEqualTo: true)
           .get();
-      final keywords = snap.docs.map((doc) => doc.data()['displayValue'] as String).toList();
+      final keywords = snap.docs
+          .map((doc) => (doc.data()['displayValue'] ?? doc.data()['key'] ?? doc.data()['normalizedValue'] ?? '').toString().trim())
+          .where((k) => k.isNotEmpty)
+          .toList();
       _cachedUserId = userId;
       _cachedNotificationKeywords = keywords;
       _cachedNotificationKeywordsExpiry = DateTime.now().add(_subscriptionCacheTtl);
@@ -3596,7 +3601,7 @@ class NotificationService {
 
       for (final doc in snap.docs) {
         final data = doc.data();
-        final rawKey = (data['key'] ?? data['displayValue'] ?? '').toString();
+        final rawKey = (data['key'] ?? data['displayValue'] ?? data['normalizedValue'] ?? '').toString();
         final cleanKw = _sanitizeKeywordForTopic(rawKey);
         if (cleanKw.isNotEmpty) {
           final kwTopic = 'kw_$cleanKw';

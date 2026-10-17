@@ -95,6 +95,28 @@ void main() {
       expect(badgeChannelCalls.first.method, equals('clearBadge'));
     });
 
+    test('clearBadge invokes native channel EVEN WHEN currentBadgeCount is already 0 (Zero-Assumption Cold Start Desync Shield)', () async {
+      final service = AppBadgeService.instance;
+      // Ensure local count is 0
+      await service.clearBadge();
+      badgeChannelCalls.clear();
+
+      // Now call clearBadge when currentBadgeCount is already 0
+      expect(service.currentBadgeCount, equals(0));
+      await service.clearBadge();
+
+      // Native IPC call MUST still be dispatched to clear iOS SpringBoard ghost badges!
+      expect(badgeChannelCalls.length, equals(1));
+      expect(badgeChannelCalls.first.method, equals('clearBadge'));
+    });
+
+    test('getNativeBadgeCount delegates to native getBadge method', () async {
+      final service = AppBadgeService.instance;
+      final count = await service.getNativeBadgeCount();
+      expect(count, isNotNull);
+      expect(badgeChannelCalls.any((call) => call.method == 'getBadge'), isTrue);
+    });
+
     test('stopRealtimeBadgeSync safely cancels active subscriptions and resets counts', () {
       final service = AppBadgeService.instance;
       service.stopRealtimeBadgeSync();

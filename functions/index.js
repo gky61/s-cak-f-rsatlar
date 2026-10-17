@@ -672,7 +672,6 @@ async function matchAndCreateDealNotifications(deal, dealId) {
                 body: `${safeTitle}\n💰 ${formattedPrice}`
               },
               sound: 'default',
-              badge: 1,
               'content-available': 1,
               'interruption-level': 'active',
               category: 'DEAL_NOTIFICATION'
@@ -681,8 +680,12 @@ async function matchAndCreateDealNotifications(deal, dealId) {
         }
       };
 
-      const topicRes = await admin.messaging().send(topicPayload);
-      functions.logger.info(`📢 Kategori FCM konusuna (topic: ${categoryTopic}) push gönderildi: ${topicRes}`);
+      try {
+        const topicRes = await admin.messaging().send(topicPayload);
+        functions.logger.info(`📢 Kategori FCM konusuna (topic: ${categoryTopic}) push gönderildi: ${topicRes}`);
+      } catch (catSendErr) {
+        functions.logger.warn(`⚠️ Kategori topic push (${categoryTopic}) uyarısı:`, catSendErr.message);
+      }
 
       // FS-NOTIF-07: Alt kategori konusuna (cat_kategori_altkategori) doğrudan FCM topic yayını
       if (subCategory && typeof subCategory === 'string' && subCategory.trim().length > 0) {
@@ -758,7 +761,6 @@ async function matchAndCreateDealNotifications(deal, dealId) {
                   body: `${safeTitle}\n💰 ${formattedPrice}`
                 },
                 sound: 'default',
-                badge: 1,
                 'content-available': 1,
                 'interruption-level': 'active',
                 category: 'DEAL_NOTIFICATION'
@@ -824,7 +826,6 @@ async function matchAndCreateDealNotifications(deal, dealId) {
                     body: `${safeTitle}\n💰 ${formattedPrice}`
                   },
                   sound: 'default',
-                  badge: 1,
                   'content-available': 1,
                   'interruption-level': 'active',
                   category: 'KEYWORD_NOTIFICATION'
@@ -920,8 +921,8 @@ async function matchAndCreateDealNotifications(deal, dealId) {
       reasonDetail: match.detail,
       reasons: match.reasons || {},
       read: false,
-      isTopicDelivered: (match.reason === 'category' || match.reason === 'keyword'),
-      pushStatus: (match.reason === 'category' || match.reason === 'keyword') ? 'delivered_via_topic' : 'pending',
+      isTopicDelivered: match.reason === 'category',
+      pushStatus: match.reason === 'category' ? 'delivered_via_topic' : 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -938,6 +939,53 @@ async function matchAndCreateDealNotifications(deal, dealId) {
   }
 
   functions.logger.info('✅ Fırsat bildirimleri başarıyla oluşturuldu.');
+}
+
+// FS-DEAL-07: Admin Bildirim Hız Limiti ve FCM Bombardıman Kalkanı
+// Cloud Function container içinde bellek önbelleği
+let _lastAdminPushTimeLocal = 0;
+
+/**
+ * Adminlere onaysız fırsat push bildiriminin hız limitine uyup uymadığını denetler.
+ * İnsan kullanıcılar için 1 dakika, Telegram botu için 5 dakika aralık uygular.
+ * @param {boolean} isUserSubmitted - Fırsatın gerçek kullanıcı tarafından mı yoksa bot tarafından mı yüklendiği
+ * @returns {Promise<boolean>} - Bildirim gönderilmeli mi?
+ */
+async function shouldSendAdminPush(isUserSubmitted) {
+  const now = Date.now();
+  const minInterval = isUserSubmitted ? 60 * 1000 : 5 * 60 * 1000; // Kullanıcı: 1 dk, Bot: 5 dk
+
+  // 1. Kademe: Bellek İçi Mikro-Saniye Kalkanı (Aynı container örneğinde 0ms erken çıkış)
+  if (now - _lastAdminPushTimeLocal < minInterval) {
+    return false;
+  }
+
+  // 2. Kademe: Dağıtık Firestore Kalkanı (Containerlar arası eşzamanlı denetim)
+  try {
+    const throttleRef = admin.firestore().collection('system').doc('admin_push_throttle');
+    const snap = await throttleRef.get();
+    if (snap.exists) {
+      const data = snap.data() || {};
+      const lastSent = data.lastSent && typeof data.lastSent.toMillis === 'function' 
+        ? data.lastSent.toMillis() 
+        : 0;
+      if (now - lastSent < minInterval) {
+        _lastAdminPushTimeLocal = lastSent;
+        return false;
+      }
+    }
+    // Eşiği geçti -> Güncelle ve izni ver
+    _lastAdminPushTimeLocal = now;
+    await throttleRef.set({
+      lastSent: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    // Hata durumunda admin bildirimini kaçırmamak için varsayılan olarak gönder
+    functions.logger.warn('⚠️ Admin push throttle denetim hatası, bildirim gönderiliyor:', err.message);
+    return true;
+  }
 }
 
 /**
@@ -1098,7 +1146,6 @@ exports.onDealCreated = functions.firestore
                 body: adminNotifBody,
               },
               sound: 'default',
-              badge: 1,
               'interruption-level': 'active',
               category: 'ADMIN_NOTIFICATION',
             },
@@ -1205,13 +1252,19 @@ exports.onDealCreated = functions.firestore
               body: adminNotifBody,
             },
             sound: 'default',
-            badge: 1,
             'interruption-level': 'active', // iOS - 'critical' özel izin gerektirir
             category: 'ADMIN_NOTIFICATION',
           },
         },
       },
     };
+
+    // FS-DEAL-07: Admin bildirim hız limiti ve FCM bombardıman kalkanı
+    const canSendAdminPush = await shouldSendAdminPush(isUserSubmitted);
+    if (!canSendAdminPush) {
+      functions.logger.info(`⏳ [RATE-LIMIT] Admin push bildirimi hız limitine takıldı, atlandı (isUserSubmitted: ${isUserSubmitted}, dealId: ${dealId})`);
+      return null;
+    }
 
     try {
       functions.logger.info(`📤 Admin bildirimi gönderiliyor (topic: admin_deals, isApproved: false, isUserSubmitted: ${isUserSubmitted})...`);
@@ -1256,6 +1309,18 @@ exports.onDealUpdated = functions.firestore
     const wasApproved = oldData.isApproved === true;
     const isNowApproved = newData.isApproved === true;
 
+    // FS-DEAL-05: Kaskad Tetikleme ve CPU Kalkanı
+    // Eğer kritik durumlar (isApproved, isRejected, hotVotes) değişmemişse,
+    // (örneğin sadece searchKeywords, yorum sayısı, başlık veya küçük bir metadata güncellenmişse)
+    // fonksiyonu 0ms içinde sonlandırarak gereksiz CPU, bellek ve kota israfını önle.
+    const isApprovalChanged = wasApproved !== isNowApproved;
+    const isRejectionChanged = Boolean(oldData.isRejected) !== Boolean(newData.isRejected);
+    const isHotVotesChanged = (Number(oldData.hotVotes) || 0) !== (Number(newData.hotVotes) || 0);
+
+    if (!isApprovalChanged && !isRejectionChanged && !isHotVotesChanged) {
+      return null;
+    }
+
     // 1. Sadece onay durumu false/null/undefined -> true olduğunda herkese bildirim oluştur
     if (!wasApproved && isNowApproved) {
       functions.logger.info('🎉 Fırsat onaylandı! Bildirimler oluşturuluyor:', dealId);
@@ -1287,6 +1352,7 @@ exports.onDealUpdated = functions.firestore
           status: 'approved',
           isUserSubmitted: true,
           sendPush: true,
+          pushStatus: 'pending',
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -1347,6 +1413,7 @@ exports.onDealUpdated = functions.firestore
           status: 'rejected',
           isUserSubmitted: true,
           sendPush: true,
+          pushStatus: 'pending',
           read: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -1616,6 +1683,7 @@ exports.onCommentCreated = functions.firestore
               senderName: replyUserName,
               senderId: replierUserId,
               replyText: commentText.length > 100 ? `${commentText.substring(0, 100)}...` : commentText,
+              pushStatus: 'pending',
               createdAt: admin.firestore.FieldValue.serverTimestamp(),
               read: false
             });
@@ -1652,6 +1720,7 @@ exports.onCommentCreated = functions.firestore
           commentUserName: replyUserName,
           senderName: replyUserName,
           senderId: replierUserId,
+          pushStatus: 'pending',
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           read: false
         });
@@ -1724,6 +1793,7 @@ exports.onAdminMessageCreated = functions.firestore
         senderId: 'admin',
         senderName: adminName,
         messageId: messageId,
+        pushStatus: 'pending',
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
@@ -2067,7 +2137,6 @@ exports.onCouponCreated = functions
                 body: adminNotifBody,
               },
               sound: 'default',
-              badge: 1,
               'interruption-level': 'active',
               category: 'ADMIN_NOTIFICATION',
             },
@@ -2171,7 +2240,6 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
                   body: `@${paylasanAdi}, ${magazaAdi} için yeni bir indirim kuponu paylaştı: "${baslik}"`
                 },
                 sound: 'default',
-                badge: 1,
                 'content-available': 1,
                 'interruption-level': 'active',
                 category: 'COUPON_NOTIFICATION'
@@ -2249,6 +2317,7 @@ async function dispatchApprovedCouponNotifications(kupon, kuponId) {
             status: 'approved',
             isUserSubmitted: true,
             sendPush: true,
+            pushStatus: 'pending',
             read: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
@@ -2419,6 +2488,7 @@ exports.onCouponUpdated = functions
               moderationReason: reason,
               isUserSubmitted: true,
               sendPush: true,
+              pushStatus: 'pending',
               read: false,
               createdAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
@@ -3831,7 +3901,6 @@ exports.sendManualNotification = functions
             body: cleanBody
           },
           sound: 'default',
-          badge: 1,
           'content-available': 1
         }
       }
@@ -3964,6 +4033,7 @@ exports.sendManualNotification = functions
         body: cleanBody,
         imageUrl: cleanImageUrl || null,
         dealId: cleanDealId || null,
+        pushStatus: 'pending',
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });

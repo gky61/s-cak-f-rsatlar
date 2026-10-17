@@ -241,8 +241,10 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
     try {
       // 1. Aşama: Cache-First (0ms yerel önbellek açılışı)
       try {
+        // FS-KUP-04: Tüm aktif web kuponlarını tek seferde belleğe al (242 aktif kupon, ~95 KB)
+        // Böylece 21 mağazanın tamamı anında keşfedilir ve filtre çipleri eksiksiz üretilir.
         final cacheRadarFuture = _kuponService.getKuponlarPaginated(
-          limit: 30,
+          limit: 300,
           kaynakTipi: 'web',
           source: Source.cache,
         );
@@ -275,7 +277,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
       // 2. Aşama: SWR Server Revalidation (Paralel sunucu senkronizasyonu)
       final serverRadarFuture = _kuponService.getKuponlarPaginated(
-        limit: 30,
+        limit: 300,
         kaynakTipi: 'web',
         source: Source.server,
       );
@@ -336,7 +338,7 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
 
     try {
       final result = await _kuponService.getKuponlarPaginated(
-        limit: 25,
+        limit: 50,
         kaynakTipi: 'web',
         lastDocument: _radarLastDocument,
         source: Source.serverAndCache,
@@ -515,7 +517,8 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
   }
 
   int _getStoreRank(String storeName) {
-    switch (storeName) {
+    switch (storeName.trim()) {
+      // Pazaryeri & Teknoloji (1-19)
       case 'Trendyol': return 1;
       case 'Hepsiburada': return 2;
       case 'Amazon': return 3;
@@ -527,14 +530,21 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
       case 'İncehesap': return 9;
       case 'Idefix': case 'İdefix': case 'idefix': return 10;
       case 'Havit': return 11;
+      case 'Boyner': return 12;
+      // Süpermarket & Hızlı Teslimat (100-109)
       case 'Getir': return 100;
       case 'Migros': return 101;
+      case 'CarrefourSA': case 'Carrefour': return 102;
+      // Kozmetik & Kişisel Bakım (150-159)
+      case 'Gratis': return 150;
+      case 'Watsons': return 151;
+      // Moda & Giyim (200-209)
       case 'Zara': return 200;
       case 'Mango': return 201;
       case 'DeFacto': return 202;
       case 'Mavi': return 203;
       case 'Beymen': return 204;
-      default: return 99;
+      default: return 999;
     }
   }
 
@@ -3537,7 +3547,11 @@ class _KuponlarPageState extends State<KuponlarPage> with SingleTickerProviderSt
                     .map((k) => k.id)
                     .toSet();
 
-                final activeStores = allVisibleKuponlar.map((k) => k.magazaAdi).toSet().toList();
+                final activeStores = allVisibleKuponlar
+                    .map((k) => k.magazaAdi.trim())
+                    .where((s) => s.isNotEmpty)
+                    .toSet()
+                    .toList();
                 activeStores.sort((a, b) => _getStoreRank(a).compareTo(_getStoreRank(b)));
                 final stores = ['Tümü', ...activeStores];
 

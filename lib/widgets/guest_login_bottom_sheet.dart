@@ -69,9 +69,10 @@ class _GuestLoginBottomSheetState extends State<GuestLoginBottomSheet> {
       if (user != null && mounted) {
         Navigator.of(context).pop(true);
         widget.onLoginSuccess?.call();
+        final welcomeName = AuthService.needsNameSetup(user.username) ? 'FırsatKolik\'e' : user.username;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Hoş geldiniz, ${user.username}! 🍎'),
+            content: Text('Hoş geldiniz, $welcomeName! 🍎'),
             backgroundColor: AppTheme.success,
             behavior: SnackBarBehavior.floating,
           ),

@@ -290,19 +290,19 @@ console.log('\n--- TEST 5: M-10 Storage Görsel Temizlik Çok Sayfalı Tarama S�
 }
 
 // ==============================================================================
-// TEST 6: FS-CF-11 onDealCreated Kelime Radarı Topic & Mükerrer Push Kalkanı
+// TEST 6: FS-CF-11 onDealCreated Kategori Topic & Kelime Radarı Garantili İletim Sözleşmesi
 // ==============================================================================
-console.log('\n--- TEST 6: FS-CF-11 onDealCreated Kelime Radarı Topic Kalkanı Sözleşmesi ---');
+console.log('\n--- TEST 6: FS-CF-11 onDealCreated Kategori Topic & Kelime Radarı Garantili İletim Sözleşmesi ---');
 {
   assert(
-    indexJsContent.includes("isTopicDelivered: (match.reason === 'category' || match.reason === 'keyword')"),
-    '❌ onDealCreated keyword eşleşmelerinde isTopicDelivered true olarak işaretlenmelidir'
+    indexJsContent.includes("isTopicDelivered: match.reason === 'category'"),
+    '❌ onDealCreated category eşleşmelerinde isTopicDelivered true olarak işaretlenmelidir'
   );
   assert(
-    indexJsContent.includes("pushStatus: (match.reason === 'category' || match.reason === 'keyword') ? 'delivered_via_topic' : 'pending'"),
-    '❌ onDealCreated keyword eşleşmelerinde pushStatus delivered_via_topic olmalıdır'
+    indexJsContent.includes("pushStatus: match.reason === 'category' ? 'delivered_via_topic' : 'pending'"),
+    '❌ onDealCreated category eşleşmelerinde pushStatus delivered_via_topic, keyword eşleşmelerinde garantili token iletimi için pending olmalıdır'
   );
-  console.log('✅ TEST 6 BAŞARILI: FS-CF-11 Kelime radarı topic gönderimi ve mükerrer push engeli doğrulandı.');
+  console.log('✅ TEST 6 BAŞARILI: FS-CF-11 Kategori topic yayını ve Kelime Radarı garantili push sözleşmesi doğrulandı.');
 }
 
 // ==============================================================================

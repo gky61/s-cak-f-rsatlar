@@ -42,6 +42,26 @@ void _log(String message) {
   LinkPreviewLogger.log(message);
 }
 
+/// FS-DEAL-04: HTML ayrıştırma işlemini UI iş parçacığından izole etmek için arka plan fonksiyonu
+Document _parseHtmlInBackground(String htmlContent) {
+  return html_parser.parse(htmlContent);
+}
+
+/// FS-DEAL-04: 50KB üzerindeki HTML verilerini arka plan izolatında ayrıştıran güvenli yardımcı
+Future<Document?> _parseHtmlSafe(String htmlContent) async {
+  if (htmlContent.isEmpty) return null;
+  // 50KB altındaki küçük HTML belgelerini doğrudan microtask'ta parse et
+  if (htmlContent.length < 50000) {
+    return html_parser.parse(htmlContent);
+  }
+  try {
+    return await compute(_parseHtmlInBackground, htmlContent);
+  } catch (e) {
+    _log('⚠️ compute HTML parse fallback: $e');
+    return html_parser.parse(htmlContent);
+  }
+}
+
 class LinkPreviewResult {
   final String? title;
   final String? description;
@@ -281,7 +301,7 @@ class LinkPreviewService {
               _log('🔍 Zara DEBUG: Title H1 exist = ${htmlContent.contains('product-detail-info__header-name')}');
               _log('🔍 Zara DEBUG: Body preview = ${htmlContent.length > 1000 ? htmlContent.substring(0, 1000) : htmlContent}');
             }
-            final document = html_parser.parse(htmlContent);
+            final document = await _parseHtmlSafe(htmlContent);
             if (document != null) {
               final imageUrl = matchedScraper.scrape(
                 document: document,
@@ -292,10 +312,10 @@ class LinkPreviewService {
               );
               
               final title = matchedScraper.scrapeTitle(document) ?? 
-                            MetadataParser.parse(document, url: targetUrl)?.title;
+                            MetadataParser.parse(document, url: targetUrl).title;
                             
               final description = await matchedScraper.scrapeDescription(document) ??
-                                  MetadataParser.parse(document, url: targetUrl)?.description;
+                                  MetadataParser.parse(document, url: targetUrl).description;
                             
               final price = await matchedScraper.scrapePrice(document);
               final originalPrice = await matchedScraper.scrapeOriginalPrice(document, price);
@@ -327,15 +347,15 @@ class LinkPreviewService {
               }
               if (ratingValue != null || ratingCount != null) {
                 _log('   - Rating: $ratingValue ($ratingCount oy)');
-                print('[aggregateRating] LinkPreviewService -> ratingValue: $ratingValue, ratingCount: $ratingCount');
+                _log('[aggregateRating] LinkPreviewService -> ratingValue: $ratingValue, ratingCount: $ratingCount');
               } else {
-                print('[aggregateRating] LinkPreviewService -> ratingValue/ratingCount bulunamadı (null)');
+                _log('[aggregateRating] LinkPreviewService -> ratingValue/ratingCount bulunamadı (null)');
               }
               if (brand != null && brand.isNotEmpty) {
                 _log('   - Marka: $brand');
-                print('[aggregateRating] LinkPreviewService -> Marka: $brand');
+                _log('[aggregateRating] LinkPreviewService -> Marka: $brand');
               } else {
-                print('[aggregateRating] LinkPreviewService -> Marka bulunamadı (null)');
+                _log('[aggregateRating] LinkPreviewService -> Marka bulunamadı (null)');
               }
 
               final isAmazonWarehouse = Deal.checkIsAmazonWarehouse(targetUrl) || Deal.checkIsAmazonWarehouse(url);
@@ -1075,7 +1095,7 @@ class LinkPreviewService {
         return null;
       }
       _log('✅ HTML başarıyla indirildi (${htmlContent.length} chars)');
-      final document = html_parser.parse(htmlContent);
+      final document = await _parseHtmlSafe(htmlContent);
       if (document == null) return null;
 
       // Mağazaya özel scraper'lar ile görsel aramayı dene

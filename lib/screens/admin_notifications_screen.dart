@@ -44,7 +44,8 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab ?? 'all';
-    AppBadgeService.instance.syncBadgeWithFirestore();
+    final uid = _authService.currentUser?.uid;
+    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: uid, forceSync: true);
     _authSub = _authService.authStateChanges.listen((user) {
       if (mounted) {
         setState(() {});
@@ -99,7 +100,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     // Okundu işaretle
     if (!(item['read'] == true || item['read'] == 'true')) {
       await _firestoreService.markNotificationAsRead(currentUserId, item['id'] as String);
-      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
     }
 
     final type = (item['type'] ?? 'deal').toString();
@@ -640,7 +641,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     try {
       HapticFeedback.lightImpact();
       await _firestoreService.markAllNotificationsAsRead(currentUserId);
-      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
       if (!mounted) return;
       _showFeedbackSnackBar(
         content: Row(
@@ -1311,7 +1312,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               if (!isUnread) return false;
               HapticFeedback.lightImpact();
               await _firestoreService.markNotificationAsRead(currentUserId, notifId);
-              AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+              AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
 
               if (context.mounted) {
                 _showFeedbackSnackBar(
@@ -1347,7 +1348,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               try {
                 // Firestore'dan tamamen sil
                 await _firestoreService.deleteNotification(currentUserId, notifId);
-                AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+                AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
               } catch (e) {
                 if (mounted) {
                   setState(() {
@@ -1579,7 +1580,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     if (confirmed == true && mounted) {
       try {
         await _firestoreService.deleteNotification(userId, item['id'] as String);
-        AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
+        AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId, forceSync: true);
         if (!mounted) return;
         _showFeedbackSnackBar(
           content: const Text('Bildirim silindi'),
@@ -1637,7 +1638,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         );
 
         await _firestoreService.deleteAllNotifications(userId);
-        AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId);
+        AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId, forceSync: true);
 
         if (!mounted) return;
         Navigator.pop(context); // Close loading dialog

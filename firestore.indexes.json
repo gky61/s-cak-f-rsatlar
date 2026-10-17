@@ -443,7 +443,47 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "magazaAdi",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "olusturulmaTarihi",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "kuponlar",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "durum",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "kaynakTipi",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "olusturulmaTarihi",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "kuponlar",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "durum",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kaynakTipi",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "magazaAdi",
           "order": "ASCENDING"
         },
         {

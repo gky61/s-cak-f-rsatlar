@@ -36,8 +36,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   @override
   void initState() {
     super.initState();
-    AppBadgeService.instance.syncBadgeWithFirestore();
     final uid = _authService.currentUser?.uid;
+    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: uid, forceSync: true);
     if (uid != null) {
       _conversationsStream = _getUnifiedConversationsStream(uid);
       _loadMutedUsers();
@@ -710,7 +710,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                   onTap: () async {
                     Navigator.pop(ctx);
                     await _firestoreService.markConversationAsRead(currentUserId, otherUserId);
-                    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+                    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
                   },
                 ),
               ListTile(

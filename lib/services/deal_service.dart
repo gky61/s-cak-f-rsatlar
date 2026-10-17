@@ -83,6 +83,10 @@ class DealService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
 
+  // FS-DEAL-15: settings/app için bellek önbelleği (5 dk TTL)
+  static bool? _cachedApprovalRequired;
+  static DateTime? _lastApprovalSettingsFetch;
+
   /// Bozuk veya eksik Firestore verisi içeren dokümanları loglar ve güvenli şekilde null döndürür
   Deal? _safeParseDeal(DocumentSnapshot doc) {
     try {
@@ -803,115 +807,136 @@ class DealService {
         _log('⚠️ [AFFILIATE-TEST] Yönlendirme çözülemedi: $e');
       }
 
-      final cleanUrl = Deal.buildCanonicalCleanUrl(resolvedUrl, canonicalUrl);
+      final cleanUrl = Deal.buildCanonicalCleanUrl(resolvedUrl, canonicalUrl).trim();
       _log('🧹 [AFFILIATE-TEST] Clean URL (Mükerrerlik için): $cleanUrl');
       if (cleanUrl.isNotEmpty) {
-        final querySnapshot = await _firestore
-            .collection('deals')
-            .where('cleanUrl', isEqualTo: cleanUrl)
-            .get();
-        
-        final existingDocs = querySnapshot.docs.toList();
-
-        // Geriye dönük uyumluluk: Eğer varyant cleanUrl farklıysa onu da sorgula
-        final rawCleanUrl = Deal.cleanProductUrl(resolvedUrl);
-        if (rawCleanUrl.isNotEmpty && rawCleanUrl != cleanUrl) {
-          final rawSnapshot = await _firestore
+        try {
+          final querySnapshot = await _firestore
               .collection('deals')
-              .where('cleanUrl', isEqualTo: rawCleanUrl)
+              .where('cleanUrl', isEqualTo: cleanUrl)
               .get();
-          for (var doc in rawSnapshot.docs) {
-            if (!existingDocs.any((d) => d.id == doc.id)) {
-              existingDocs.add(doc);
-            }
-          }
-        }
+          
+          final existingDocs = querySnapshot.docs.toList();
 
-        if (existingDocs.isNotEmpty) {
-          final now = DateTime.now();
-          for (var doc in existingDocs) {
-            final dealData = doc.data();
-            
-            // 1. Reddedilmiş fırsat kontrolü (Reddedilenler yeni paylaşımı engellemez)
-            final isRejected = dealData['isRejected'] == true || dealData['status'] == 'rejected';
-            if (isRejected) {
-              continue;
-            }
-
-            // 2. Yaş Kontrolü (48 saatlik aktif pencere - Cron beklenmeden anında tespit)
-            final createdAtRaw = dealData['createdAt'] ?? dealData['timestamp'];
-            DateTime? dealCreatedAt;
-            if (createdAtRaw is Timestamp) {
-              dealCreatedAt = createdAtRaw.toDate();
-            } else if (createdAtRaw is DateTime) {
-              dealCreatedAt = createdAtRaw;
-            } else if (createdAtRaw is String) {
-              dealCreatedAt = DateTime.tryParse(createdAtRaw);
-            }
-
-            if (dealCreatedAt != null && dealCreatedAt.isBefore(now.subtract(const Duration(hours: 48)))) {
-              continue; // 48 saati geçmiş, arşiv fırsat, mükerrer sayılmaz!
-            }
-            
-            // 3. Pasif/Biten Kontrolleri
-            final isExpired = dealData['isExpired'] == true || dealData['status'] == 'expired';
-            final expiredVotes = dealData['expiredVotes'] ?? 0;
-            if (isExpired || expiredVotes >= 15) {
-              continue;
-            }
-            
-            // 4. Soğuk oylama kontrolü (Topluluk tarafından reddedilenler yeni paylaşımı engellemez)
-            final hotVotes = dealData['hotVotes'] ?? 0;
-            final coldVotes = dealData['coldVotes'] ?? 0;
-            final totalVotes = hotVotes + coldVotes;
-            if (totalVotes >= 5) {
-              final hotPercentage = (hotVotes / totalVotes * 100);
-              if (hotPercentage < 20) {
-                continue;
+          // Geriye dönük uyumluluk: Eğer varyant cleanUrl farklıysa onu da sorgula
+          final rawCleanUrl = Deal.cleanProductUrl(resolvedUrl).trim();
+          if (rawCleanUrl.isNotEmpty && rawCleanUrl != cleanUrl) {
+            final rawSnapshot = await _firestore
+                .collection('deals')
+                .where('cleanUrl', isEqualTo: rawCleanUrl)
+                .get();
+            for (var doc in rawSnapshot.docs) {
+              if (!existingDocs.any((d) => d.id == doc.id)) {
+                existingDocs.add(doc);
               }
             }
-            if (hotVotes - coldVotes <= -5) {
-              continue;
-            }
-
-            // 5. Onay Durumu Kontrolü (Onay bekleyen fırsat kuyrukta spam olmasın)
-            // Eğer aynı ürün zaten admin onayında bekliyorsa, fiyatı ne olursa olsun ikinci bir onay kartı açılmaz.
-            final isDocApproved = dealData['isApproved'] == true;
-            final isDocPending = !isDocApproved || dealData['status'] == 'pending' || dealData['status'] == 'beklemede';
-            if (isDocPending) {
-              throw DealPendingApprovalException(doc.id);
-            }
-
-            // 6. Fiyat Düşüşü (Price Drop) Toleransı (Yalnızca onaylı ve aktif fırsatlar için)
-            // Eğer yeni girilen fiyat, mevcut onaylı aktif fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
-            double existingPrice = PriceFormatUtil.parse(dealData['price']) ?? 0.0;
-
-            if (price > 0 && existingPrice > 0 && price <= (existingPrice * 0.95)) {
-              _log('🏷️ [DEDUPLICATION] Fiyat düşüşü tespit edildi (Eski: $existingPrice, Yeni: $price). Paylaşıma izin veriliyor.');
-              continue;
-            }
-            
-            // 7. Aktif onaylı fırsat eşleşti -> paylaşımı engelle
-            throw DealAlreadySharedException(doc.id);
           }
+
+          if (existingDocs.isNotEmpty) {
+            final now = DateTime.now();
+            for (var doc in existingDocs) {
+              final dealData = doc.data();
+              
+              // 1. Reddedilmiş fırsat kontrolü (Reddedilenler yeni paylaşımı engellemez)
+              final isRejected = dealData['isRejected'] == true || dealData['status'] == 'rejected';
+              if (isRejected) {
+                continue;
+              }
+
+              // 2. Yaş Kontrolü (48 saatlik aktif pencere - Cron beklenmeden anında tespit)
+              final createdAtRaw = dealData['createdAt'] ?? dealData['timestamp'];
+              DateTime? dealCreatedAt;
+              if (createdAtRaw is Timestamp) {
+                dealCreatedAt = createdAtRaw.toDate();
+              } else if (createdAtRaw is DateTime) {
+                dealCreatedAt = createdAtRaw;
+              } else if (createdAtRaw is String) {
+                dealCreatedAt = DateTime.tryParse(createdAtRaw);
+              }
+
+              if (dealCreatedAt != null && dealCreatedAt.isBefore(now.subtract(const Duration(hours: 48)))) {
+                continue; // 48 saati geçmiş, arşiv fırsat, mükerrer sayılmaz!
+              }
+              
+              // 3. Pasif/Biten Kontrolleri
+              final isExpired = dealData['isExpired'] == true || dealData['status'] == 'expired';
+              final expiredVotes = dealData['expiredVotes'] ?? 0;
+              if (isExpired || expiredVotes >= 15) {
+                continue;
+              }
+              
+              // 4. Soğuk oylama kontrolü (Topluluk tarafından reddedilenler yeni paylaşımı engellemez)
+              final hotVotes = dealData['hotVotes'] ?? 0;
+              final coldVotes = dealData['coldVotes'] ?? 0;
+              final totalVotes = hotVotes + coldVotes;
+              if (totalVotes >= 5) {
+                final hotPercentage = (hotVotes / totalVotes * 100);
+                if (hotPercentage < 20) {
+                  continue;
+                }
+              }
+              if (hotVotes - coldVotes <= -5) {
+                continue;
+              }
+
+              // 5. Onay Durumu Kontrolü (Onay bekleyen fırsat kuyrukta spam olmasın)
+              // Eğer aynı ürün zaten admin onayında bekliyorsa, fiyatı ne olursa olsun ikinci bir onay kartı açılmaz.
+              final isDocApproved = dealData['isApproved'] == true;
+              final isDocPending = !isDocApproved || dealData['status'] == 'pending' || dealData['status'] == 'beklemede';
+              if (isDocPending) {
+                throw DealPendingApprovalException(doc.id);
+              }
+
+              // 6. Fiyat Düşüşü (Price Drop) Toleransı (Yalnızca onaylı ve aktif fırsatlar için)
+              // Eğer yeni girilen fiyat, mevcut onaylı aktif fırsatın fiyatından en az %5 daha ucuzsa yeni fırsat olarak izin ver
+              double existingPrice = PriceFormatUtil.parse(dealData['price']) ?? 0.0;
+
+              if (price > 0 && existingPrice > 0 && price <= (existingPrice * 0.95)) {
+                _log('🏷️ [DEDUPLICATION] Fiyat düşüşü tespit edildi (Eski: $existingPrice, Yeni: $price). Paylaşıma izin veriliyor.');
+                continue;
+              }
+              
+              // 7. Aktif onaylı fırsat eşleşti -> paylaşımı engelle
+              throw DealAlreadySharedException(doc.id);
+            }
+          }
+        } on DealBusinessException {
+          rethrow;
+        } catch (queryErr) {
+          _log('⚠️ [DEDUPLICATION] Mükerrerlik kontrol sorgusunda geçici hata, paylaşım akışını kesmemek için devam ediliyor: $queryErr');
         }
       }
       
       bool isApprovalRequired = true;
-      try {
-        final settingsDoc = await _firestore.collection('settings').doc('app').get();
-        if (settingsDoc.exists && settingsDoc.data() != null) {
-          final sData = settingsDoc.data()!;
-          isApprovalRequired = sData['dealApprovalRequired'] ?? true;
-          AffiliateService.syncFromMap(sData);
+      final nowTime = DateTime.now();
+      if (_cachedApprovalRequired != null &&
+          _lastApprovalSettingsFetch != null &&
+          nowTime.difference(_lastApprovalSettingsFetch!).inMinutes < 5) {
+        isApprovalRequired = _cachedApprovalRequired!;
+      } else {
+        try {
+          final settingsDoc = await _firestore.collection('settings').doc('app').get();
+          if (settingsDoc.exists && settingsDoc.data() != null) {
+            final sData = settingsDoc.data()!;
+            isApprovalRequired = sData['dealApprovalRequired'] ?? true;
+            _cachedApprovalRequired = isApprovalRequired;
+            _lastApprovalSettingsFetch = nowTime;
+            AffiliateService.syncFromMap(sData);
+          }
+        } catch (e) {
+          _log('⚠️ Settings loading error: $e');
+          if (_cachedApprovalRequired != null) {
+            isApprovalRequired = _cachedApprovalRequired!;
+          }
         }
-      } catch (e) {
-        _log('⚠️ Settings loading error: $e');
       }
       _log('📋 [AFFILIATE-TEST] Onay Modu: ${isApprovalRequired ? "Admin Onayı Bekliyor (isApproved: false)" : "Doğrudan Yayında (isApproved: true)"}');
 
       // Yazar bilgilerini al (snapshot)
       String? finalPosterName = (postedByName != null && postedByName.trim().isNotEmpty) ? postedByName.trim() : null;
+      if (finalPosterName != null && AuthService.isApplePrivateRelayHash(finalPosterName)) {
+        finalPosterName = null;
+      }
       String? finalPosterAvatar = (postedByAvatar != null && postedByAvatar.trim().isNotEmpty) ? postedByAvatar.trim() : null;
       if (finalPosterName == null || finalPosterAvatar == null) {
         try {
@@ -920,7 +945,10 @@ class DealService {
             final uData = userDoc.data();
             final usernameVal = uData?['username']?.toString() ?? uData?['displayName']?.toString() ?? uData?['nickname']?.toString();
             if (finalPosterName == null && usernameVal != null && usernameVal.trim().isNotEmpty) {
-              finalPosterName = usernameVal.trim();
+              final cleanUVal = usernameVal.trim();
+              if (!AuthService.isApplePrivateRelayHash(cleanUVal)) {
+                finalPosterName = cleanUVal;
+              }
             }
             final rawAvatar = uData?['profileImageUrl']?.toString() ?? uData?['photoURL']?.toString();
             if (finalPosterAvatar == null && rawAvatar != null && rawAvatar.trim().isNotEmpty) {
@@ -930,7 +958,7 @@ class DealService {
         } catch (_) {}
       }
 
-      finalPosterName ??= 'Kullanıcı';
+      finalPosterName ??= 'Fırsat Avcısı';
       if (finalPosterAvatar != null && finalPosterAvatar.isNotEmpty) {
         finalPosterAvatar = migrateAssetPath(finalPosterAvatar);
       } else {

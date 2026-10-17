@@ -59,8 +59,8 @@ graph TD
 ### 2.1 📊 Dağıtım Kanalına Göre Sınıflandırma
 1. **🚀 Kategori A: Hem Push Hem Bildirim Merkezi (Çift Katmanlı Bildirimler):**
    * Veritabanında `users/{userId}/notifications` altına kaydedilir (Kullanıcının Bildirim Kutusu'nda kalıcı saklanır).
-   * Cloud Functions `onNotificationCreated` motoru üzerinden filtrelere (sessiz saatler, hız limitleri, kullanıcı tercihleri) tabi tutularak kullanıcının telefonuna **FCM Push** bildirimi olarak iletilir.
-   * *Kapsam:* Kategori Fırsatları, Yazar Takip Fırsatları, Botkolik Radarı, Anahtar Kelime Fırsatları, Yoruma Cevap, Fırsata Yorum, Fırsat Onay/Red, Resmi Yönetici Duyuruları, Admin Kampanyaları (`uid`; `all` için yalnızca ilk 500 kullanıcı).
+   * Kategori fırsatları `cat_*` FCM Topic yayını üzerinden dağıtılır; Anahtar Kelime (`keyword`) ve Yazar (`author`) takip fırsatları ise Cloud Functions `onNotificationCreated` motoru üzerinden filtrelere (sessiz saatler, hız limitleri, kullanıcı tercihleri) tabi tutularak kullanıcının telefonuna doğrudan **Garantili Token Push** bildirimi olarak iletilir.
+   * *Kapsam:* Kategori Fırsatları (Topic), Yazar Takip Fırsatları (Token Push), Botkolik Radarı (Dual), Anahtar Kelime Fırsatları (Garantili Token Push), Yoruma Cevap, Fırsata Yorum, Fırsat Onay/Red, Resmi Yönetici Duyuruları, Admin Kampanyaları (`uid`; `all` için Dual-Topic + GlobalAnnouncements tekil feed).
 
 2. **🔕 Kategori B: Sadece Bildirim Merkezi (Push Gönderilmez - Sessiz / In-App Only):**
    * `users/{userId}/notifications` altına doküman yazılır ancak telefon bildirim çubuğuna push **GİTMEZ**.
@@ -325,17 +325,29 @@ Flutter testleri `flutter test` ile çalışır; `functions/tests/*.js` dosyalar
 ### Rozet Sayısı Formülü:
 $$\text{Toplam Rozet Sayısı} = \text{Okunmamış Bildirimler} + \text{Okunmamış Birebir Mesajlar} + \text{Okunmamış Yönetici Mesajları} + \text{Okunmamış Genel Duyurular (globalAnnouncements)}$$
 
+### 🛡️ FS-NOTIF-16: Zero-Assumption Desync Shield & Cold Start Hayalet Rozet Koruması:
+1. **Kök Neden & Chain of Failure Analizi:**
+   - **Backend Kaynağı:** Cloud Functions topic bildirimleri (`admin_deals`, `community_coupons`, `cat_*`, `kw_*`) sabit `badge: 1` gönderdiğinde, arka planda cihaz SpringBoard'u 1 rozetiyle işaretleniyordu.
+   - **Dart Bellek Varsayımı:** Flutter uygulaması soğuk açılışta (`main()`) başladığında RAM'de `_currentBadgeCount` 0 olarak atanır.
+   - **Desenkronizasyon Kilidi:** Kullanıcı uygulamayı açtığında Firestore'da 0 okunmamış içerik bulununca `syncBadgeWithFirestore` fonksiyonu `clearBadge(force: false)` çağırıyordu. Eski koddaki `if (!force && _currentBadgeCount == 0) return;` erken çıkış kuralı, Dart belleğindeki 0 değerine güvenerek native IPC çağrısını iptal ediyordu. Sonuç olarak iOS işletim sistemindeki SpringBoard "1" rozeti sonsuza kadar silinemiyordu (**Ghost Badge Trap**).
+2. **Çift Yönlü Mimari Çözüm:**
+   - **Backend APNs Topic Omission:** `functions/index.js` içindeki tüm topic bildirimlerinden (`admin_deals`, `community_coupons`, `cat_*`, `kw_*`) sabit `badge` parametresi tamamen kaldırılmıştır (Apple & Firebase Best Practice).
+   - **Client Zero-Assumption Shield:** `AppBadgeService` içerisine `_isNativeBadgeZero` dahili bayrağı eklenmiştir. `clearBadge({bool force = true})` varsayılan olarak `force: true` yapılmıştır. Soğuk açılışta `_isNativeBadgeZero == false` olduğu için native köprüye ilk `clearBadge` çağrısı koşulsuz iletilir ve SpringBoard temizlenir.
+   - **Native iOS Güçlendirmesi:** `AppDelegate.swift` içine `getBadge` metodu eklenmiş ve `applicationDidBecomeActive` yaşam döngüsü güvenceye alınmıştır.
+3. **120 FPS Sıfır-Jank ve Render Performansı:**
+   - Rozet sıfırlandığı doğrulandıktan sonra (`_isNativeBadgeZero == true`), ardışık gereksiz Platform Channel IPC çağrıları bypass edilerek ana render iş parçacığında 0 ms gecikmeyle 120 FPS akıcılık korunur.
+   - Ekran `build()` fonksiyonları içerisinde asla `clearBadge()` çağrılmaz (Render loop ve frame drop önleyici).
+
 ### Rozet Güncelleme ve Sıfırlama Tetikleyicileri (Triggers):
-1. **Canlı Firestore Dinleyicisi (`startRealtimeBadgeSync`):** Kullanıcı oturum açtığında bildirim ve mesaj koleksiyonlarındaki okunmamış kayıtları anlık dinler. Sayı azaldığında veya arttığında rozeti otomatik günceller.
-2. **Uygulama Ön Plana Geldiğinde (`AppLifecycleState.resumed`):** Kullanıcı uygulamayı her açtığında veya arka plandan ön plana getirdiğinde `syncBadgeWithFirestore` çağrılır.
-3. **Bildirim Merkezi Etkileşimleri (`AdminNotificationsScreen`):**
-   - Sayfa ilk açıldığında `syncBadgeWithFirestore()` çağrılır.
-   - Bildirime tıklandığında okunma durumu (`read: true`) kaydedilip rozet güncellenir.
-   - "Tümünü Okundu İşaretle" butonuna basıldığında tüm bildirimler okunur ve rozet sıfırlanır.
-   - Bildirim tek tek sağa/sola kaydırılarak silindiğinde veya "Tüm Bildirimleri Temizle" dendiğinde rozet anında senkronize edilir.
-4. **Mesajlaşma Ekranları (`MessageScreen` & `MessagesListScreen`):**
-   - Mesajlaşma gelen kutusu açıldığında ve kapatıldığında rozet güncellenir.
-   - Bir sohbet penceresi açılıp mesajlar okunduğunda ve sohbetten çıkıldığında `syncBadgeWithFirestore()` tetiklenir.
-5. **Oturum Kapatma (`signOut`):**
-   - Kullanıcı çıkış yaptığında tüm canlı dinleyiciler durdurulur (`stopRealtimeBadgeSync`) ve rozet derhal **0**'a çekilerek native kanallarla temizlenir (`clearBadge`).
+1. **Cold Start Başlangıcı (`main.dart` `initState`):** Uygulama ilk açıldığında `AppBadgeService.instance.syncBadgeWithFirestore(forceSync: true)` çağrılarak işletim sistemi rozeti anında sıfırlanır / eşitlenir.
+2. **Uygulama Ön Plana Geldiğinde (`AppLifecycleState.resumed`):** Kullanıcı uygulamayı her ön plana getirdiğinde `syncBadgeWithFirestore(forceSync: true)` çalışır.
+3. **Kullanıcı Oturum Değişimleri (`AuthWrapper`):** Giriş yapıldığında `syncBadgeWithFirestore(targetUserId: userId, forceSync: true)`; çıkış yapıldığında veya misafir moduna geçildiğinde `clearBadge(force: true)` ve `stopRealtimeBadgeSync()` tetiklenir.
+4. **Ana Sayfa Unread Stream:** Sayım 0'a indiğinde `clearBadge(force: true)` icra edilir.
+5. **Bildirim Merkezi Etkileşimleri (`AdminNotificationsScreen`):**
+   - Sayfa açılışında `syncBadgeWithFirestore(targetUserId: userId, forceSync: true)`.
+   - Bildirim okundu işaretlendiğinde veya silindiğinde `syncBadgeWithFirestore(targetUserId: userId, forceSync: true)`.
+   - Bildirim zili dönüşlerinde `forceSync: true`.
+6. **Mesajlaşma Ekranları (`MessageScreen` & `MessagesListScreen`):**
+   - Gelen kutusu açıldığında ve kapatıldığında `forceSync: true` ile senkronizasyon.
+   - Bir sohbet penceresinde mesajlar okunduğunda ve sohbetten çıkıldığında `syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true)`.
 

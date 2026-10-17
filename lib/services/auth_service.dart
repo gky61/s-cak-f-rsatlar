@@ -75,6 +75,81 @@ class AuthService {
     _lastAdminCheck = null;
     _inFlightAdminCheck = null;
   }
+
+  /// Apple Private Relay (E-postamı Gizle) adresi kontrolü
+  static bool isApplePrivateRelayEmail(String? email) {
+    if (email == null) return false;
+    return email.trim().toLowerCase().endsWith('@privaterelay.appleid.com');
+  }
+
+  /// Apple Private Relay 10 haneli alfanümerik hash kontrolü (örn: hkdz2pgzrr)
+  static bool isApplePrivateRelayHash(String? text) {
+    if (text == null) return false;
+    final clean = text.trim();
+    if (clean.length != 10) return false;
+    return RegExp(r'^[a-z0-9]{10}$').hasMatch(clean);
+  }
+
+  /// Bir kullanıcı adının geçici/placeholder olup olmadığını belirler.
+  /// Harici yetkilendirmeden (Apple/Google) gelen gerçek bir ad ile üzerine yazmanın güvenli olup olmadığını doğrular.
+  static bool isPlaceholderUsername(String? username, {String? email}) {
+    if (username == null) return true;
+    final clean = username.trim();
+    if (clean.isEmpty || clean == 'Kullanıcı' || clean == 'Fırsat Avcısı' || clean == 'Yeni Avcı') {
+      return true;
+    }
+    if (clean.contains('@')) return true;
+    if (email != null && email.contains('@')) {
+      final prefix = email.split('@')[0].trim();
+      if (clean.toLowerCase() == prefix.toLowerCase()) return true;
+    }
+    if (isApplePrivateRelayHash(clean)) {
+      if (email == null || isApplePrivateRelayEmail(email)) return true;
+    }
+    return false;
+  }
+
+  /// Kullanıcının henüz kendi özel adını/mahlasını belirleyip belirlemediğini kontrol eder.
+  /// Profil ekranında "İsminizi Belirleyin" aksiyonu gösterilirken kullanılır.
+  /// Normal e-posta kullanıcılarının bilerek seçtiği geçerli kullanıcı adlarını (örn: "ahmet") yanlışlıkla tetiklemez.
+  static bool needsNameSetup(String? username, {String? email}) {
+    if (username == null || username.trim().isEmpty) return true;
+    final clean = username.trim();
+    if (clean == 'Kullanıcı' || clean == 'Fırsat Avcısı' || clean == 'Yeni Avcı') {
+      return true;
+    }
+    if (clean.contains('@')) return true;
+    if (email != null && isApplePrivateRelayEmail(email)) {
+      final prefix = email.split('@')[0].trim();
+      if (clean.toLowerCase() == prefix.toLowerCase()) return true;
+    }
+    if (isApplePrivateRelayHash(clean)) {
+      if (email == null || isApplePrivateRelayEmail(email)) return true;
+    }
+    return false;
+  }
+
+  /// Güvenli varsayılan kullanıcı adı çözümü (Apple Private Relay hash'ini asla kullanıcı adı yapmaz)
+  static String resolveDefaultUsername(User? firebaseUser, {String? displayName}) {
+    if (displayName != null && displayName.trim().isNotEmpty) {
+      final clean = displayName.trim();
+      if (!needsNameSetup(clean, email: firebaseUser?.email)) {
+        return clean;
+      }
+    }
+    if (firebaseUser?.displayName != null && firebaseUser!.displayName!.trim().isNotEmpty) {
+      final clean = firebaseUser.displayName!.trim();
+      if (!needsNameSetup(clean, email: firebaseUser.email)) {
+        return clean;
+      }
+    }
+    final email = firebaseUser?.email?.trim();
+    if (email != null && email.isNotEmpty && !isApplePrivateRelayEmail(email)) {
+      final local = email.split('@')[0].trim();
+      if (local.isNotEmpty && local != 'user') return local;
+    }
+    return 'Fırsat Avcısı';
+  }
   
   // Lazy initialization - sadece gerektiğinde oluştur
   GoogleSignIn get _googleSignInInstance {
@@ -281,6 +356,7 @@ class AuthService {
           if (currentUser.displayName != null && currentUser.displayName != existingUser.username) {
             updateData['username'] = currentUser.displayName;
             updateData['displayName'] = currentUser.displayName;
+            updateData['nickname'] = currentUser.displayName;
           }
           // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
           if (!hasCustomAvatar && currentUser.photoURL != null && currentUser.photoURL!.isNotEmpty) {
@@ -302,9 +378,14 @@ class AuthService {
           _log('✅ Kullanıcı verileri düzeltildi. Following listesi korunuyor: ${appUser.following.length} kişi');
         } catch (parseError) {
           _log('Parse hatası, mevcut profil güvenli alanları güncelleniyor: $parseError');
+          final username = resolveDefaultUsername(currentUser);
+          final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
+              ? currentUser.displayName!.trim()
+              : username;
           appUser = app_user.AppUser(
             uid: currentUser.uid,
-            username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı',
+            username: username,
+            nickname: effNickname,
             profileImageUrl: currentUser.photoURL ?? '',
             badges: [],
             points: 0,
@@ -319,6 +400,7 @@ class AuthService {
                 .update({
               'username': appUser.username,
               'displayName': appUser.username,
+              'nickname': appUser.username,
               if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
               if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
               if (appUser.searchKeywords != null && appUser.searchKeywords!.isNotEmpty)
@@ -330,10 +412,14 @@ class AuthService {
         }
       } else {
         // Yeni kullanıcı ise tam veriyi oluştur (create kuralı ile uyumlu)
-        final username = currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Kullanıcı';
+        final username = resolveDefaultUsername(currentUser);
+        final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
+            ? currentUser.displayName!.trim()
+            : username;
         appUser = app_user.AppUser(
           uid: currentUser.uid,
           username: username,
+          nickname: effNickname,
           profileImageUrl: currentUser.photoURL ?? '',
           badges: [],
           points: 0,
@@ -342,6 +428,7 @@ class AuthService {
           searchKeywords: DealSearchEngine.generateUserSearchKeywords(
             username: username,
             displayName: currentUser.displayName,
+            nickname: effNickname,
           ),
         );
         
@@ -449,18 +536,16 @@ class AuthService {
       // FS-AUTH-09: Eğer mevcut operasyonda isim placeholder kalmışsa ve bu çağrıda yeni/gerçek isim iletildiyse ismi güvenle benimse
       if (initialDisplayName != null && initialDisplayName.trim().isNotEmpty) {
         final cleanName = initialDisplayName.trim();
-        final isPlaceholder = appUser.username == 'Kullanıcı' || 
-            appUser.username.isEmpty || 
-            appUser.username.contains('@') ||
-            (firebaseUser.email != null && appUser.username == firebaseUser.email!.split('@')[0]);
+        final isPlaceholder = isPlaceholderUsername(appUser.username, email: firebaseUser.email);
         if (isPlaceholder) {
           try {
             await _firestore.collection('users').doc(uid).update({
               'username': cleanName,
               'displayName': cleanName,
+              'nickname': cleanName,
             });
             _log('✨ [FS-AUTH-09] Geciken auth ad-soyad bilgisi kullanıcı profiline başarıyla uygulandı: $cleanName');
-            return appUser.copyWith(username: cleanName);
+            return appUser.copyWith(username: cleanName, nickname: cleanName);
           } catch (_) {}
         }
       }
@@ -488,7 +573,9 @@ class AuthService {
       if (effectiveName == null || effectiveName.trim().isEmpty) {
         try {
           final prefs = await SharedPreferences.getInstance();
-          effectiveName = prefs.getString('apple_pending_display_name_${firebaseUser.uid}') ??
+          effectiveName = prefs.getString('apple_saved_display_name_${firebaseUser.uid}') ??
+              prefs.getString('apple_pending_display_name_${firebaseUser.uid}') ??
+              prefs.getString('apple_saved_display_name_last') ??
               prefs.getString('apple_pending_display_name_last');
         } catch (_) {}
       }
@@ -504,10 +591,7 @@ class AuthService {
               ? existingUser.profileImageUrl
               : (firebaseUser.photoURL ?? '');
 
-          final isUsernamePlaceholder = existingUser.username == 'Kullanıcı' || 
-              existingUser.username.isEmpty || 
-              existingUser.username.contains('@') ||
-              (firebaseUser.email != null && existingUser.username == firebaseUser.email!.split('@')[0]);
+          final isUsernamePlaceholder = isPlaceholderUsername(existingUser.username, email: firebaseUser.email);
 
           final shouldAdoptEffectiveName = effectiveName != null && 
               effectiveName.isNotEmpty && 
@@ -517,6 +601,9 @@ class AuthService {
             username: shouldAdoptEffectiveName
                 ? effectiveName
                 : existingUser.username,
+            nickname: shouldAdoptEffectiveName
+                ? effectiveName
+                : existingUser.nickname,
             profileImageUrl: effectiveProfileImage,
           );
           
@@ -525,6 +612,12 @@ class AuthService {
           if (shouldAdoptEffectiveName) {
             updateData['username'] = effectiveName;
             updateData['displayName'] = effectiveName;
+            updateData['nickname'] = effectiveName;
+            if (firebaseUser.displayName == null || firebaseUser.displayName!.isEmpty) {
+              try {
+                await firebaseUser.updateDisplayName(effectiveName);
+              } catch (_) {}
+            }
           }
           // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
           if (!hasCustomAvatar && firebaseUser.photoURL != null && firebaseUser.photoURL!.isNotEmpty) {
@@ -574,6 +667,7 @@ class AuthService {
                 .update({
               'username': appUser.username,
               'displayName': appUser.username,
+              'nickname': appUser.username,
               if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
               if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
               if (firebaseUser.email != null) 'email': firebaseUser.email,
@@ -594,6 +688,7 @@ class AuthService {
           ...appUser.toFirestore(),
           'username': appUser.username,
           'displayName': appUser.username,
+          'nickname': appUser.username,
           'profileImageUrl': appUser.profileImageUrl,
           'photoURL': appUser.profileImageUrl,
           if (firebaseUser.email != null) 'email': firebaseUser.email,
@@ -631,12 +726,14 @@ class AuthService {
   /// Varsayılan kullanıcı oluştur
   app_user.AppUser _createDefaultUser(User firebaseUser, {String? displayName}) {
     final effectiveName = displayName ?? firebaseUser.displayName;
-    final username = (effectiveName != null && effectiveName.isNotEmpty)
-        ? effectiveName
-        : (firebaseUser.email?.split('@')[0] ?? 'Kullanıcı');
+    final username = resolveDefaultUsername(firebaseUser, displayName: effectiveName);
+    final effNickname = (effectiveName != null && effectiveName.trim().isNotEmpty)
+        ? effectiveName.trim()
+        : username;
     return app_user.AppUser(
       uid: firebaseUser.uid,
       username: username,
+      nickname: effNickname,
       profileImageUrl: firebaseUser.photoURL ?? '',
       badges: [],
       points: 0,
@@ -645,6 +742,7 @@ class AuthService {
       searchKeywords: DealSearchEngine.generateUserSearchKeywords(
         username: username,
         displayName: effectiveName,
+        nickname: effNickname,
       ),
     );
   }
@@ -700,8 +798,10 @@ class AuthService {
             // FS-AUTH-02 Kalkanı: İlk yetkilendirmede gelen adı yerel diskte mühürle!
             // Ağ kopması, app crash veya sonraki girişlerde Apple bir daha asla ad göndermez.
             if (appleUserId != null && appleUserId.isNotEmpty) {
+              await prefs.setString('apple_saved_display_name_$appleUserId', appleFullName);
               await prefs.setString('apple_pending_display_name_$appleUserId', appleFullName);
             }
+            await prefs.setString('apple_saved_display_name_last', appleFullName);
             await prefs.setString('apple_pending_display_name_last', appleFullName);
             _log('💾 [FS-AUTH-02] Apple ad-soyad yerel önbelleğe mühürlendi: $appleFullName');
           }
@@ -710,9 +810,11 @@ class AuthService {
         // Eğer Apple bu girişte ad göndermediyse (sonraki girişler), yerel önbellekten kurtar:
         if (appleFullName == null || appleFullName.isEmpty) {
           if (appleUserId != null && appleUserId.isNotEmpty) {
-            appleFullName = prefs.getString('apple_pending_display_name_$appleUserId');
+            appleFullName = prefs.getString('apple_saved_display_name_$appleUserId') ??
+                prefs.getString('apple_pending_display_name_$appleUserId');
           }
-          appleFullName ??= prefs.getString('apple_pending_display_name_last');
+          appleFullName ??= prefs.getString('apple_saved_display_name_last') ??
+              prefs.getString('apple_pending_display_name_last');
           if (appleFullName != null && appleFullName.isNotEmpty) {
             _log('🔄 [FS-AUTH-02] Apple ad-soyad yerel önbellekten başarıyla kurtarıldı: $appleFullName');
           }
@@ -729,7 +831,8 @@ class AuthService {
         // Ortak pipeline: Firestore kullanıcı dokümanı, takip listesi koruma, FCM token
         final appUser = await _handleUserAfterSignIn(user, initialDisplayName: appleFullName);
 
-        // Firestore'a başarıyla yazıldığı kesinleşti; yerel beklemedeki Apple adını temizle
+        // Firestore'a başarıyla yazıldığı kesinleşti; yerel beklemedeki geçici flagleri temizle.
+        // NOT: apple_saved_display_name_$appleUserId sonraki girişler ve reinstall durumları için muhafaza edilir.
         try {
           if (appleUserId != null && appleUserId.isNotEmpty) {
             await prefs.remove('apple_pending_display_name_$appleUserId');
@@ -759,6 +862,15 @@ class AuthService {
       
       throw _convertToUserFriendlyError(e);
     }
+  }
+
+  /// Apple Sign-In için yerel isim hafızasını günceller (reinstall / re-auth senkronizasyonu)
+  Future<void> updateAppleSavedDisplayName(String uid, String name) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('apple_saved_display_name_$uid', name);
+      await prefs.setString('apple_saved_display_name_last', name);
+    } catch (_) {}
   }
 
   // Email ve şifre ile kayıt - Production Ready (Ortak Boru Hattı Entegre)

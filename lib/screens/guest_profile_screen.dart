@@ -70,7 +70,8 @@ class _GuestProfileScreenState extends State<GuestProfileScreen> {
     try {
       final user = await _authService.signInWithApple();
       if (user != null && mounted) {
-        final name = user.displayName.isNotEmpty ? user.displayName : user.username;
+        final rawName = user.displayName.isNotEmpty ? user.displayName : user.username;
+        final name = AuthService.needsNameSetup(rawName) ? 'FırsatKolik\'e' : rawName;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Hoş geldiniz, $name! 🍎'),

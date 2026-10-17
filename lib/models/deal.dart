@@ -213,10 +213,18 @@ class Deal {
   String get sourceDisplayName {
     if (isUserSubmitted) {
       if (postedByName != null && postedByName!.trim().isNotEmpty) {
-        return postedByName!.trim();
+        final clean = postedByName!.trim();
+        if (clean.length == 10 && RegExp(r'^[a-z0-9]{10}$').hasMatch(clean)) {
+          return 'Fırsat Avcısı';
+        }
+        return clean;
       }
       if (postedBy.isNotEmpty && postedBy != 'admin') {
-        return postedBy;
+        final clean = postedBy.trim();
+        if (clean.length == 10 && RegExp(r'^[a-z0-9]{10}$').hasMatch(clean)) {
+          return 'Fırsat Avcısı';
+        }
+        return clean;
       }
       return 'Kullanıcı';
     }
@@ -354,6 +362,8 @@ class Deal {
         }
       }
 
+      // FS-DEAL-13: URL fragmentlerini (#yorumlar vb.) temizle ve host/scheme normalizasyonu sağla
+      uri = uri.removeFragment();
       final host = uri.host.toLowerCase();
       
       // 1. Amazon: ASIN tespiti yapılıp kanonik /dp/ASIN standardına dönüştürülür

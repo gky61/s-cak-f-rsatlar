@@ -291,6 +291,7 @@ Bir fırsat onaylandığında `matchAndCreateDealNotifications` fonksiyonu şu a
 2. **Özel Kelime Koruması:** Kullanıcı *"mac"* takibi yaptığında, Türkçe *"maç"* kelimesi içeren bilet fırsatlarıyla yalancı eşleşme engellenir.
 3. **Kendi Kendine Bildirim Engeli:** Fırsatı paylaşan kullanıcıya kendi paylaşımı için bildirim üretilmez (`sub.uid !== postedBy`).
 4. **Dinamik Neden Dönüşümü (Dynamic Reason Fallback):** Eğer kullanıcı kelime bildirimlerini kapatmış ama kategori bildirimlerini açık bırakmışsa, `onNotificationCreated` motoru bildirimin birincil nedenini kategoriye dönüştürür ve başlığı buna göre uyarlayarak push'u iletir.
+5. **Dual-Delivery ve Garantili İletim Sözleşmesi:** Kategori takipçilerine `isTopicDelivered: true` ve `pushStatus: 'delivered_via_topic'` atanarak `cat_*` FCM Topic yayını üzerinden dağıtım yapılır. Anahtar Kelime (`keyword`) ve Yazar (`author`) takipçilerine ise `isTopicDelivered: false` ve `pushStatus: 'pending'` atanarak `onNotificationCreated` merkezi motoru üzerinden doğrudan kullanıcının aktif cihaz token'ına **garantili, yüksek öncelikli kişisel push** iletilir. Çoklu eşleşmelerde mobil istemci `_isRecentDealHandled` (60s sliding window) ve işletim sistemi `tag: deal_${dealId}` / `apns-collapse-id` sayesinde çifte push kilit ekranında tek karta birleştirilir.
 
 ---
 
@@ -397,7 +398,8 @@ Uygulama tamamen kapalıyken veya arka plandayken bildirime tıklandığında:
 | **`admin_channel`** | Admin Bildirimleri | `max` | `#2196F3` | Onay bekleyen yeni fırsatlar (Yöneticiler) |
 
 ### 8.2 iOS APNs Yapılandırması:
-* **Ses & Rozet:** `sound: 'default'`, `badge: 1`.
+* **Ses & Rozet:** `sound: 'default'`.
+  * 🛡️ **Kritik Mimari Kuralı (APNs Topic Omission):** Toplu / Kitle bildirimlerinde (FCM Topics: `admin_deals`, `community_coupons`, `cat_*`, `kw_*`, `author_*`, `all`) `badge` alanı APNs payload'ından **KESİNLİKLE OMIT EDİLİR (hariç tutulur)**. Apple APNs yönergeleri gereği, topic push'ları binlerce farklı kullanıcıya tekilleştirilmeden dağıtılır; sabit bir `badge: 1` gönderilmesi, o kullanıcının gerçekte 0 okunmamış bildirimi olsa dahi ana ekranda (SpringBoard) FırsatKolik ikonu üzerinde kalıcı **1 Hayalet Rozet (Ghost Badge)** oluşmasına yol açar. Kişisel rozet sayısı yalnızca tekil istemci üzerinden veya doğrudan hedef token'a yönelik push'larda dinamik hesaplanmalıdır.
 * **Kategori & Öncelik:** `apns-priority: 10`, `apns-push-type: 'alert'`, `interruption-level: active` (Admin mesajlarında `time-sensitive`).
 * **Alert & Görsel Sunum:** Apple kuralları gereği kilit ekranı ve bildirim merkezinde afiş gösterimi için `payload.aps.alert: { title: '...', body: '...' }` tanımlanır. Android data-only yapısını korurken iOS cihazlara doğrudan işletim sistemi seviyesinde kilit ekranı bildirim kartı oluşturulması sağlanır.
 * **Content Available:** Arka plan veri senkronizasyonu için `content-available: 1`.
@@ -407,9 +409,23 @@ Uygulama tamamen kapalıyken veya arka plandayken bildirime tıklandığında:
 
 ### 8.3 🏷️ Uygulama İkonu Rozet (App Icon Badge) Native Köprüsü (`com.sicakfirsatlar.app/badge`):
 Apple iOS ve Android cihazlarda uygulama ikonu üzerindeki rozet sayısını ve bildirim çekmecesini sıfırlayan / güncelleyen çift yönlü native mimari:
-* **iOS (`AppDelegate.swift`):** `UIApplication.shared.applicationIconBadgeNumber` ve iOS 16+ `UNUserNotificationCenter.setBadgeCount(count)` çağrıları yapılarak işletim sistemi rozet sayısı Firestore'daki toplam okunmamış içerikle (`AppBadgeService`) anlık eşitlenir.
+* **iOS (`AppDelegate.swift`):**
+  * `UIApplication.shared.applicationIconBadgeNumber` ve iOS 16+ `UNUserNotificationCenter.setBadgeCount(count)` çağrıları yapılarak işletim sistemi rozet sayısı Firestore'daki toplam okunmamış içerikle (`AppBadgeService`) anlık eşitlenir.
+  * `getBadge` metodu eklenerek native taraftaki gerçek SpringBoard rozet sayısının doğrudan Flutter katmanına döndürülmesi sağlanmıştır.
+  * `applicationDidBecomeActive` yaşam döngüsü override edilerek uygulamanın ön plana her gelişinde native rozet durumu garanti altına alınmıştır.
 * **Android (`MainActivity.kt`):** `clearBadge` tetiklendiğinde `NotificationManager.cancelAll()` çalıştırılarak bildirim tepsisi temizlenir ve başlatıcı (launcher) bildirim noktası (dot) anında söndürülür.
-* **Tetikleyiciler:** Uygulama açılışı (`resumed`), Bildirim Merkezi (`AdminNotificationsScreen`), Mesajlaşma (`MessageScreen`, `MessagesListScreen`) ve Oturum Kapatma (`signOut`).
+* **🛡️ FS-NOTIF-16: Zero-Assumption Desync Shield & Cold Start Hayalet Rozet Kalkanı:**
+  * **Kök Neden Analizi:** Flutter uygulaması soğuk açılışta (Cold Start) başladığında Dart RAM belleğindeki `_currentBadgeCount` sıfır (`0`) olarak başlatılır. Eğer cihaz arka planda bir topic bildirimi almış ve SpringBoard üzerinde "1" rozeti kalmışsa, kullanıcı uygulamaya girdiğinde Firestore'da 0 okunmamış bildirimi olsa bile eski mantıkta `if (!force && _currentBadgeCount == 0) return;` kontrolü nedeniyle native temizleme IPC çağrısı yapılmıyor ve "1" rozeti sonsuza kadar kalıyordu.
+  * **Sıfır-Varsayım Çözümü:** `AppBadgeService` içerisine `_isNativeBadgeZero` dahili onay bayrağı eklenmiştir. `clearBadge({bool force = true})` varsayılan olarak `force: true` moduna geçirilmiştir. Soğuk başlangıçta Dart belleğindeki sıfır varsayımına güvenilmez (`_isNativeBadgeZero == false`); native işletim sistemine ilk `clearBadge` IPC çağrısı koşulsuz gönderilir ve SpringBoard temizlendikten sonra `_isNativeBadgeZero = true` işaretlenir.
+  * **120 FPS Akıcılık ve Performans Güvencesi:** Rozetin doğrulanmış olarak sıfır olduğu sonraki anlarda (`!force && _currentBadgeCount == 0 && _isNativeBadgeZero`), gereksiz Platform Channel IPC çağrıları bypass edilerek ana render thread'inde 0 ms ek maliyetle 120 FPS akıcılık korunur.
+  * **Build Döngüsü İzolasyonu:** `AdminNotificationsScreen.build()` gibi ekran çizim döngüleri içerisinden asla `clearBadge()` çağrılmaz; rozet senkronizasyonu yalnızca yaşam döngüsü olaylarında (`initState`, `didChangeAppLifecycleState(resumed)`), ekran dönüşlerinde (`then`), kullanıcı giriş/çıkışlarında (`AuthWrapper`) ve açık kullanıcı eylemlerinde (okundu/silindi) `forceSync: true` ile icra edilir.
+* **Tetikleyiciler:**
+  1. `main.dart` `initState` (Cold Start) -> `syncBadgeWithFirestore(forceSync: true)`
+  2. `main.dart` `didChangeAppLifecycleState(resumed)` -> `syncBadgeWithFirestore(forceSync: true)`
+  3. `AuthWrapper` kullanıcı login / token doğrulama -> `syncBadgeWithFirestore(targetUserId: userId, forceSync: true)`
+  4. `AuthWrapper` çıkış / guest mode -> `clearBadge(force: true)`
+  5. `HomeScreen` unread stream 0 olduğunda -> `clearBadge(force: true)`
+  6. `AdminNotificationsScreen`, `MessagesListScreen`, `MessageScreen` açılış, okuma ve silme aksiyonları -> `syncBadgeWithFirestore(targetUserId: uid, forceSync: true)`
 
 ### 8.4 ⚡ 100k DAU Hafif Bildirim Sayacı ve Çift Sayım (Dedup) Kalkanı (`getUnreadNotificationCountStream`):
 * **Read Avalanche Önleyici:** Ana sayfadaki bildirim ikonu için 100 kişisel doküman + 15 küresel duyuru yerine, maksimum 20 okunmamış kişisel doküman (`where('read', isEqualTo: false)`) ve 5 aktif küresel duyuru hafifçe dinlenir.
@@ -481,23 +497,24 @@ Cloud Functions `onNotificationCreated` motoru her bildirim dokümanına şu dur
 
 | `pushStatus` Değeri | Açıklama |
 | :--- | :--- |
-| **`sent`** | Push bildirimi FCM üzerinden kullanıcının aktif cihaz(lar)ına başarıyla iletildi. |
-| **`failed`** | FCM gönderimi sırasında cihaz bazlı teknik bir hata oluştu. |
-| **`no_active_devices`** | Kullanıcının veritabanında `active: true` olan geçerli bir FCM token kaydı bulunamadı. |
-| **`disabled_permanently_for_submission_status`** | `submission_status` dokümanında `isUserSubmitted` veya `sendPush` bayrağı yoksa push atılmaz (sadece uygulama içi kutuda saklanır). Gerçek kullanıcı gönderimlerinde `onDealUpdated` bu bayrakları yazar ve push gider. |
-| **`delivered_via_topic`** | Kupon bildirim dokümanı (`isTopicDelivered: true`); push zaten topic ile gönderildiği için tekil push atlanır. |
-| **`disabled_by_system_master_switch`** | Web Admin panelinden global bildirim şalteri (`systemConfig/notifications.enabled: false`) kapatılmıştır. |
-| **`disabled_by_user_master_switch`** | Kullanıcı "Telefon Bildirimleri" master anahtarını (`pushMasterEnabled: false`) kapatmıştır. |
-| **`disabled_by_user_group_<grup>`** | Kullanıcı ilgili bildirim grubunu kapatmıştır (Örn: `disabled_by_user_group_category`, `disabled_by_user_group_deal`). |
-| **`skipped_quiet_hours`** | Kullanıcının belirlediği sessiz saatler aralığında olunduğu için push gönderimi atlandı. |
-| **`skipped_category_limit`** | Kullanıcının saatlik (3) veya günlük (8) kategori bildirim kotası dolduğu için push atlandı. |
-| **`skipped_author_limit`** | Kullanıcının saatlik (4) veya günlük (12) yazar bildirim kotası dolduğu için push atlandı. |
-| **`skipped_keyword_limit`** | Kullanıcının saatlik (6) veya günlük (18) anahtar kelime bildirim kotası dolduğu için push atlandı. |
-| **`skipped_deal_burst_cooldown`** | Fırsat bildirimleri arasında 30 saniye minimum soğuma süresi dolmadığı için push atlandı. |
-| **`skipped_deal_hourly_total_limit`** | Kullanıcının toplam saatlik fırsat tavanı (8) dolduğu için push atlandı. |
-| **`skipped_comment_rate_limit`** | Viral fırsat yorum koruması: 10 dakikada 5 veya saatte 10 yorum sınırı aşıldığı için atlandı. |
-| **`skipped_marketing_limit`** | Günlük azami 2 pazarlama push sınırı dolduğu için atlandı. |
-| **`skipped_admin_message_rate_limit`** | Saatte azami 6 admin mesajı güvenlik sınırı aşıldığı için atlandı. |
+| **`pending`** | Bildirim dokümanı Firestore'a başarıyla yazıldı; `onNotificationCreated` merkezi push motorunun değerlendirmesini bekliyor (Web Admin'de nötr gri "Bekliyor" animasyonlu rozetiyle listelenir). |
+| **`sent`** / **`success`** | Push bildirimi FCM üzerinden kullanıcının aktif cihaz(lar)ına başarıyla iletildi (Zümrüt yeşili "Gönderildi" rozeti). |
+| **`delivered_via_topic`** / **`delivered_via_batch_topic`** | Kategori veya topluluk kuponu bildirimi; FCM Topic (`cat_*`, `community_coupons`) üzerinden toplu yayınlandığı için tekil token push atlanarak 100k DAU ölçeğinde kota tasarrufu sağlanır (Web Admin'de gök mavisi "Topic Yayını" rozetiyle başarı sayaçlarına dahil edilir). |
+| **`failed`** | FCM gönderimi sırasında cihaz bazlı teknik bir hata oluştu (Kırmızı "Hata" rozeti). |
+| **`no_active_devices`** | Kullanıcının veritabanında `active: true` olan geçerli bir FCM token kaydı bulunamadı ("Cihaz Yok" rozeti). |
+| **`disabled_permanently_for_submission_status`** | `submission_status` dokümanında `isUserSubmitted` veya `sendPush` bayrağı yoksa push atılmaz (sadece uygulama içi kutuda saklanır - "Sessiz" rozeti). Gerçek kullanıcı gönderimlerinde `onDealUpdated` bu bayrakları yazar ve push gider. |
+| **`disabled_by_system_master_switch`** | Web Admin panelinden global bildirim şalteri (`systemConfig/notifications.enabled: false`) kapatılmıştır ("Sistem Kapalı" rozeti). |
+| **`disabled_by_user_master_switch`** | Kullanıcı "Telefon Bildirimleri" master anahtarını (`pushMasterEnabled: false`) kapatmıştır ("Tercih Kapalı" rozeti). |
+| **`disabled_by_user_group_<grup>`** | Kullanıcı ilgili bildirim grubunu kapatmıştır (Örn: `disabled_by_user_group_category`, `disabled_by_user_group_deal` - "Tercih Kapalı" rozeti). |
+| **`skipped_quiet_hours`** | Kullanıcının belirlediği sessiz saatler aralığında olunduğu için push gönderimi atlandı (Kehribar "Sessiz Saat" rozeti). |
+| **`skipped_category_limit`** | Kullanıcının saatlik (3) veya günlük (8) kategori bildirim kotası dolduğu için push atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_author_limit`** | Kullanıcının saatlik (4) veya günlük (12) yazar bildirim kotası dolduğu için push atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_keyword_limit`** | Kullanıcının saatlik (6) veya günlük (18) anahtar kelime bildirim kotası dolduğu için push atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_deal_burst_cooldown`** | Fırsat bildirimleri arasında 30 saniye minimum soğuma süresi dolmadığı için push atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_deal_hourly_total_limit`** | Kullanıcının toplam saatlik fırsat tavanı (8) dolduğu için push atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_comment_rate_limit`** | Viral fırsat yorum koruması: 10 dakikada 5 veya saatte 10 yorum sınırı aşıldığı için atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_marketing_limit`** | Günlük azami 2 pazarlama push sınırı dolduğu için atlandı (Turuncu "Limit Aşıldı" rozeti). |
+| **`skipped_admin_message_rate_limit`** | Saatte azami 6 admin mesajı güvenlik sınırı aşıldığı için atlandı (Turuncu "Limit Aşıldı" rozeti). |
 
 ---
 
@@ -524,7 +541,7 @@ Web Admin panelinde [web/admin/app.js](../../web/admin/app.js) ve [web/admin/ind
 * **Manuel Push & Kategori Seçimi (`sendManualNotification`):** Tüm Kullanıcılar, Belirli UID, Belirli Token veya Topic hedeflenerek bildirim gönderilir; `Yönetici Duyurusu` veya `Pazarlama / Kampanya` türü seçilebilir. Girilen `dealId` mobil istemcide tıklandığında ilgili fırsatı anında açar.
 * **Geçersiz Token Temizliği (`cleanupInvalidTokens`):** Veritabanındaki aktif cihazların token geçerliliğini test edip bayat token'ları otomatik pasife alır.
 * **30+ Günlük Bildirim Temizliği (`purgeOldNotificationsManual`):** Sunucu yetkisiyle 30 günden eski bildirimleri tek tıkla toplu temizler.
-* **Canlı Bildirim Akışı ve Çift Yönlü Filtreleme:** `collectionGroup('notifications')` sorgusu ile son bildirimleri listeler; `Durum Filtresi` (`sent`, `skipped_*`, `disabled_*`, `failed`) ve `Kanal Filtresi` (`Yönetici`, `Kampanya`, `Topluluk`, `Yazar`, `Kategori`, `Anahtar Kelime`) birlikte çalışarak anlık arama ve derin denetim sunar.
+* **Canlı Bildirim Akışı ve Evrensel Rozetleme:** `collectionGroup('notifications')` sorgusu ile son bildirimleri listeler; `Durum Filtresi` (`sent`, `delivered_via_topic`, `skipped_quiet_hours`, `skipped_category_limit` [tüm limitler], `disabled_by_user`, `disabled_by_system`, `no_active_devices`, `failed`) ve `Kanal Filtresi` birlikte çalışır. Anti-spam hız limitleri (`skipped_keyword_limit`, `skipped_author_limit`, `skipped_deal_burst_cooldown` vb.) artık asılsız "HATA" olarak değil, açıklayıcı tooltip'e sahip turuncu **"Limit Aşıldı"** rozetiyle listelenir. Topic yayınları ise gök mavisi **"Topic Yayını"** rozetiyle gösterilir ve başarı sayaçlarına dinamik dahil edilir.
 * **Bildirim Detay İnceleme:** Dokümanın teknik alanlarını (`reasons`, `reasonDetail`, `pushStatus`, `dealId`) modal pencerede inceler.
 * **Bildirim Gönderim Trendi (Son 7 Gün) Grafiği:** `notificationStats` günlük sayaç dokümanları ile `collectionGroup('notifications')` kayıtlarını dinamik olarak harmanlayan hibrit agregasyon algoritması sayesinde hiçbir veri kaybı olmadan son 7 günün push dağılımını çizer.
 

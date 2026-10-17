@@ -107,5 +107,73 @@ void main() {
       verifyMapping('Schafer Kitchen House 2 Litre Çelik Termos Inox (Sıcak ve Soğuk İçecekler İçin 12 Saat Koruma)', 'ev_yasam', 'Mutfak Gereçleri');
       verifyMapping('Stanley Klasik Vakumlu Çelik Kamp Termosu 1 L', 'spor_outdoor', 'Kamp & Doğa Malzemeleri');
     });
+
+    test('6. Store/URL Category Fallback Tests (FS-DEAL-08)', () {
+      // Zara / Moda store fallback when text has no category keywords
+      final zaraResult = CategoryDetectionService.detectCategory(
+        'X-9021 Special Edition',
+        url: 'https://www.zara.com/tr/tr/x-9021-p123.html',
+        store: 'Zara',
+      );
+      expect(zaraResult, isNotNull);
+      expect(zaraResult!['categoryId'], 'moda');
+
+      // Flo shoe store fallback
+      final floResult = CategoryDetectionService.detectCategory(
+        'ZX-90401',
+        url: 'https://www.flo.com.tr/urun-4012',
+        store: 'Flo',
+      );
+      expect(floResult, isNotNull);
+      expect(floResult!['categoryId'], 'moda');
+      expect(floResult['subCategory'], 'Ayakkabı & Çanta');
+
+      // Itopya computer store fallback
+      final itopyaResult = CategoryDetectionService.detectCategory(
+        'Special Component Bundle 12',
+        url: 'https://www.itopya.com/bundle-12',
+        store: 'İtopya',
+      );
+      expect(itopyaResult, isNotNull);
+      expect(itopyaResult!['categoryId'], 'elektronik');
+      expect(itopyaResult['subCategory'], 'Bilgisayar & Tablet');
+
+      // Gratis cosmetic store fallback
+      final gratisResult = CategoryDetectionService.detectCategory(
+        'Glow Special Edition',
+        url: 'https://www.gratis.com/special-glow',
+        store: 'Gratis',
+      );
+      expect(gratisResult, isNotNull);
+      expect(gratisResult!['categoryId'], 'kozmetik');
+
+      // Ebebek baby store fallback
+      final ebebekResult = CategoryDetectionService.detectCategory(
+        'Ebebek Exclusive 102',
+        url: 'https://www.ebebek.com/exclusive-102',
+        store: 'Ebebek',
+      );
+      expect(ebebekResult, isNotNull);
+      expect(ebebekResult!['categoryId'], 'anne_bebek');
+
+      // Decathlon sports store fallback
+      final decathlonResult = CategoryDetectionService.detectCategory(
+        'Quechua 100 Pack',
+        url: 'https://www.decathlon.com.tr/quechua-100',
+        store: 'Decathlon',
+      );
+      expect(decathlonResult, isNotNull);
+      expect(decathlonResult!['categoryId'], 'spor_outdoor');
+
+      // Explicit keywords should still take priority over store fallback
+      final bookAtZaraResult = CategoryDetectionService.detectCategory(
+        'Koleksiyonluk Sanat Tarihi Kitabı Ciltli',
+        url: 'https://www.zara.com/tr/tr/kitap-p123.html',
+        store: 'Zara',
+      );
+      expect(bookAtZaraResult, isNotNull);
+      expect(bookAtZaraResult!['categoryId'], 'kitap_hobi');
+      expect(bookAtZaraResult['subCategory'], 'Kitap & Dergi');
+    });
   });
 }

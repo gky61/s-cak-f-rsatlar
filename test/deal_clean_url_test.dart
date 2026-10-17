@@ -70,6 +70,14 @@ void main() {
       const teknosaWithoutShop = 'https://www.teknosa.com/apple-iphone-15-128gb-p-125078546?utm_source=social_affiliate';
       expect(Deal.cleanProductUrl(teknosaWithoutShop), 'https://www.teknosa.com/apple-iphone-15-128gb-p-125078546');
     });
+
+    test('FS-DEAL-13: Should strip URL fragment anchors (#reviews, #fiyat) to ensure deterministic cleanUrl deduplication', () {
+      const urlWithFragment = 'https://www.trendyol.com/brand/product-p-12345?utm_source=test#reviews';
+      expect(Deal.cleanProductUrl(urlWithFragment), 'https://www.trendyol.com/brand/product-p-12345');
+
+      const amazonWithFragment = 'https://www.amazon.com.tr/dp/B07K3TWJ5J?ref=abc#customerReviews';
+      expect(Deal.cleanProductUrl(amazonWithFragment), 'https://www.amazon.com.tr/dp/B07K3TWJ5J');
+    });
   });
 
   group('Deal.displayUrl Tests', () {

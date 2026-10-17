@@ -315,5 +315,75 @@ void main() {
       expect(radarList[0].id, 'old_trendyol');
       expect(radarList[1].id, 'new_boyner');
     });
+
+    test('FS-KUP-04: 22 Desteklenen Mağazanın Sıralama Hiyerarşisi ve Sıfır Boşluk Sözleşmesi', () {
+      int getStoreRank(String storeName) {
+        switch (storeName.trim()) {
+          case 'Trendyol': return 1;
+          case 'Hepsiburada': return 2;
+          case 'Amazon': return 3;
+          case 'N11': return 4;
+          case 'Pazarama': return 5;
+          case 'Teknosa': return 6;
+          case 'MediaMarkt': return 7;
+          case 'PttAVM': return 8;
+          case 'İncehesap': return 9;
+          case 'Idefix': case 'İdefix': case 'idefix': return 10;
+          case 'Havit': return 11;
+          case 'Boyner': return 12;
+          case 'Getir': return 100;
+          case 'Migros': return 101;
+          case 'CarrefourSA': case 'Carrefour': return 102;
+          case 'Gratis': return 150;
+          case 'Watsons': return 151;
+          case 'Zara': return 200;
+          case 'Mango': return 201;
+          case 'DeFacto': return 202;
+          case 'Mavi': return 203;
+          case 'Beymen': return 204;
+          default: return 999;
+        }
+      }
+
+      // Amazon, Hepsiburada, Trendyol ve CarrefourSA hiyerarşisi doğrulaması
+      expect(getStoreRank('Trendyol') < getStoreRank('Hepsiburada'), true);
+      expect(getStoreRank('Hepsiburada') < getStoreRank('Amazon'), true);
+      expect(getStoreRank('Amazon') < getStoreRank('N11'), true);
+      expect(getStoreRank('Boyner') < getStoreRank('Getir'), true);
+      expect(getStoreRank('Migros') < getStoreRank('CarrefourSA'), true);
+      expect(getStoreRank('Gratis') < getStoreRank('Watsons'), true);
+      expect(getStoreRank('Zara') < getStoreRank('Beymen'), true);
+      expect(getStoreRank('Bilinmeyen Magaza'), 999);
+    });
+
+    test('FS-KUP-04: Aktif mağaza çip seti üretimi ve boş/geçersiz mağaza adlarının filtrelenmesi', () {
+      final now = DateTime.now();
+      final kuponlar = [
+        Kupon(id: '1', magazaAdi: 'Trendyol', baslik: 'K1', kuponKodu: 'C1', olusturulmaTarihi: now, paylasanKullaniciId: 'u'),
+        Kupon(id: '2', magazaAdi: 'Amazon', baslik: 'K2', kuponKodu: 'C2', olusturulmaTarihi: now, paylasanKullaniciId: 'u'),
+        Kupon(id: '3', magazaAdi: 'Hepsiburada', baslik: 'K3', kuponKodu: 'C3', olusturulmaTarihi: now, paylasanKullaniciId: 'u'),
+        Kupon(id: '4', magazaAdi: '  ', baslik: 'K4', kuponKodu: 'C4', olusturulmaTarihi: now, paylasanKullaniciId: 'u'), // Geçersiz boşluklu
+        Kupon(id: '5', magazaAdi: 'Amazon', baslik: 'K5', kuponKodu: 'C5', olusturulmaTarihi: now, paylasanKullaniciId: 'u'), // Mükerrer
+      ];
+
+      int getStoreRank(String storeName) {
+        switch (storeName.trim()) {
+          case 'Trendyol': return 1;
+          case 'Hepsiburada': return 2;
+          case 'Amazon': return 3;
+          default: return 999;
+        }
+      }
+
+      final activeStores = kuponlar
+          .map((k) => k.magazaAdi.trim())
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+      activeStores.sort((a, b) => getStoreRank(a).compareTo(getStoreRank(b)));
+      final stores = ['Tümü', ...activeStores];
+
+      expect(stores, ['Tümü', 'Trendyol', 'Hepsiburada', 'Amazon']);
+    });
   });
 }

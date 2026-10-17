@@ -126,7 +126,8 @@ class _AuthScreenState extends State<AuthScreen> {
             }
           } else {
             if (mounted) {
-              _showSuccess('Hoş geldiniz, ${user.username}!');
+              final welcomeName = AuthService.needsNameSetup(user.username) ? 'FırsatKolik\'e' : user.username;
+              _showSuccess('Hoş geldiniz, $welcomeName!');
               await Future.delayed(const Duration(milliseconds: 500));
               if (mounted) {
                 if (Navigator.canPop(context)) {
@@ -163,7 +164,8 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final user = await _authService.signInWithApple();
       if (user != null && mounted) {
-        _showSuccess('Hoş geldiniz, ${user.username}!');
+        final welcomeName = AuthService.needsNameSetup(user.username) ? 'FırsatKolik\'e' : user.username;
+        _showSuccess('Hoş geldiniz, $welcomeName!');
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
           if (Navigator.canPop(context)) {

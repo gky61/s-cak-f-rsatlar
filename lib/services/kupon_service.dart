@@ -26,6 +26,7 @@ class KuponService {
     int limit = 30,
     DocumentSnapshot? lastDocument,
     String? kaynakTipi,
+    String? magazaAdi,
     Source source = Source.serverAndCache,
   }) async {
     try {
@@ -35,6 +36,10 @@ class KuponService {
 
       if (kaynakTipi != null && kaynakTipi.trim().isNotEmpty) {
         query = query.where('kaynakTipi', isEqualTo: kaynakTipi.trim());
+      }
+
+      if (magazaAdi != null && magazaAdi.trim().isNotEmpty && magazaAdi.trim() != 'Tümü') {
+        query = query.where('magazaAdi', isEqualTo: magazaAdi.trim());
       }
 
       query = query

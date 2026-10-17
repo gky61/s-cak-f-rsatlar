@@ -418,7 +418,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         isTyping: false,
       );
       _firestoreService.markConversationAsRead(currentUserId, widget.otherUserId);
-      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
     }
     _otherUserSubscription?.cancel();
     _typingTimer?.cancel();
@@ -445,7 +445,7 @@ class _MessageScreenState extends State<MessageScreen> with TickerProviderStateM
         }
       }
     }
-    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId);
+    AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
   }
 
   void _scrollToBottom({bool animated = true}) {

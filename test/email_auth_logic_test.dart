@@ -71,21 +71,34 @@ void main() {
       expect(combineAppleName(null, null), isNull);
     });
 
-    // 6. FS-AUTH-02: Placeholder Username Self-Healing Detection
-    test('Placeholder username detection identifies default names and email prefixes', () {
-      bool isUsernamePlaceholder(String username, String? email) {
-        return username == 'Kullanıcı' ||
-            username.isEmpty ||
-            username.contains('@') ||
-            (email != null && username == email.split('@')[0]);
-      }
+    // 6. FS-AUTH-02: Placeholder Username & Apple Private Relay Defense Detection
+    test('Placeholder username detection identifies default names, email prefixes, and Apple relay hashes', () {
+      expect(AuthService.isApplePrivateRelayEmail('hkdz2pgzrr@privaterelay.appleid.com'), isTrue);
+      expect(AuthService.isApplePrivateRelayEmail('user@gmail.com'), isFalse);
+      expect(AuthService.isApplePrivateRelayEmail(null), isFalse);
 
-      expect(isUsernamePlaceholder('Kullanıcı', 'test@apple.com'), isTrue);
-      expect(isUsernamePlaceholder('', 'test@apple.com'), isTrue);
-      expect(isUsernamePlaceholder('test@privaterelay.appleid.com', 'test@privaterelay.appleid.com'), isTrue);
-      expect(isUsernamePlaceholder('test', 'test@apple.com'), isTrue);
-      expect(isUsernamePlaceholder('Murat Kaya', 'test@apple.com'), isFalse);
-      expect(isUsernamePlaceholder('firsat_avcisi', 'avci@gmail.com'), isFalse);
+      expect(AuthService.isApplePrivateRelayHash('hkdz2pgzrr'), isTrue);
+      expect(AuthService.isApplePrivateRelayHash('cr7n4fh6hf'), isTrue);
+      expect(AuthService.isApplePrivateRelayHash('ahmet'), isFalse);
+      expect(AuthService.isApplePrivateRelayHash('Elif Güven'), isFalse);
+
+      expect(AuthService.isPlaceholderUsername('Kullanıcı', email: 'test@apple.com'), isTrue);
+      expect(AuthService.isPlaceholderUsername('Fırsat Avcısı'), isTrue);
+      expect(AuthService.isPlaceholderUsername('', email: 'test@apple.com'), isTrue);
+      expect(AuthService.isPlaceholderUsername('test@privaterelay.appleid.com', email: 'test@privaterelay.appleid.com'), isTrue);
+      expect(AuthService.isPlaceholderUsername('test', email: 'test@apple.com'), isTrue);
+      expect(AuthService.isPlaceholderUsername('hkdz2pgzrr', email: 'hkdz2pgzrr@privaterelay.appleid.com'), isTrue);
+      expect(AuthService.isPlaceholderUsername('cr7n4fh6hf', email: 'cr7n4fh6hf@privaterelay.appleid.com'), isTrue);
+      expect(AuthService.isPlaceholderUsername('Murat Kaya', email: 'test@apple.com'), isFalse);
+      expect(AuthService.isPlaceholderUsername('Elif Güven', email: 'hkdz2pgzrr@privaterelay.appleid.com'), isFalse);
+      expect(AuthService.isPlaceholderUsername('firsat_avcisi', email: 'avci@gmail.com'), isFalse);
+
+      // needsNameSetup testleri: normal email kullanıcılarının seçtiği adı korumalı
+      expect(AuthService.needsNameSetup('ahmet', email: 'ahmet@gmail.com'), isFalse);
+      expect(AuthService.needsNameSetup('Kullanıcı', email: 'ahmet@gmail.com'), isTrue);
+      expect(AuthService.needsNameSetup('Fırsat Avcısı'), isTrue);
+      expect(AuthService.needsNameSetup('hkdz2pgzrr', email: 'hkdz2pgzrr@privaterelay.appleid.com'), isTrue);
+      expect(AuthService.needsNameSetup('Elif Güven', email: 'hkdz2pgzrr@privaterelay.appleid.com'), isFalse);
     });
 
     // 7. FS-AUTH-10: Password Reset Cooldown & Rate-Limit Tests

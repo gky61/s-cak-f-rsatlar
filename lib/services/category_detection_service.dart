@@ -28,29 +28,32 @@ class CategoryDetectionService {
   /// 
   /// Returns: Map with 'categoryId' and 'subCategory' keys, or null if no match
   static Map<String, String?>? detectCategory(String text, {String? url, String? store}) {
-    if (text.trim().isEmpty) return null;
-
-    // CPU ve Regex DoS kalkanı: Kategori tespiti için ilk 2500 karakter fazlasıyla yeterlidir
-    final safeText = text.length > 2500 ? text.substring(0, 2500) : text;
     final lowerUrl = (url ?? '').toLowerCase();
     final lowerStore = (store ?? '').toLowerCase();
-    final lowerText = safeText.toLowerCase();
+    final trimmedText = text.trim();
 
+    // 1. Metin doluysa önce anahtar kelime tabanlı derinlikli tespiti çalıştır
+    Map<String, String?>? result;
+    if (trimmedText.isNotEmpty) {
+      final safeText = trimmedText.length > 2500 ? trimmedText.substring(0, 2500) : trimmedText;
+      result = _detectCategoryInternal(safeText);
+    }
+
+    // 2. Getir / Migros özel durumu (Süpermarket dikeyinde tam koruma)
     final isGetirOrMigros = lowerUrl.contains('getir.com') ||
         lowerUrl.contains('migros.com.tr') ||
         lowerStore.contains('getir') ||
         lowerStore.contains('migros') ||
-        lowerText.contains('getir.com') ||
-        lowerText.contains('migros.com.tr');
-
-    final result = _detectCategoryInternal(safeText);
+        (trimmedText.isNotEmpty && (trimmedText.toLowerCase().contains('getir.com') || trimmedText.toLowerCase().contains('migros.com.tr')));
 
     if (isGetirOrMigros) {
       String? subCategory;
       if (result != null && result['categoryId'] == 'supermarket') {
         subCategory = result['subCategory'];
       }
-      subCategory ??= _findSupermarketSubCategory(lowerText);
+      if (trimmedText.isNotEmpty) {
+        subCategory ??= _findSupermarketSubCategory(trimmedText.toLowerCase());
+      }
       subCategory ??= 'Gıda Ürünleri';
 
       _log('🛒 Getir/Migros ürünü tespit edildi -> Kategori: supermarket, Alt Kategori: $subCategory');
@@ -61,7 +64,213 @@ class CategoryDetectionService {
       };
     }
 
-    return result;
+    // 3. Metin analizinden net bir kategori sonucu çıktıysa doğrudan döndür
+    if (result != null) {
+      return result;
+    }
+
+    // 4. FS-DEAL-08: Metin yetersizse veya eşleşmediyse, dikey odaklı mağaza/domain fallback'i uygula
+    final storeFallback = _detectCategoryFromStoreOrUrl(lowerUrl, lowerStore);
+    if (storeFallback != null) {
+      _log('🏬 Mağaza/URL bazlı akıllı kategori atandı (${storeFallback['categoryId']}) -> url: $url, store: $store');
+      return storeFallback;
+    }
+
+    return null;
+  }
+
+  /// Belirli dikey odaklı mağazalar ve domainler için akıllı kategori fallback tespiti (FS-DEAL-08)
+  static Map<String, String?>? _detectCategoryFromStoreOrUrl(String lowerUrl, String lowerStore) {
+    // 1. Moda & Giyim Mağazaları
+    final isFashion = lowerUrl.contains('zara.com') ||
+        lowerUrl.contains('mango.com') ||
+        lowerUrl.contains('mavi.com') ||
+        lowerUrl.contains('defacto.com') ||
+        lowerUrl.contains('boyner.com') ||
+        lowerUrl.contains('beymen.com') ||
+        lowerUrl.contains('lcwaikiki.com') ||
+        lowerUrl.contains('koton.com') ||
+        lowerUrl.contains('hm.com') ||
+        lowerUrl.contains('colins.com') ||
+        lowerUrl.contains('stradivarius.com') ||
+        lowerUrl.contains('bershka.com') ||
+        lowerUrl.contains('pullandbear.com') ||
+        lowerUrl.contains('flo.com') ||
+        lowerUrl.contains('instreet.com') ||
+        lowerStore.contains('zara') ||
+        lowerStore.contains('mango') ||
+        lowerStore.contains('mavi') ||
+        lowerStore.contains('defacto') ||
+        lowerStore.contains('boyner') ||
+        lowerStore.contains('beymen') ||
+        lowerStore.contains('lc waikiki') ||
+        lowerStore.contains('lcw') ||
+        lowerStore.contains('koton') ||
+        lowerStore.contains('h&m') ||
+        lowerStore.contains('colin') ||
+        lowerStore.contains('flo') ||
+        lowerStore.contains('instreet');
+
+    if (isFashion) {
+      final isShoes = lowerUrl.contains('flo.com') ||
+          lowerUrl.contains('instreet.com') ||
+          lowerStore.contains('flo') ||
+          lowerStore.contains('instreet');
+      return {
+        'categoryId': 'moda',
+        'subCategory': isShoes ? 'Ayakkabı & Çanta' : 'Kadın Giyim',
+      };
+    }
+
+    // 2. Elektronik & Bilgisayar & Oyuncu Donanımı Mağazaları
+    final isTech = lowerUrl.contains('itopya.com') ||
+        lowerUrl.contains('incehesap.com') ||
+        lowerUrl.contains('gaming.gen.tr') ||
+        lowerUrl.contains('gamegaraj.com') ||
+        lowerUrl.contains('sinerji.gen.tr') ||
+        lowerUrl.contains('tebilon.com') ||
+        lowerUrl.contains('qp.com.tr') ||
+        lowerUrl.contains('vatanbilgisayar.com') ||
+        lowerUrl.contains('mediamarkt.com') ||
+        lowerUrl.contains('havit.com') ||
+        lowerStore.contains('itopya') ||
+        lowerStore.contains('incehesap') ||
+        lowerStore.contains('gaming.gen') ||
+        lowerStore.contains('game garaj') ||
+        lowerStore.contains('gamegaraj') ||
+        lowerStore.contains('sinerji') ||
+        lowerStore.contains('tebilon') ||
+        lowerStore.contains('qp bilişim') ||
+        lowerStore.contains('vatan') ||
+        lowerStore.contains('mediamarkt') ||
+        lowerStore.contains('havit');
+
+    if (isTech) {
+      return {
+        'categoryId': 'elektronik',
+        'subCategory': 'Bilgisayar & Tablet',
+      };
+    }
+
+    // 3. Kozmetik & Kişisel Bakım Mağazaları
+    final isCosmetics = lowerUrl.contains('gratis.com') ||
+        lowerUrl.contains('watsons.com') ||
+        lowerUrl.contains('sephora.com') ||
+        lowerUrl.contains('rossmann.com') ||
+        lowerStore.contains('gratis') ||
+        lowerStore.contains('watsons') ||
+        lowerStore.contains('sephora') ||
+        lowerStore.contains('rossmann');
+
+    if (isCosmetics) {
+      return {
+        'categoryId': 'kozmetik',
+        'subCategory': 'Cilt & Yüz Bakımı',
+      };
+    }
+
+    // 4. Anne & Bebek Mağazaları
+    final isBaby = lowerUrl.contains('ebebek.com') ||
+        lowerUrl.contains('joker.com') ||
+        lowerStore.contains('ebebek') ||
+        lowerStore.contains('e-bebek') ||
+        lowerStore.contains('joker');
+
+    if (isBaby) {
+      return {
+        'categoryId': 'anne_bebek',
+        'subCategory': 'Beslenme & Emzirme',
+      };
+    }
+
+    // 5. Kitap, Müzik & Hobi Mağazaları
+    final isBook = lowerUrl.contains('dr.com.tr') ||
+        lowerUrl.contains('idefix.com') ||
+        lowerUrl.contains('kitapyurdu.com') ||
+        lowerUrl.contains('bkmkitap.com') ||
+        lowerStore.contains('d&r') ||
+        lowerStore.contains('dr') ||
+        lowerStore.contains('idefix') ||
+        lowerStore.contains('kitapyurdu') ||
+        lowerStore.contains('bkm kitap');
+
+    if (isBook) {
+      return {
+        'categoryId': 'kitap_hobi',
+        'subCategory': 'Kitap & Dergi',
+      };
+    }
+
+    // 6. Ev, Yaşam & Mobilya Mağazaları
+    final isHome = lowerUrl.contains('ikea.com') ||
+        lowerUrl.contains('vivense.com') ||
+        lowerUrl.contains('karaca.com') ||
+        lowerUrl.contains('englishhome.com') ||
+        lowerUrl.contains('madamecoco.com') ||
+        lowerStore.contains('ikea') ||
+        lowerStore.contains('vivense') ||
+        lowerStore.contains('karaca') ||
+        lowerStore.contains('english home') ||
+        lowerStore.contains('madame coco');
+
+    if (isHome) {
+      return {
+        'categoryId': 'ev_yasam',
+        'subCategory': 'Mutfak Gereçleri',
+      };
+    }
+
+    // 7. Yapı Market & Hırdavat Mağazaları
+    final isDIY = lowerUrl.contains('koctas.com') ||
+        lowerUrl.contains('bauhaus.com') ||
+        lowerUrl.contains('tekzen.com') ||
+        lowerStore.contains('koçtaş') ||
+        lowerStore.contains('koctas') ||
+        lowerStore.contains('bauhaus') ||
+        lowerStore.contains('tekzen');
+
+    if (isDIY) {
+      return {
+        'categoryId': 'yapi_oto',
+        'subCategory': 'Elektrikli Aletler, Hırdavat & İş Güvenliği',
+      };
+    }
+
+    // 8. Spor & Outdoor Mağazaları
+    final isSports = lowerUrl.contains('decathlon.com') ||
+        lowerUrl.contains('barcin.com') ||
+        lowerUrl.contains('korayspor.com') ||
+        lowerUrl.contains('sneaksup.com') ||
+        lowerStore.contains('decathlon') ||
+        lowerStore.contains('barçın') ||
+        lowerStore.contains('korayspor') ||
+        lowerStore.contains('sneaks up');
+
+    if (isSports) {
+      return {
+        'categoryId': 'spor_outdoor',
+        'subCategory': 'Spor Giyim & Ayakkabı',
+      };
+    }
+
+    // 9. Süpermarket & Market Mağazaları
+    final isSupermarket = lowerUrl.contains('sokmarket.com') ||
+        lowerUrl.contains('a101.com') ||
+        lowerUrl.contains('carrefoursa.com') ||
+        lowerStore.contains('şok') ||
+        lowerStore.contains('sok market') ||
+        lowerStore.contains('a101') ||
+        lowerStore.contains('carrefoursa') ||
+        lowerStore.contains('carrefour');
+
+    if (isSupermarket) {
+      return {
+        'categoryId': 'supermarket',
+        'subCategory': 'Gıda Ürünleri',
+      };
+    }
+
+    return null;
   }
 
   static String? _findSupermarketSubCategory(String lowerText) {

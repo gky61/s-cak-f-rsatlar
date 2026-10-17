@@ -462,11 +462,13 @@ class HepsiburadaScraper extends BaseProductScraper {
     };
 
     final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 5);
+    client.idleTimeout = const Duration(seconds: 5);
     client.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
     const url = 'https://www.hepsiburada.com/api/v1/withoutAffordability';
     try {
-      final request = await client.postUrl(Uri.parse(url));
+      final request = await client.postUrl(Uri.parse(url)).timeout(const Duration(seconds: 6));
       request.headers.set('content-type', 'application/json');
       request.headers.set('accept', 'application/json, text/plain, */*');
       request.headers.set('origin', 'https://www.hepsiburada.com');
@@ -479,7 +481,7 @@ class HepsiburadaScraper extends BaseProductScraper {
       
       request.add(utf8.encode(jsonEncode(payload)));
       
-      final response = await request.close();
+      final response = await request.close().timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final body = await response.transform(utf8.decoder).join();
         final resJson = jsonDecode(body);
@@ -552,7 +554,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     } catch (_) {
       // Fallback silently
     } finally {
-      client.close();
+      client.close(force: true);
     }
 
     return null;
@@ -715,11 +717,13 @@ class HepsiburadaScraper extends BaseProductScraper {
     };
 
     final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 5);
+    client.idleTimeout = const Duration(seconds: 5);
     client.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
     const url = 'https://www.hepsiburada.com/api/v1/otherMerchants';
     try {
-      final request = await client.postUrl(Uri.parse(url));
+      final request = await client.postUrl(Uri.parse(url)).timeout(const Duration(seconds: 6));
       request.headers.set('content-type', 'application/json');
       request.headers.set('accept', 'application/json, text/plain, */*');
       request.headers.set('origin', 'https://www.hepsiburada.com');
@@ -732,7 +736,7 @@ class HepsiburadaScraper extends BaseProductScraper {
       
       request.add(utf8.encode(jsonEncode(payload)));
       
-      final response = await request.close();
+      final response = await request.close().timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final body = await response.transform(utf8.decoder).join();
         final resJson = jsonDecode(body);
@@ -807,7 +811,7 @@ class HepsiburadaScraper extends BaseProductScraper {
     } catch (_) {
       // Fallback silently
     } finally {
-      client.close();
+      client.close(force: true);
     }
 
     return null;

@@ -163,6 +163,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   String _selectedCategory = 'elektronik';
   String? _selectedSubCategory;
   bool _isLoading = false;
+  bool _isSubmitting = false;
   bool _isAutoDetecting = false;
   bool _isLoadingImage = false;
   String? _previewImageUrl;
@@ -369,7 +370,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     });
   }
 
-  bool _isFetchingActive = false;
+  bool _isDisposed = false;
+  int _fetchSessionId = 0;
 
   Future<void> _onUrlChanged() async {
     final rawUrl = _urlController.text.trim();
@@ -509,11 +511,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }
 
   Future<void> _autoFetchProductData(String url) async {
-    if (_isFetchingActive) return;
-    _isFetchingActive = true;
+    final fetchSessionId = ++_fetchSessionId;
 
     try {
-      if (!_isAutoDetecting && mounted) {
+      if (!_isAutoDetecting && mounted && !_isDisposed) {
         setState(() {
           _isAutoDetecting = true;
           _isLoadingImage = true;
@@ -521,8 +522,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       }
 
       final validationResult = await DomainAllowlistService.validateUrl(url);
+      if (!mounted || _isDisposed || fetchSessionId != _fetchSessionId) return;
+
       if (validationResult != UrlValidationResult.valid) {
-        if (mounted) {
+        if (mounted && !_isDisposed && fetchSessionId == _fetchSessionId) {
           setState(() {
             _isAutoDetecting = false;
             _isLoadingImage = false;
@@ -567,9 +570,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       if (url.contains("amazon") || url.contains("amzn")) {
         try {
           amazonImage = await _linkPreviewService.getAmazonImageSmart(url);
+          if (!mounted || _isDisposed || fetchSessionId != _fetchSessionId) return;
           if (amazonImage != null) {
             _log('✅ Amazon görsel ASIN yöntemiyle bulundu: $amazonImage');
-            if (mounted) {
+            if (mounted && !_isDisposed && fetchSessionId == _fetchSessionId) {
               setState(() {
                 _imageUrlController.text = amazonImage!;
                 _previewImageUrl = amazonImage;
@@ -592,8 +596,10 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           return null;
         });
 
+        if (!mounted || _isDisposed || fetchSessionId != _fetchSessionId) return;
+
         final cleanPreview = preview;
-        if (cleanPreview != null && mounted) {
+        if (cleanPreview != null && mounted && !_isDisposed && fetchSessionId == _fetchSessionId) {
           final cleanImage = _cleanScrapedString(cleanPreview.imageUrl);
           if (!hasImage && cleanImage != null && _isValidImageUrl(cleanImage)) {
             setState(() {
@@ -653,36 +659,43 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             });
           }
 
-          if (cleanPreview.breadcrumbs != null && cleanPreview.breadcrumbs!.isNotEmpty) {
-            final joinedBreadcrumbs = cleanPreview.breadcrumbs!.join(' ');
-            final cleanT = _cleanScrapedString(cleanPreview.title) ?? '';
-            final textToClassify = '$joinedBreadcrumbs $cleanT';
-            final result = CategoryDetectionService.detectCategory(
-              textToClassify,
-              url: url,
-              store: _selectedStore,
-            );
-            if (result != null) {
-              setState(() {
-                _selectedCategory = result['categoryId']!;
-                _selectedSubCategory = result['subCategory'];
-                _isCategoryLockedByScraper = true;
-              });
-              hasCategory = true;
-            }
+          // FS-DEAL-08: Kategori tespiti - breadcrumbs tek başına şart koşulmaz!
+          // breadcrumbs, title ve description harmanlanarak en zengin metin sınıflandırmaya verilir.
+          final breadcrumbsText = (cleanPreview.breadcrumbs != null && cleanPreview.breadcrumbs!.isNotEmpty)
+              ? cleanPreview.breadcrumbs!.join(' ')
+              : '';
+          final cleanTitleText = _cleanScrapedString(cleanPreview.title) ?? _titleController.text.trim();
+          final cleanDescText = cleanDesc ?? '';
+          
+          final textToClassify = [breadcrumbsText, cleanTitleText, cleanDescText]
+              .where((String s) => s.isNotEmpty)
+              .join(' ');
+
+          final result = CategoryDetectionService.detectCategory(
+            textToClassify,
+            url: url,
+            store: _selectedStore ?? _storeController.text.trim(),
+          );
+          if (result != null) {
+            setState(() {
+              _selectedCategory = result['categoryId']!;
+              _selectedSubCategory = result['subCategory'];
+              _isCategoryLockedByScraper = true;
+            });
+            hasCategory = true;
           }
         }
       } catch (e) {
         _log('❌ LinkPreview metadata çekme hatası: $e');
       }
 
-      if (mounted) {
+      if (mounted && !_isDisposed && fetchSessionId == _fetchSessionId) {
         setState(() {
           _isLoadingImage = false;
         });
       }
 
-      if (mounted) {
+      if (mounted && !_isDisposed && fetchSessionId == _fetchSessionId) {
         setState(() {
           _isAutoDetecting = false;
         });
@@ -695,7 +708,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       _log('   🖼️ Görsel: ${_imageUrlController.text.trim().isNotEmpty ? "Görsel bulundu" : "Görsel yok"}');
 
       // 4. KULLANICI BİLGİLENDİRME (SNACKBAR)
-      if (mounted) {
+      if (mounted && !_isDisposed && fetchSessionId == _fetchSessionId) {
         final anySuccess = hasImage || hasTitle || hasStore || hasCategory || hasPrice;
 
         if (anySuccess) {
@@ -728,8 +741,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         }
       }
     } finally {
-      _isFetchingActive = false;
-      if (mounted && _isAutoDetecting) {
+      if (mounted && !_isDisposed && fetchSessionId == _fetchSessionId && _isAutoDetecting) {
         setState(() {
           _isAutoDetecting = false;
           _isLoadingImage = false;
@@ -913,6 +925,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _fetchSessionId++;
     if (widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty) {
       ShareIntentService.instance.markUrlConsumed(widget.initialUrl!);
     }
@@ -971,58 +985,61 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   }
 
   Future<void> _submitDeal() async {
+    if (_isSubmitting || _isLoading) return;
+    _isSubmitting = true;
     HapticFeedback.mediumImpact();
-    final user = _authService.currentUser;
-    if (user == null) {
-      _showCustomSnackBar(
-        message: 'Fırsat paylaşmak için giriş yapmalısınız',
-        icon: Icons.lock_outline_rounded,
-        backgroundColor: const Color(0xFFC62828),
-      );
-      return;
-    }
-
-    final results = await Future.wait([
-      _firestoreService.isDealSharingEnabled(),
-      _firestoreService.isUserDealBanned(user.uid),
-    ]);
-
-    final isEnabled = results[0];
-    final isBanned = results[1];
-
-    if (!isEnabled) {
-      if (mounted) {
-        showDealSharingDisabledBottomSheet(context);
-      }
-      return;
-    }
-
-    if (isBanned) {
-      if (mounted) {
-        showDealBannedBottomSheet(context);
-      }
-      return;
-    }
-
-    if (!_formKey.currentState!.validate()) {
-      _showCustomSnackBar(
-        message: 'Lütfen zorunlu alanları eksiksiz doldurun.',
-        icon: Icons.error_outline_rounded,
-        backgroundColor: const Color(0xFFC62828),
-      );
-      return;
-    }
-
-    final urlControllerText = _urlController.text.trim();
-    final validationResult = await DomainAllowlistService.validateUrl(urlControllerText);
-    if (validationResult != UrlValidationResult.valid) {
-      _showUrlValidationErrorDialog(validationResult);
-      return;
-    }
-
-    setState(() => _isLoading = true);
 
     try {
+      final user = _authService.currentUser;
+      if (user == null) {
+        _showCustomSnackBar(
+          message: 'Fırsat paylaşmak için giriş yapmalısınız',
+          icon: Icons.lock_outline_rounded,
+          backgroundColor: const Color(0xFFC62828),
+        );
+        return;
+      }
+
+      final results = await Future.wait([
+        _firestoreService.isDealSharingEnabled(),
+        _firestoreService.isUserDealBanned(user.uid),
+      ]);
+
+      final isEnabled = results[0];
+      final isBanned = results[1];
+
+      if (!isEnabled) {
+        if (mounted) {
+          showDealSharingDisabledBottomSheet(context);
+        }
+        return;
+      }
+
+      if (isBanned) {
+        if (mounted) {
+          showDealBannedBottomSheet(context);
+        }
+        return;
+      }
+
+      if (!_formKey.currentState!.validate()) {
+        _showCustomSnackBar(
+          message: 'Lütfen zorunlu alanları eksiksiz doldurun.',
+          icon: Icons.error_outline_rounded,
+          backgroundColor: const Color(0xFFC62828),
+        );
+        return;
+      }
+
+      final urlControllerText = _urlController.text.trim();
+      final validationResult = await DomainAllowlistService.validateUrl(urlControllerText);
+      if (validationResult != UrlValidationResult.valid) {
+        _showUrlValidationErrorDialog(validationResult);
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
       final categoryId = _selectedCategory;
       final subCategoryName = _selectedSubCategory;
 
@@ -1169,6 +1186,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         }
       }
     } finally {
+      _isSubmitting = false;
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -3072,7 +3090,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
           width: double.infinity,
           height: 46,
           child: ElevatedButton(
-            onPressed: (_isLoading || !_dealSharingEnabled || _isUserDealBanned) ? null : _submitDeal,
+            onPressed: (_isLoading || _isSubmitting || !_dealSharingEnabled || _isUserDealBanned) ? null : _submitDeal,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: Colors.white,

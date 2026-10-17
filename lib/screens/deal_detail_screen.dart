@@ -2328,7 +2328,7 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   String _extractFirstName(String? fullName) {
     if (fullName == null) return 'Kullanıcı';
     final trimmed = fullName.trim();
-    if (trimmed.isEmpty) return 'Kullanıcı';
+    if (trimmed.isEmpty || AuthService.isApplePrivateRelayHash(trimmed)) return 'Fırsat Avcısı';
     final parts = trimmed.split(RegExp(r'\s+'));
     return parts.isNotEmpty ? parts.first : trimmed;
   }

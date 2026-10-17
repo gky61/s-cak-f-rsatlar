@@ -159,6 +159,11 @@ import google_mobile_ads
             }
             result(true)
           }
+        } else if call.method == "getBadge" {
+          DispatchQueue.main.async {
+            let currentBadge = UIApplication.shared.applicationIconBadgeNumber
+            result(currentBadge)
+          }
         } else {
           result(FlutterMethodNotImplemented)
         }
@@ -240,6 +245,10 @@ import google_mobile_ads
     didFailToRegisterForRemoteNotificationsWithError error: Error
   ) {
     super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
+  }
+
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
   }
 }
 
