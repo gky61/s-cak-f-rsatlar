@@ -13,6 +13,7 @@ const linkScraperService = require('./link_scraper_service');
 const categoryDetectionService = require('./category_detection_service');
 const domainAllowlist = require('./domain_allowlist');
 const advertisingComplianceService = require('./advertising_compliance_service');
+const descriptionFormatterService = require('./description_formatter_service');
 const affiliateManager = require('./affiliate_manager');
 
 // P1-03 (R-INF-10): Fail-Closed Ortam Doğrulaması
@@ -399,65 +400,7 @@ function extractStoreFromLink(link, text) {
  * Açıklama metninden Editör, Yazar, Paylaşan, Admin vb. footer satırlarını ve sonrasını temizler.
  */
 function truncateEditorAndFooterInfo(rawText) {
-  if (!rawText) return '';
-
-  const lines = rawText.split(/\r?\n/);
-  const cleanLines = [];
-
-  const forbiddenKeywords = [
-    'editör',
-    'editor',
-    'yazar',
-    'paylaşan',
-    'paylasan',
-    'hazırlayan',
-    'hazirlayan',
-    'ekleyen',
-    'yayınlayan',
-    'yayinlayan',
-    'gönderen',
-    'gonderen',
-    'moderatör',
-    'moderator',
-    'admin',
-    'kaynak:',
-    'kanalımız',
-    'kanalimiz',
-    'grubumuz',
-    'takip edin',
-    'takipedin',
-    'katılın',
-    'katilin',
-    'sponsorlu',
-    'işbirliği',
-    'isbirligi',
-    'reklam içerir',
-    'reklam icerir'
-  ];
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      cleanLines.push(line);
-      continue;
-    }
-
-    const lowerStandard = trimmedLine.toLowerCase();
-    const lowerTurkish = trimmedLine.toLocaleLowerCase('tr-TR');
-
-    const hasForbiddenWord = forbiddenKeywords.some(keyword => 
-      lowerStandard.includes(keyword) || lowerTurkish.includes(keyword)
-    );
-
-    if (hasForbiddenWord) {
-      console.log(`✂️ [AÇIKLAMA FİLTRESİ] Editör/Yazar/Footer satırı tespit edildi ("${trimmedLine}"), bu satırdan sonrası kesildi.`);
-      break;
-    }
-
-    cleanLines.push(line);
-  }
-
-  return cleanLines.join('\n').trim();
+  return descriptionFormatterService.truncateEditorAndFooterInfo(rawText);
 }
 
 /**
@@ -611,7 +554,14 @@ async function saveDealToFirebase(message, chatInfo) {
     );
     const finalCategory = categoryResult.categoryId || 'diger';
 
-    const finalDescription = getDescriptionWithoutLinks(messageText, rawLinks);
+    const finalDescription = descriptionFormatterService.formatAndEnrichDescription({
+      rawText: messageText || scrapeResult.description || '',
+      links: rawLinks,
+      title: cleanedTitle,
+      store: storeFromLink,
+      category: finalCategory,
+      seed: uniqueDocId
+    });
 
     // ========================================
     // 📷 GÖRSEL KONTROLÜ VE YÜKLEME
@@ -720,9 +670,7 @@ async function saveDealToFirebase(message, chatInfo) {
     // Deal objesi
     const deal = {
       title: cleanedTitle,
-      description: advertisingComplianceService.ensureAdvertisingDisclosure(
-        truncateEditorAndFooterInfo(finalDescription || 'Fırsat Ürünü Detayları')
-      ),
+      description: finalDescription,
       link: finalDealLink,
       cleanUrl: finalCleanUrl,
       price: finalPrice,

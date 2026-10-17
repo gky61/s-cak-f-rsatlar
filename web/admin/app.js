@@ -1567,7 +1567,10 @@ function renderDeals() {
                 const store = (d.store || '').toLowerCase();
                 const brand = (d.brand || '').toLowerCase();
                 const id = (d.id || '').toLowerCase();
-                return title.includes(query) || store.includes(query) || brand.includes(query) || id.includes(query);
+                const tgTitle = (d.telegramChatTitle || '').toLowerCase();
+                const tgUser = (d.telegramChatUsername || '').toLowerCase();
+                const botSrc = (d.botSource || '').toLowerCase();
+                return title.includes(query) || store.includes(query) || brand.includes(query) || id.includes(query) || tgTitle.includes(query) || tgUser.includes(query) || botSrc.includes(query);
             });
         }
     }
@@ -1679,32 +1682,67 @@ function createDealRow(deal) {
             : initialUserLabel;
 
         sourceBadge = `
-            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-semibold" title="${escapeHtml(initialUserLabel)}">
-                <span class="material-symbols-outlined text-[14px]">person</span>
-                <span class="deal-user-source-label truncate max-w-[120px]" data-uid="${escapeHtml(postedByRaw)}">${escapeHtml(displayLabel)}</span>
+            <div class="flex flex-col items-start gap-1">
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-semibold" title="${escapeHtml(initialUserLabel)}">
+                    <span class="material-symbols-outlined text-[13px]">person</span>
+                    <span class="deal-user-source-label truncate max-w-[120px]" data-uid="${escapeHtml(postedByRaw)}">${escapeHtml(displayLabel)}</span>
+                </div>
+                <div class="flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500 pl-0.5">
+                    <span class="material-symbols-outlined text-[12px] text-purple-400 shrink-0">group</span>
+                    <span>Topluluk Avcısı</span>
+                </div>
             </div>
         `;
     } else {
-        // Bot paylaşımı (Telegram Kanalları)
-        let channelName = '';
-        if (deal.postedByName === 'Botkolik' || postedByRaw === 'botkolik') {
-            channelName = 'Botkolik';
-        } else if (deal.telegramChatTitle) {
-            channelName = deal.telegramChatTitle;
-        } else if (deal.telegramChatUsername) {
-            channelName = deal.telegramChatUsername.startsWith('@') ? deal.telegramChatUsername : `@${deal.telegramChatUsername}`;
-        } else if (postedByRaw.startsWith('telegram_')) {
-            channelName = `@${postedByRaw.replace('telegram_', '')}`;
-        } else if (postedByRaw && postedByRaw !== 'admin' && postedByRaw !== 'Bilinmiyor') {
-            channelName = postedByRaw;
-        } else {
-            channelName = 'Botkolik';
+        // Bot paylaşımı (Telegram Kanalları & Otonom Scraper)
+        let channelTitle = (deal.telegramChatTitle || '').trim();
+        let channelUsername = (deal.telegramChatUsername || '').trim();
+        let botSourceRaw = (deal.botSource || '').trim();
+
+        if (channelUsername && !channelUsername.startsWith('@')) {
+            channelUsername = `@${channelUsername}`;
         }
 
+        let channelSubLabel = '';
+        let channelFullTooltip = '';
+
+        if (channelTitle && channelUsername && channelTitle !== channelUsername) {
+            channelSubLabel = channelTitle;
+            channelFullTooltip = `Kaynak Kanal: ${channelTitle} (${channelUsername})`;
+        } else if (channelTitle) {
+            channelSubLabel = channelTitle;
+            channelFullTooltip = `Kaynak Kanal: ${channelTitle}`;
+        } else if (channelUsername) {
+            channelSubLabel = channelUsername;
+            channelFullTooltip = `Kaynak Kanal: ${channelUsername}`;
+        } else if (botSourceRaw.startsWith('telegram_')) {
+            const handle = `@${botSourceRaw.replace('telegram_', '')}`;
+            channelSubLabel = handle;
+            channelFullTooltip = `Kaynak Kanal: ${handle}`;
+        } else if (postedByRaw.startsWith('telegram_')) {
+            const handle = `@${postedByRaw.replace('telegram_', '')}`;
+            channelSubLabel = handle;
+            channelFullTooltip = `Kaynak Kanal: ${handle}`;
+        } else if (postedByRaw && postedByRaw !== 'botkolik' && postedByRaw !== 'admin' && postedByRaw !== 'Bilinmiyor') {
+            channelSubLabel = postedByRaw;
+            channelFullTooltip = `Kaynak: ${postedByRaw}`;
+        } else {
+            channelSubLabel = 'Otonom Web Radarı';
+            channelFullTooltip = 'Botkolik Otonom Web Radarı';
+        }
+
+        const isSpecificChannel = channelSubLabel !== 'Otonom Web Radarı';
+
         sourceBadge = `
-            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-semibold" title="${escapeHtml(channelName)}">
-                <span class="material-symbols-outlined text-[14px]">smart_toy</span>
-                <span class="truncate max-w-[120px]">${escapeHtml(channelName)}</span>
+            <div class="flex flex-col items-start gap-1">
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold" title="Botkolik Otonom Kazıma Motoru">
+                    <span class="material-symbols-outlined text-[13px]">smart_toy</span>
+                    <span>Botkolik</span>
+                </div>
+                <div class="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors pl-0.5 truncate max-w-[145px]" title="${escapeHtml(channelFullTooltip)}">
+                    <span class="material-symbols-outlined text-[13px] ${isSpecificChannel ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400'} shrink-0">${isSpecificChannel ? 'podcasts' : 'radar'}</span>
+                    <span class="truncate ${isSpecificChannel ? 'text-slate-700 dark:text-slate-300 font-semibold' : ''}">${escapeHtml(channelSubLabel)}</span>
+                </div>
             </div>
         `;
     }
@@ -2533,9 +2571,21 @@ async function showDealModal(deal) {
             <!-- Bot Source Info -->
             <div class="bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 p-4 shadow-sm flex items-start gap-3">
                 <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 mt-0.5">smart_toy</span>
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-col gap-1 w-full">
                     <span class="text-sm font-bold text-blue-900 dark:text-blue-200">${isNew ? 'Botkolik Paylaşımı' : 'Botkolik Otonom Bot'}</span>
                     <p class="text-xs text-blue-700 dark:text-blue-400 leading-normal">${isNew ? 'Bu fırsat Admin Paneli üzerinden Botkolik adına eklenmektedir.' : 'Bu fırsat otomatik olarak yakalandı. Lütfen fiyatı ve stok durumunu kontrol ediniz.'}</p>
+                    ${(!isNew && (deal.telegramChatTitle || deal.telegramChatUsername || deal.botSource)) ? `
+                        <div class="mt-2 pt-2 border-t border-blue-200/60 dark:border-blue-800/40 flex flex-col gap-0.5">
+                            <span class="text-[10px] text-blue-500 font-bold uppercase tracking-wider">Otonom Kaynak Kanalı</span>
+                            <div class="flex items-center gap-1.5 text-xs text-blue-900 dark:text-blue-200 font-bold">
+                                <span class="material-symbols-outlined text-[14px] text-sky-500">podcasts</span>
+                                <span>${escapeHtml(deal.telegramChatTitle || deal.telegramChatUsername || deal.botSource)}</span>
+                            </div>
+                            ${(deal.telegramChatUsername && deal.telegramChatTitle && deal.telegramChatTitle !== deal.telegramChatUsername) ? `
+                                <span class="text-[11px] text-blue-600/80 dark:text-blue-400 pl-5 font-mono">${escapeHtml(deal.telegramChatUsername.startsWith('@') ? deal.telegramChatUsername : '@' + deal.telegramChatUsername)}</span>
+                            ` : ''}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
             ` : ''}

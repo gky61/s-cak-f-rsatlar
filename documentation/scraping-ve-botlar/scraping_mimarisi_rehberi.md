@@ -675,3 +675,41 @@ Telegram Botu (`telegram_bot.js`), Mobil İstemci (`DealService.createDeal`) ve 
 | **Trendyol / N11** | Tüm query parametreleri temizlenir (Ürün ID path'tedir) | `trendyol.com/marka/urun-p-12345?merchantId=777` | `https://www.trendyol.com/marka/urun-p-12345` |
 | **Özel Mağazalar** | Sadece ürün ID parametreleri (`id`, `sku`, `p` vb.) korunur | `butik.com/urun.php?id=999&fbclid=xyz` | `https://butik.com/urun.php?id=999` |
 
+---
+
+## 17. 🎨 Fırsat Açıklaması Temizleme & FırsatKolik Editoryal Marka Motoru (`description_formatter_service.js`)
+
+### 17.1 Problem ve Kök Neden
+Telegram kanallarından scrape edilen paylaşımlarda, Telegram gönderisini hazırlayan editörlerin eklediği CTA buton metinleri (`👉 FIRSATA GİT 👈`), rakip kanal yönlendirmeleri (`📣 Diğer kanallarımız için TAZEFIRSAT.com`), sosyal medya linkleri (`t.me/...`) ve mükerrer başlık/çıplak fiyat satırları açıklamaya sızabiliyordu.
+
+### 17.2 Çift Katmanlı Mimari Çözüm
+
+```mermaid
+graph TD
+    A[Ham Telegram Mesajı] --> B[1. CTA & Rakip Kanal Kesme Kalkanı]
+    B --> C[2. Mükerrer Başlık & Çıplak Fiyat Ayıklama]
+    C --> D[3. İpucu, Kupon ve Şartları Zenginleştirme]
+    D --> E[4. Dinamik FırsatKolik Başlık & Güven Rozeti]
+    E --> F[5. Yasal #tanıtım Kapanışı]
+    F --> G[Özgün, Kurumsal FırsatKolik Detayı]
+```
+
+1. **Kesme & Budama Kalkanı (Truncation Shield):**
+   `👉 FIRSATA GİT`, `Satın Al`, `Ürüne Git`, `Tıkla`, `Link:`, `diğer kanallarımız`, `kanallarımız`, `gruplarımız`, `t.me/`, `@kanal`, `tazefirsat.com` vb. 30'dan fazla CTA ve rakip kanal tetikleyicisi tespit edildiği anda, o satır ve altındaki tüm çöp metin anında kesilir.
+   *Aşırı genel filtreleme önlemi:* "3 al 2 öde", "çift kanal ram" gibi kampanya ve donanım terimlerinin yanlış kesilmesini önleyen kelime sınırı (`\b`) ve istisna kuralları uygulanır.
+2. **Arayüz Mükerrerlik Elemesi (Deduplication):**
+   - **Başlık Elemesi:** Ekranın en üstünde zaten yazan ürün başlığı (kelime benzerliği ≥ %60) metinden otomatik temizlenir. Kampanya şartı taşıyan satırlar güvenlik kilidiyle korunur.
+   - **Çıplak Fiyat Elemesi:** Altta büyük puntolarla yazan fiyat (örn. `💳 207 TL`), ek bir kampanya şartı taşımıyorsa açıklamadan kaldırılır.
+3. **Kıymetli İpuçlarının Korunması & Parlatılması:**
+   - `⚠️ 3 adet ekleyin, indirim ödeme aşamasında uygulanır` gibi can alıcı satırlar korunur ve `💡` rozetiyle vurgulanır.
+   - Kupon kodları `🏷️ Kupon Kodu: ...` şeklinde standartlaştırılır.
+   - Satıcı ve kargo detayları `🛍️ Satıcı: Amazon` olarak temizlenir.
+4. **FırsatKolik Marka Kimliği & Dinamik Rotasyon:**
+   Tüm fırsatların tekdüze görünmemesi için fırsat ID'sine göre deterministik rotasyonla editoryal başlık ve güven mikro-metni eklenir:
+   - **Dinamik Başlıklar:** `✨ FırsatKolik İndirim Rehberi`, `🎯 FırsatKolik Fırsat Radarı`, `💡 FırsatKolik Editör Notu`, `🔥 FırsatKolik Avantaj Bülteni`
+   - **Güven Rozetleri (Callout Footers):** `⚡ FırsatKolik ile yakaladınız! İndirim ve stoklar anlık değişebilir.`, `🛡️ FırsatKolik İpucu: Avantajlı fiyattan yararlanmak için tükenmeden sepetinize ekleyin.`
+   - **Yasal Uyum:** 1 Ağustos Ticari Reklam Yönetmeliği gereği en alta tek bir `#tanıtım` etiketi eklenir.
+5. **İstemci İçi Savunma Hattı (`AdvertisingComplianceService.cleanCompetitorAndCtaFooters`):**
+   Flutter katmanında (`DealDetailScreen._buildDescriptionWidget`) ekrana basılmadan hemen önce çalışarak, Firestore'daki eski fırsatlarda dahi rakip kanal ve buton kalıntılarının görünmesini engeller. Zaten temiz yeni fırsatlarda `startsWith('...FırsatKolik...')` ile O(1) anında geri dönerek 120 FPS mobil kaydırma akıcılığını korur.
+
+

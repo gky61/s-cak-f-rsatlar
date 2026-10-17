@@ -15,6 +15,7 @@ import '../services/affiliate/store_redirect_service.dart';
 import '../services/analytics_service.dart';
 import '../services/notification_service.dart';
 import '../services/deal_sync_service.dart';
+import '../services/advertising_compliance_service.dart';
 import '../theme/app_theme.dart';
 import 'profile_screen.dart';
 import 'botkolik_profile_screen.dart';
@@ -2222,7 +2223,10 @@ class _DealDetailScreenState extends State<DealDetailScreen> {
   void _showFullScreenImage(String imageUrl) =>
       DealDetailImage.showFullScreenImage(context, imageUrl);
 
-  Widget _buildDescriptionWidget(String text, bool isDark, Color primaryColor, String store) {
+  Widget _buildDescriptionWidget(String rawText, bool isDark, Color primaryColor, String store) {
+    // İstemci savunma kalkanı: Mevcut/eski fırsatlardaki rakip kanal adı, CTA ve footer kalıntılarını temizle
+    final text = AdvertisingComplianceService.cleanCompetitorAndCtaFooters(rawText);
+
     if (text.isEmpty) {
       return Text(
         'Açıklama eklemek için tıklayın',

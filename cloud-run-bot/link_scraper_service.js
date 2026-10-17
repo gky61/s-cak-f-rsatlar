@@ -402,10 +402,10 @@ function cleanTeknosaProductUrl(rawUrl) {
   }
 }
 
-/** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür (Mutlak 25sn Hard Timeout Korumalı) */
+/** URL yönlendirmelerini çözer ve nihai hedef URL'yi döndürür (Geniş 60sn Bufferlı Timeout Korumalı) */
 async function resolveUrlRedirects(url) {
   if (!url || typeof url !== 'string') return url;
-  return withTimeout(_resolveUrlRedirectsInternal(url), 25000, url, `resolveUrlRedirects(${url.substring(0, 40)})`);
+  return withTimeout(_resolveUrlRedirectsInternal(url), 60000, url, `resolveUrlRedirects(${url.substring(0, 40)})`);
 }
 
 async function _resolveUrlRedirectsInternal(url) {
@@ -1466,9 +1466,9 @@ function checkForBotBlockers(htmlText, url) {
   }
 }
 
-/** Verilen URL için ürün bilgilerini çeker (Mutlak 40sn Hard Timeout Korumalı) */
+/** Verilen URL için ürün bilgilerini çeker (Geniş 180sn Bufferlı Timeout Korumalı - Orijinal Veri Çekimini Asla Kesmez) */
 async function scrapeProductFromUrl(url) {
-  return withTimeout(_scrapeProductFromUrlInternal(url), 40000, {
+  return withTimeout(_scrapeProductFromUrlInternal(url), 180000, {
     url,
     canonicalUrl: null,
     title: null,

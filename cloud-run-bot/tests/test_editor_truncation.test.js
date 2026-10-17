@@ -1,65 +1,6 @@
 const assert = require('assert');
 
-function truncateEditorAndFooterInfo(rawText) {
-  if (!rawText) return '';
-
-  const lines = rawText.split(/\r?\n/);
-  const cleanLines = [];
-
-  const forbiddenKeywords = [
-    'editör',
-    'editor',
-    'yazar',
-    'paylaşan',
-    'paylasan',
-    'hazırlayan',
-    'hazirlayan',
-    'ekleyen',
-    'yayınlayan',
-    'yayinlayan',
-    'gönderen',
-    'gonderen',
-    'moderatör',
-    'moderator',
-    'admin',
-    'kaynak:',
-    'kanalımız',
-    'kanalimiz',
-    'grubumuz',
-    'takip edin',
-    'takipedin',
-    'katılın',
-    'katilin',
-    'sponsorlu',
-    'işbirliği',
-    'isbirligi',
-    'reklam içerir',
-    'reklam icerir'
-  ];
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      cleanLines.push(line);
-      continue;
-    }
-
-    const lowerStandard = trimmedLine.toLowerCase();
-    const lowerTurkish = trimmedLine.toLocaleLowerCase('tr-TR');
-
-    const hasForbiddenWord = forbiddenKeywords.some(keyword => 
-      lowerStandard.includes(keyword) || lowerTurkish.includes(keyword)
-    );
-
-    if (hasForbiddenWord) {
-      break;
-    }
-
-    cleanLines.push(line);
-  }
-
-  return cleanLines.join('\n').trim();
-}
+const { truncateEditorAndFooterInfo } = require('../description_formatter_service');
 
 function runTests() {
   console.log('🧪 Testing Telegram Description Editor Truncation...\n');
@@ -74,14 +15,14 @@ Detaylar için kanala katılın`;
   console.log('1. Test Editör:\n', r1);
   assert.strictEqual(r1, `Harika fırsat ürünü 100 TL\nKaçırmayın çok ucuz`);
 
-  // Test 2: "YAZAR : Mehmet" (Uppercase)
+  // Test 2: "Moderatör: Mehmet"
   const t2 = `Anker Bluetooth Kulaklık
 %30 İndirimde
 
-YAZAR : Mehmet
+Moderatör: Mehmet
 Kanalımıza katılın`;
   const r2 = truncateEditorAndFooterInfo(t2);
-  console.log('2. Test YAZAR:\n', r2);
+  console.log('2. Test Moderatör:\n', r2);
   assert.strictEqual(r2, `Anker Bluetooth Kulaklık\n%30 İndirimde`);
 
   // Test 3: "Paylaşan: @bot"
@@ -100,6 +41,15 @@ Sadece bugün özel fiyat!`;
   const r4 = truncateEditorAndFooterInfo(t4);
   console.log('4. Test Normal Text:\n', r4);
   assert.strictEqual(r4, t4);
+
+  // Test 5: Kitap Açıklaması ve Yazar Bilgisi (ASLA KESİLMEMELİ!)
+  const t5 = `Sefiller - 2 Cilt Takım
+Yazar: Victor Hugo
+Çevirmen: Hasan Ali Yücel
+Yayınevi: Türkiye İş Bankası Kültür Yayınları`;
+  const r5 = truncateEditorAndFooterInfo(t5);
+  console.log('5. Test Kitap Yazarı Korunumu:\n', r5);
+  assert.strictEqual(r5, t5, 'Book author and publisher info must NEVER be truncated!');
 
   console.log('\n✅ ALL DESCRIPTION TRUNCATION TESTS PASSED!');
 }

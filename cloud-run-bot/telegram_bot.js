@@ -14,6 +14,7 @@ const linkScraperService = require('./link_scraper_service');
 const categoryDetectionService = require('./category_detection_service');
 const domainAllowlist = require('./domain_allowlist');
 const advertisingComplianceService = require('./advertising_compliance_service');
+const descriptionFormatterService = require('./description_formatter_service');
 const affiliateManager = require('./affiliate_manager');
 
 // P1-03 (R-INF-10): Fail-Closed Ortam Doğrulaması
@@ -158,7 +159,7 @@ let lastPollCycleCompletedAt = Date.now();
 let lastPollDurationMs = 0;
 let consecutiveDeadlocks = 0;
 let totalDeadlockRecoveries = 0;
-const POLLING_DEADLOCK_TIMEOUT_MS = 90000; // 90 saniye
+const POLLING_DEADLOCK_TIMEOUT_MS = 300000; // 5 dakika (300 saniye - Geniş bufferlı koruma)
 const MAX_CONSECUTIVE_DEADLOCKS = 3;
 let lastRestartTrigger = 0;
 let lastForcePollTrigger = 0;
@@ -765,6 +766,43 @@ function cleanFallbackTitle(rawTitle) {
 }
 
 /**
+ * Telegram mesaj metninden en uygun ürün başlığını ayıklar.
+ * Fiyat, link, hashtag ve pazarlama/slogan satırlarını filtreleyerek
+ * yalnızca gerçek ürün adı satırını döndürür.
+ */
+function extractTitleFromTelegramMessage(messageText) {
+  if (!messageText || typeof messageText !== 'string') return 'Fırsat Ürünü';
+  const lines = messageText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  const isSkipLine = (line) => {
+    const l = line.toLowerCase();
+    // 1. Link içeren satırlar
+    if (/https?:\/\/|t\.me\/|hb\.biz|ty\.gl|amzn\.to|bit\.ly|amzlinks|pzrm\.me/i.test(l)) return true;
+    // 2. Hashtag ve reklam ibareleri
+    if (/#işbirliği|#reklam|^#|^işbirliği$|^reklam$/i.test(l)) return true;
+    // 3. Fiyat, taksit ve kupon kodu satırları
+    if (/^[✅🔥*•\-–🔺!⚡️\s]*(\d{1,3}(?:\.\d{3})*|\d+)(?:,\d{2})?\s*(?:tl|₺|lira)/i.test(l)) return true;
+    if (/^[✅🔥*•\-–🔺!⚡️\s]*₺\s*\d+/i.test(l)) return true;
+    if (/^\s*\d+\s*x\s*\d+/i.test(l)) return true;
+    if (/kupon kodu|sepette/i.test(l)) return true;
+    // 4. Promosyon, dip fiyat ve indirim sloganları
+    if (/\b(?:son \d+ (?:ay|yıl|hafta|gün)(?:ın)? en düşük|en düşük fiyat|tarihi (?:en düşük|fiyat|dip)|kaçırma(?:yın)?|günün fırsatı|büyük (?:indirim|fırsat)|efsane (?:indirim|fiyat)|şok (?:fiyat|indirim)|süper (?:fiyat|indirim)|dibe vurdu|tükenmeden al|çökün|koşun|kargo bedava|ücretsiz kargo|piyasa fiyatı)/i.test(l)) return true;
+    return false;
+  };
+
+  for (const line of lines) {
+    if (!isSkipLine(line) && /[a-zA-ZçğıöşüÇĞİÖŞÜ]/.test(line) && line.length >= 5) {
+      const candidate = cleanFallbackTitle(line);
+      if (candidate && candidate !== 'Fırsat Ürünü' && candidate.length >= 5) {
+        return candidate;
+      }
+    }
+  }
+
+  return cleanFallbackTitle(lines[0] || messageText);
+}
+
+/**
  * Fırsat linkinden mağaza platformunu bulur
  */
 function extractStoreFromLink(link, text) {
@@ -843,65 +881,7 @@ function extractStoreFromLink(link, text) {
  * Açıklama metninden Editör, Yazar, Paylaşan, Admin vb. footer satırlarını ve sonrasını temizler.
  */
 function truncateEditorAndFooterInfo(rawText) {
-  if (!rawText) return '';
-
-  const lines = rawText.split(/\r?\n/);
-  const cleanLines = [];
-
-  const forbiddenKeywords = [
-    'editör',
-    'editor',
-    'yazar',
-    'paylaşan',
-    'paylasan',
-    'hazırlayan',
-    'hazirlayan',
-    'ekleyen',
-    'yayınlayan',
-    'yayinlayan',
-    'gönderen',
-    'gonderen',
-    'moderatör',
-    'moderator',
-    'admin',
-    'kaynak:',
-    'kanalımız',
-    'kanalimiz',
-    'grubumuz',
-    'takip edin',
-    'takipedin',
-    'katılın',
-    'katilin',
-    'sponsorlu',
-    'işbirliği',
-    'isbirligi',
-    'reklam içerir',
-    'reklam icerir'
-  ];
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      cleanLines.push(line);
-      continue;
-    }
-
-    const lowerStandard = trimmedLine.toLowerCase();
-    const lowerTurkish = trimmedLine.toLocaleLowerCase('tr-TR');
-
-    const hasForbiddenWord = forbiddenKeywords.some(keyword => 
-      lowerStandard.includes(keyword) || lowerTurkish.includes(keyword)
-    );
-
-    if (hasForbiddenWord) {
-      console.log(`✂️ [AÇIKLAMA FİLTRESİ] Editör/Yazar/Footer satırı tespit edildi ("${trimmedLine}"), bu satırdan sonrası kesildi.`);
-      break;
-    }
-
-    cleanLines.push(line);
-  }
-
-  return cleanLines.join('\n').trim();
+  return descriptionFormatterService.truncateEditorAndFooterInfo(rawText);
 }
 
 /**
@@ -1055,7 +1035,12 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
       descSource = "Telegram Link Önizleme";
     }
 
-    const cleanedTitle = cleanFallbackTitle(scrapeResult.title || messageText);
+    let cleanedTitle = '';
+    if (scrapeResult.title) {
+      cleanedTitle = cleanFallbackTitle(scrapeResult.title);
+    } else {
+      cleanedTitle = extractTitleFromTelegramMessage(messageText);
+    }
     let finalPrice = scrapeResult.price || extractPrice(messageText) || 0;
 
     // Eğer fiyat hala bulunamadıysa (sadece link atılmış ve scraper engellenmiş olabilir),
@@ -1085,7 +1070,14 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     );
     const finalCategory = categoryResult.categoryId || 'diger';
 
-    const finalDescription = getDescriptionWithoutLinks(messageText, rawLinks);
+    const finalDescription = descriptionFormatterService.formatAndEnrichDescription({
+      rawText: messageText || scrapeResult.description || '',
+      links: rawLinks,
+      title: cleanedTitle,
+      store: storeFromLink,
+      category: finalCategory,
+      seed: uniqueDocId
+    });
 
     // ========================================
     // 📷 GÖRSEL KONTROLÜ VE YÜKLEME
@@ -1261,9 +1253,7 @@ async function saveDealToFirebase(message, chatInfo, isTest = false) {
     // Deal objesi
     const deal = {
       title: cleanedTitle,
-      description: advertisingComplianceService.ensureAdvertisingDisclosure(
-        truncateEditorAndFooterInfo(finalDescription || scrapeResult.description || 'Fırsat Ürünü Detayları')
-      ),
+      description: finalDescription,
       link: finalDealLink,
       price: finalPrice,
       originalPrice: origPrice,
@@ -1896,7 +1886,7 @@ async function pollMonitoredChannels() {
                   };
                   await withTimeout(
                     handleTelegramMessageEvent(fakeEvent),
-                    45000,
+                    240000,
                     null,
                     `handleTelegramMessageEvent ChannelDiff [${channelInfo.title}]`
                   );
@@ -1953,7 +1943,7 @@ async function pollMonitoredChannels() {
           };
           await withTimeout(
             handleTelegramMessageEvent(fakeEvent),
-            45000,
+            240000,
             null,
             `handleTelegramMessageEvent Fallback [${channelInfo.title}]`
           );
