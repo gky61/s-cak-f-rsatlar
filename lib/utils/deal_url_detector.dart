@@ -107,6 +107,9 @@ class DealUrlDetector {
     if (lower.contains('migros.com.tr')) {
       return 'Migros';
     }
+    if (lower.contains('carrefoursa.com')) {
+      return 'CarrefourSA';
+    }
     if (lower.contains('getir.com')) {
       return 'Getir';
     }

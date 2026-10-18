@@ -557,7 +557,7 @@ const AffiliateManager = {
         const majorStores = [
           'trendyol', 'n11', 'pazarama', 'pttavm',
           'zara', 'defacto', 'mavi', 'beymen', 'mediamarkt',
-          'migros', 'getir', 'vatanbilgisayar', 'idefix', 'itopya', 'incehesap', 'havit'
+          'migros', 'getir', 'vatanbilgisayar', 'idefix', 'itopya', 'incehesap', 'havit', 'carrefoursa'
         ];
 
         let isMajorStore = majorStores.some(store => host.includes(store));

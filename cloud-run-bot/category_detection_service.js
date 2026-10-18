@@ -1136,10 +1136,14 @@ function detectCategory(title, breadcrumbs = [], url = '', store = '') {
 
   const isGetirOrMigros = lowerUrl.includes('getir.com') ||
     lowerUrl.includes('migros.com.tr') ||
+    lowerUrl.includes('carrefoursa.com') ||
     lowerStore.includes('getir') ||
     lowerStore.includes('migros') ||
+    lowerStore.includes('carrefoursa') ||
+    lowerStore.includes('carrefour') ||
     lowerText.includes('getir.com') ||
-    lowerText.includes('migros.com.tr');
+    lowerText.includes('migros.com.tr') ||
+    lowerText.includes('carrefoursa.com');
 
   const result = _detectCategoryInternal(title, safeBreadcrumbs);
 

@@ -11,6 +11,7 @@ import '../utils/asset_path_migration.dart';
 import 'system_log_service.dart';
 import 'deal_search_engine.dart';
 import 'deal_sync_service.dart';
+import 'notification_service.dart';
 
 void _log(String message) {
   if (kDebugMode) print(message);
@@ -30,6 +31,7 @@ class DealsPageResult {
   final bool isFromCache;
   final bool isError;
   final String? errorMessage;
+  final bool hasFollowedCategories;
 
   const DealsPageResult({
     required this.deals,
@@ -38,6 +40,7 @@ class DealsPageResult {
     this.isFromCache = false,
     this.isError = false,
     this.errorMessage,
+    this.hasFollowedCategories = true,
   });
 }
 
@@ -369,13 +372,22 @@ class DealService {
       }
 
       if (followedCategoryKeys.isEmpty && followedSubCategoryKeys.isEmpty) {
+        NotificationService().setCachedFollowedCategories(userId, const [], const []);
         return const DealsPageResult(
           deals: [],
           lastDocument: null,
           hasMore: false,
           isFromCache: false,
+          hasFollowedCategories: false,
         );
       }
+
+      // Kategori takibi var, önbelleği güncelle
+      NotificationService().setCachedFollowedCategories(
+        userId,
+        followedCategoryKeys.toList(),
+        followedSubCategoryKeys.toList(),
+      );
 
       // Ebeveyn kategorileri topla
       final Set<String> parentCategoryKeys = Set.from(followedCategoryKeys);
@@ -492,6 +504,7 @@ class DealService {
         lastDocument: newLastDoc,
         hasMore: hasMore,
         isFromCache: isFromCache,
+        hasFollowedCategories: true,
       );
     } catch (e) {
       final isCacheMiss = source == Source.cache && e.toString().contains('unavailable');

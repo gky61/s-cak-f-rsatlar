@@ -39,14 +39,17 @@ class CategoryDetectionService {
       result = _detectCategoryInternal(safeText);
     }
 
-    // 2. Getir / Migros özel durumu (Süpermarket dikeyinde tam koruma)
-    final isGetirOrMigros = lowerUrl.contains('getir.com') ||
+    // 2. Getir / Migros / CarrefourSA özel durumu (Süpermarket dikeyinde tam koruma)
+    final isSupermarketSpecial = lowerUrl.contains('getir.com') ||
         lowerUrl.contains('migros.com.tr') ||
+        lowerUrl.contains('carrefoursa.com') ||
         lowerStore.contains('getir') ||
         lowerStore.contains('migros') ||
-        (trimmedText.isNotEmpty && (trimmedText.toLowerCase().contains('getir.com') || trimmedText.toLowerCase().contains('migros.com.tr')));
+        lowerStore.contains('carrefoursa') ||
+        lowerStore.contains('carrefour') ||
+        (trimmedText.isNotEmpty && (trimmedText.toLowerCase().contains('getir.com') || trimmedText.toLowerCase().contains('migros.com.tr') || trimmedText.toLowerCase().contains('carrefoursa.com')));
 
-    if (isGetirOrMigros) {
+    if (isSupermarketSpecial) {
       String? subCategory;
       if (result != null && result['categoryId'] == 'supermarket') {
         subCategory = result['subCategory'];
@@ -56,7 +59,7 @@ class CategoryDetectionService {
       }
       subCategory ??= 'Gıda Ürünleri';
 
-      _log('🛒 Getir/Migros ürünü tespit edildi -> Kategori: supermarket, Alt Kategori: $subCategory');
+      _log('🛒 Süpermarket (Getir/Migros/CarrefourSA) ürünü tespit edildi -> Kategori: supermarket, Alt Kategori: $subCategory');
 
       return {
         'categoryId': 'supermarket',

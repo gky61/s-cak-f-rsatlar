@@ -483,6 +483,7 @@ const AffiliateManager = {
             if (host.includes('boyner.com.tr')) return 'Boyner';
             if (host.includes('gamer.gen.tr')) return 'Gamer Gen';
             if (host.includes('gaming.gen.tr')) return 'Gaming Gen';
+            if (host.includes('carrefoursa.com')) return 'CarrefourSA';
             return 'Bilinmeyen';
         } catch (_) {
             return 'Bilinmeyen';
@@ -566,7 +567,7 @@ const AffiliateManager = {
                 const majorStores = [
                     'trendyol', 'n11', 'pazarama', 'pttavm',
                     'zara', 'defacto', 'mavi', 'beymen', 'mediamarkt',
-                    'migros', 'getir', 'vatanbilgisayar', 'idefix', 'itopya', 'incehesap', 'havit'
+                    'migros', 'getir', 'vatanbilgisayar', 'idefix', 'itopya', 'incehesap', 'havit', 'carrefoursa'
                 ];
 
                 let isMajorStore = majorStores.some(store => host.includes(store));

@@ -327,6 +327,7 @@ class AffiliateService {
       final hostname = uri.host.toLowerCase();
       if (hostname.contains('havitstore.com.tr')) return 'Havit';
       if (hostname.contains('migros.com.tr')) return 'Migros';
+      if (hostname.contains('carrefoursa.com')) return 'CarrefourSA';
       if (hostname.contains('getir.com')) return 'Getir';
       if (hostname.contains('boyner.com.tr')) return 'Boyner';
       if (hostname.contains('vatanbilgisayar.com')) return 'Vatan Bilgisayar';

@@ -47,7 +47,8 @@ function cleanProductUrl(urlStr) {
       'idefix',
       'itopya',
       'incehesap',
-      'havit'
+      'havit',
+      'carrefoursa'
     ];
     
     let isMajorStore = false;

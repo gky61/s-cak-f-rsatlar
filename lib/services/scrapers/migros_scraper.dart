@@ -5,9 +5,283 @@ import 'package:http/http.dart' as http;
 import 'base_scraper.dart';
 
 class MigrosScraper extends BaseProductScraper {
+  static final Expando<Map<String, dynamic>> _infoExpando = Expando<Map<String, dynamic>>('migrosInfo');
+  static final Expando<String> _urlExpando = Expando<String>('migrosUrl');
+
+  Map<String, dynamic>? _lastProductInfo;
+  String? _lastUrl;
+
 
   @override
   String get domain => 'migros.com.tr';
+
+  Map<String, dynamic>? _getInfo(dom.Document document) {
+    return _infoExpando[document] ?? _lastProductInfo;
+  }
+
+  String? _getUrl(dom.Document document) {
+    return _urlExpando[document] ??
+        _lastUrl ??
+        document.querySelector('link[rel="canonical"]')?.attributes['href'];
+  }
+
+  /// URL veya DOM'dan Migros ürün ID'sini (SKU) çıkarır
+  String? extractProductId(String url, [dom.Document? document]) {
+    // 1. URL pattern: -p-([a-fA-F0-9]+) (query ve fragment öncesi path sınırı ile)
+    final cleanPath = Uri.tryParse(url)?.path ?? '';
+    final searchUrl = cleanPath.isNotEmpty ? cleanPath : url;
+
+    final matchHex = RegExp(r'-p-([a-fA-F0-9]+)(?:[/?#]|$)', caseSensitive: false).firstMatch(searchUrl);
+    if (matchHex != null) {
+      final hexStr = matchHex.group(1)!;
+      final dec = int.tryParse(hexStr, radix: 16);
+      if (dec != null && dec > 0) return dec.toString();
+      final decFallback = int.tryParse(hexStr);
+      if (decFallback != null && decFallback > 0) return decFallback.toString();
+    }
+
+    // 2. Canonical URL (document varsa)
+    if (document != null) {
+      final canonical = document.querySelector('link[rel="canonical"]')?.attributes['href'] ?? '';
+      final canonicalPath = Uri.tryParse(canonical)?.path ?? '';
+      final searchCanonical = canonicalPath.isNotEmpty ? canonicalPath : canonical;
+
+      final matchCanonical = RegExp(r'-p-([a-fA-F0-9]+)(?:[/?#]|$)', caseSensitive: false).firstMatch(searchCanonical);
+      if (matchCanonical != null) {
+        final hexStr = matchCanonical.group(1)!;
+        final dec = int.tryParse(hexStr, radix: 16);
+        if (dec != null && dec > 0) return dec.toString();
+        final decFallback = int.tryParse(hexStr);
+        if (decFallback != null && decFallback > 0) return decFallback.toString();
+      }
+
+      // 3. og:image or meta tag: product/(\d+)
+      final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'] ?? '';
+      final matchImg = RegExp(r'product\/(\d+)').firstMatch(ogImage);
+      if (matchImg != null) return matchImg.group(1);
+    }
+
+    // 4. URL containing product/(\d+)
+    final matchUrlProduct = RegExp(r'product\/(\d+)').firstMatch(url);
+    if (matchUrlProduct != null) return matchUrlProduct.group(1);
+
+    return null;
+  }
+
+  /// URL slug'ından temiz ve okunaklı başlık türetir (Örn: soke-un-1-kg -> Söke Un 1 Kg)
+  String? parseSlugTitle(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    try {
+      final uri = Uri.parse(url);
+      final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+      if (segments.isEmpty) return null;
+
+      String lastSegment = segments.last;
+      lastSegment = lastSegment.replaceAll(RegExp(r'-p-[a-fA-F0-9]+$', caseSensitive: false), '');
+      lastSegment = lastSegment.replaceAll(RegExp(r'\.(html|htm|php)$', caseSensitive: false), '');
+
+      if (lastSegment.trim().isEmpty) return null;
+
+      final words = lastSegment.split(RegExp(r'[-_]')).where((w) => w.isNotEmpty).map((w) {
+        if (w.isEmpty) return '';
+        final lower = w.toLowerCase();
+        // Türkçe özel harf eşlemeleri
+        if (lower == 'soke') return 'Söke';
+        if (lower == 'kadin') return 'Kadın';
+        if (lower == 'erkek') return 'Erkek';
+        if (lower == 'cikolata') return 'Çikolata';
+        if (lower == 'sut') return 'Süt';
+        if (lower == 'seker') return 'Şeker';
+        if (lower == 'cay') return 'Çay';
+        if (lower == 'yag') return 'Yağ';
+        return lower[0].toUpperCase() + lower.substring(1);
+      }).toList();
+
+      if (words.isEmpty) return null;
+      return words.join(' ');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> prepare({required dom.Document document, required String url}) async {
+    _lastUrl = url;
+    _urlExpando[document] = url;
+    _lastProductInfo = null;
+
+    final productId = extractProductId(url, document);
+    if (productId != null) {
+      final info = await _fetchScreensApi(productId, url: url);
+      if (info != null) {
+        _infoExpando[document] = info;
+        _lastProductInfo = info;
+      }
+    }
+  }
+
+  double _extractCandidatePrice(Map<String, dynamic> info) {
+    final prices = <double>[];
+    for (final key in ['shownPrice', 'loyaltyPrice', 'salePrice']) {
+      dynamic val = info[key];
+      if (val is String) val = num.tryParse(val);
+      if (val is num && val > 0) {
+        prices.add(val.toDouble());
+      }
+    }
+    if (prices.isEmpty) return double.infinity;
+    prices.sort();
+    return prices.first;
+  }
+
+  double _scoreCandidate(Map<String, dynamic> info) {
+    dynamic shownPrice = info['shownPrice'];
+    if (shownPrice is String) shownPrice = num.tryParse(shownPrice);
+    dynamic regularPrice = info['regularPrice'];
+    if (regularPrice is String) regularPrice = num.tryParse(regularPrice);
+    dynamic loyaltyPrice = info['loyaltyPrice'];
+    if (loyaltyPrice is String) loyaltyPrice = num.tryParse(loyaltyPrice);
+    dynamic salePrice = info['salePrice'];
+    if (salePrice is String) salePrice = num.tryParse(salePrice);
+    dynamic discountRate = info['discountRate'];
+    if (discountRate is String) discountRate = num.tryParse(discountRate);
+
+    final effectivePrice = _extractCandidatePrice(info);
+
+    final hasDiscount = (
+      (loyaltyPrice is num && regularPrice is num && loyaltyPrice < regularPrice) ||
+      (shownPrice is num && regularPrice is num && shownPrice < regularPrice) ||
+      (loyaltyPrice is num && salePrice is num && loyaltyPrice < salePrice) ||
+      (shownPrice is num && salePrice is num && shownPrice < salePrice) ||
+      (discountRate is num && discountRate > 0) ||
+      (info['badges'] is List && (info['badges'] as List).any((b) => b is Map && (b['name'] == 'PRICE_PROMOTED' || b['name'] == 'CROSS_PROMOTED'))) ||
+      (info['crmDiscountTags'] is List && (info['crmDiscountTags'] as List).isNotEmpty)
+    );
+
+    double score = 0.0;
+    if (hasDiscount) {
+      score = 1000.0 + ((discountRate is num) ? discountRate.toDouble() : 1.0);
+      if (regularPrice is num && effectivePrice < regularPrice) {
+        score += (regularPrice.toDouble() - effectivePrice) / 100.0;
+      }
+    }
+    return score;
+  }
+
+  void _mergeMissingFields(Map<String, dynamic> target, Map<String, dynamic> source) {
+    if ((target['images'] == null || (target['images'] is List && (target['images'] as List).isEmpty)) &&
+        source['images'] != null) {
+      target['images'] = source['images'];
+    }
+    if (target['brand'] == null && source['brand'] != null) {
+      target['brand'] = source['brand'];
+    }
+    if ((target['description'] == null || target['description'].toString().trim().isEmpty) &&
+        source['description'] != null) {
+      target['description'] = source['description'];
+    }
+    if ((target['badges'] == null || (target['badges'] is List && (target['badges'] as List).isEmpty)) &&
+        source['badges'] != null) {
+      target['badges'] = source['badges'];
+    }
+    if ((target['crmDiscountTags'] == null || (target['crmDiscountTags'] is List && (target['crmDiscountTags'] as List).isEmpty)) &&
+        source['crmDiscountTags'] != null) {
+      target['crmDiscountTags'] = source['crmDiscountTags'];
+    }
+    if (target['category'] == null && source['category'] != null) {
+      target['category'] = source['category'];
+    }
+    if ((target['categoryAscendants'] == null || (target['categoryAscendants'] is List && (target['categoryAscendants'] as List).isEmpty)) &&
+        source['categoryAscendants'] != null) {
+      target['categoryAscendants'] = source['categoryAscendants'];
+    }
+  }
+
+  Future<Map<String, dynamic>?> _fetchScreensApi(String productId, {String? url}) async {
+    final effectiveUrl = url ?? _lastUrl ?? '';
+    final isHemenUrl = effectiveUrl.toLowerCase().contains('/hemen/');
+
+    Future<Map<String, dynamic>?> fetchSingle(String endpoint) async {
+      try {
+        final response = await http.get(
+          Uri.parse(endpoint),
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'X-Pwa': 'true',
+          },
+        ).timeout(const Duration(seconds: 3));
+
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body);
+          if (json is Map && json['successful'] != false && json['data'] != null) {
+            final data = json['data'];
+            if (data is Map && data['storeProductInfoDTO'] != null) {
+              return Map<String, dynamic>.from(data['storeProductInfoDTO'] as Map);
+            }
+          }
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    // Hem genel (/rest/products/) hem express/hemen (/rest/hemen/) kanallarını paralel sorgula.
+    // Migros sadakat/Money kampanyaları bazı ürünlerde hemen kanalında, bazı ürünlerde genel kanalda yayımlanır.
+    final results = await Future.wait([
+      fetchSingle('https://www.migros.com.tr/rest/products/screens/$productId'),
+      fetchSingle('https://www.migros.com.tr/rest/hemen/products/screens/$productId'),
+    ]);
+
+    var infoGeneral = results[0];
+    var infoHemen = results[1];
+
+    // Yedek kontrol: Eğer iki ana uç nokta da yanıt vermediyse sanalmarket ucunu dene
+    if (infoGeneral == null && infoHemen == null) {
+      infoGeneral = await fetchSingle('https://www.migros.com.tr/rest/sanalmarket/products/screens/$productId');
+    }
+
+    if (infoGeneral == null && infoHemen == null) return null;
+    if (infoGeneral != null && infoHemen == null) return infoGeneral;
+    if (infoGeneral == null && infoHemen != null) return infoHemen;
+
+    // Her iki uç nokta da veri döndüyse: Money veya kampanya indirimi içeren kanalı seç
+    final genScore = _scoreCandidate(infoGeneral!);
+    final hemenScore = _scoreCandidate(infoHemen!);
+
+    Map<String, dynamic> chosen;
+    Map<String, dynamic> alternate;
+
+    if (hemenScore > genScore) {
+      chosen = infoHemen;
+      alternate = infoGeneral;
+    } else if (genScore > hemenScore) {
+      chosen = infoGeneral;
+      alternate = infoHemen;
+    } else {
+      final genPrice = _extractCandidatePrice(infoGeneral);
+      final hemenPrice = _extractCandidatePrice(infoHemen);
+      if (hemenPrice < genPrice) {
+        chosen = infoHemen;
+        alternate = infoGeneral;
+      } else if (genPrice < hemenPrice) {
+        chosen = infoGeneral;
+        alternate = infoHemen;
+      } else {
+        if (isHemenUrl) {
+          chosen = infoHemen;
+          alternate = infoGeneral;
+        } else {
+          chosen = infoGeneral;
+          alternate = infoHemen;
+        }
+      }
+    }
+
+    _mergeMissingFields(chosen, alternate);
+    return chosen;
+  }
 
   @override
   String? scrape({
@@ -17,7 +291,26 @@ class MigrosScraper extends BaseProductScraper {
     required String? Function(String? imageUrl, String pageUrl) resolveImageUrl,
     required void Function(String message) log,
   }) {
-    // 1. JSON-LD şemasından görsel çekmeyi dene (Öncelikli)
+    // 1. Screens API (Öncelikli - Sanal Market ve Hemen için gerçek yüksek çözünürlüklü ürün görseli)
+    final info = _getInfo(document);
+    if (info != null && info['images'] is List) {
+      final images = info['images'] as List;
+      for (final imgObj in images) {
+        if (imgObj is Map && imgObj['urls'] is Map) {
+          final urls = imgObj['urls'] as Map;
+          final rawUrl = urls['PRODUCT_HD'] ?? urls['PRODUCT_DETAIL'] ?? urls['PRODUCT_LIST'];
+          if (rawUrl != null && rawUrl.toString().isNotEmpty) {
+            final resolved = resolveImageUrl(rawUrl.toString(), url);
+            if (resolved != null && !isLogoUrl(resolved)) {
+              log('✅ Migros görseli Screens API ile bulundu: $resolved');
+              return resolved;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. JSON-LD şemasından görsel çekmeyi dene (Hemen SSR veya SSR fallback)
     final productJson = findProductJsonLd(document);
     if (productJson != null && productJson['image'] != null) {
       final imgLd = extractImageFromProductJson(productJson['image']);
@@ -30,7 +323,7 @@ class MigrosScraper extends BaseProductScraper {
       }
     }
 
-    // 2. Open Graph meta tag'i dene (Fallback 1)
+    // 3. Open Graph meta tag'i dene (isLogoUrl ile sanalmarket-seo bannerları filtrelenir)
     final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
     if (ogImage != null && ogImage.isNotEmpty) {
       final resolved = resolveImageUrl(ogImage, url);
@@ -40,8 +333,10 @@ class MigrosScraper extends BaseProductScraper {
       }
     }
 
-    // 3. DOM Seçicileri (Fallback 2)
-    final imgElements = document.querySelectorAll('img[class*="product-image"], img.product-image, .product-details img, img[class*="product"]');
+    // 4. DOM Seçicileri (Fallback 2)
+    final imgElements = document.querySelectorAll(
+      'img[class*="product-image"], img.product-image, .product-details img, img[class*="product"]',
+    );
     for (final img in imgElements) {
       final src = img.attributes['src'] ?? img.attributes['data-src'];
       if (src != null && src.isNotEmpty) {
@@ -58,79 +353,80 @@ class MigrosScraper extends BaseProductScraper {
 
   @override
   String? scrapeTitle(dom.Document document) {
-    // 1. JSON-LD şemasından (Öncelikli)
+    // 1. Screens API (En doğru ve tam ürün adı)
+    final info = _getInfo(document);
+    if (info != null && info['name'] != null) {
+      final apiTitle = info['name'].toString().trim();
+      final lower = apiTitle.toLowerCase();
+      if (apiTitle.isNotEmpty && lower != 'migros' && lower != 'migros sanalmarket') {
+        return apiTitle;
+      }
+    }
+
+    // 2. JSON-LD şemasından
     final productJson = findProductJsonLd(document);
     if (productJson != null && productJson['name'] != null) {
-      return productJson['name'].toString().trim();
+      final ldTitle = productJson['name'].toString().trim();
+      final lower = ldTitle.toLowerCase();
+      if (ldTitle.isNotEmpty && lower != 'migros' && lower != 'migros sanalmarket') {
+        return ldTitle;
+      }
     }
 
-    // 2. DOM Seçicileri (Fallback)
-    final titleEl = document.querySelector('h1.product-title') ??
-                    document.querySelector('h1');
+    // 3. DOM Seçicileri
+    final titleEl = document.querySelector('h1.product-title') ?? document.querySelector('h1');
     if (titleEl != null) {
-      return titleEl.text.trim();
-    }
-    return null;
-  }
-
-  String? _extractProductId(dom.Document document) {
-    // 1. og:image or meta tag
-    final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'] ?? '';
-    final matchImg = RegExp(r'product\/(\d+)').firstMatch(ogImage);
-    if (matchImg != null) return matchImg.group(1);
-
-    // 2. Canonical URL or img elements
-    final canonical = document.querySelector('link[rel="canonical"]')?.attributes['href'] ?? '';
-    final matchHex = RegExp(r'-p-([a-fA-F0-9]+)').firstMatch(canonical);
-    if (matchHex != null) {
-      final dec = int.tryParse(matchHex.group(1)!, radix: 16);
-      if (dec != null && dec > 0) return dec.toString();
+      final domTitle = titleEl.text.trim();
+      final lower = domTitle.toLowerCase();
+      if (domTitle.isNotEmpty && lower != 'migros' && lower != 'migros sanalmarket') {
+        return domTitle;
+      }
     }
 
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _fetchScreensApi(String productId) async {
-    final endpoints = [
-      'https://www.migros.com.tr/rest/hemen/products/screens/$productId',
-      'https://www.migros.com.tr/rest/sanalmarket/products/screens/$productId',
-      'https://www.migros.com.tr/rest/products/screens/$productId',
-    ];
-    for (final ep in endpoints) {
-      try {
-        final response = await http.get(
-          Uri.parse(ep),
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-          },
-        ).timeout(const Duration(seconds: 3));
-        if (response.statusCode == 200) {
-          final json = jsonDecode(response.body);
-          if (json is Map && json['data'] != null) {
-            final data = json['data'];
-            if (data is Map && data['storeProductInfoDTO'] != null) {
-              return data['storeProductInfoDTO'] as Map<String, dynamic>;
-            }
-          }
-        }
-      } catch (_) {}
+    // 4. URL slug'ından türetme (Sanalmarket SPA veya 404 sayfalarında 'Migros' başlığını engelleme)
+    final effectiveUrl = _getUrl(document);
+    if (effectiveUrl != null) {
+      final slugTitle = parseSlugTitle(effectiveUrl);
+      if (slugTitle != null && slugTitle.isNotEmpty) {
+        return slugTitle;
+      }
     }
+
     return null;
   }
 
   @override
   Future<double?> scrapePrice(dom.Document document) async {
-    // 1. Screens API
-    final productId = _extractProductId(document);
-    if (productId != null) {
-      final info = await _fetchScreensApi(productId);
-      if (info != null) {
-        final p = info['shownPrice'] ?? info['loyaltyPrice'] ?? info['salePrice'];
-        if (p is num && p > 0) return p.toDouble() / 100;
+    // 1. Screens API (Cache veya doğrudan API çağrısı)
+    Map<String, dynamic>? info = _getInfo(document);
+    if (info == null) {
+      final effectiveUrl = _getUrl(document);
+      final productId = extractProductId(effectiveUrl ?? '', document);
+      if (productId != null) {
+        info = await _fetchScreensApi(productId, url: effectiveUrl);
+        if (info != null) {
+          _infoExpando[document] = info;
+          _lastProductInfo = info;
+        }
       }
     }
 
-    // 2. JSON-LD şemasından fiyat çekmeyi dene (Öncelikli)
+    if (info != null) {
+      final prices = <double>[];
+      for (final key in ['shownPrice', 'loyaltyPrice', 'salePrice']) {
+        dynamic p = info[key];
+        if (p is String) p = num.tryParse(p);
+        if (p is num && p > 0) {
+          prices.add(p.toDouble() / 100);
+        }
+      }
+      if (prices.isNotEmpty) {
+        prices.sort();
+        return prices.first;
+      }
+    }
+
+    // 2. JSON-LD şemasından fiyat çekmeyi dene
     final productJson = findProductJsonLd(document);
     if (productJson != null) {
       final priceLd = extractPriceFromProductJson(productJson);
@@ -140,8 +436,7 @@ class MigrosScraper extends BaseProductScraper {
     }
 
     // 3. DOM Seçicileri (Fallback)
-    final priceEl = document.querySelector('#new-amount') ??
-                    document.querySelector('.amount');
+    final priceEl = document.querySelector('#new-amount') ?? document.querySelector('.amount');
     if (priceEl != null) {
       final val = parsePriceText(priceEl.text);
       if (val != null && val > 0) {
@@ -158,28 +453,43 @@ class MigrosScraper extends BaseProductScraper {
 
     final candidates = <double>[];
 
-    // 1. Screens API (Primary for Migros SPA)
-    final productId = _extractProductId(document);
-    if (productId != null) {
-      final info = await _fetchScreensApi(productId);
-      if (info != null) {
-        if (info['regularPrice'] is num) {
-          final reg = (info['regularPrice'] as num).toDouble() / 100;
+    // 1. Screens API (Primary for Migros)
+    Map<String, dynamic>? info = _getInfo(document);
+    if (info == null) {
+      final effectiveUrl = _getUrl(document);
+      final productId = extractProductId(effectiveUrl ?? '', document);
+      if (productId != null) {
+        info = await _fetchScreensApi(productId, url: effectiveUrl);
+        if (info != null) {
+          _infoExpando[document] = info;
+          _lastProductInfo = info;
+        }
+      }
+    }
+
+    if (info != null) {
+      for (final k in ['regularPrice', 'salePrice']) {
+        dynamic regVal = info[k];
+        if (regVal is String) regVal = num.tryParse(regVal);
+        if (regVal is num && regVal > 0) {
+          final reg = regVal.toDouble() / 100;
           if (reg > currentPrice) candidates.add(reg);
         }
-        if (info['badges'] is List) {
-          for (final badge in info['badges']) {
-            if (badge is Map && badge['name'] == 'PRICE_PROMOTED' && badge['value'] != null) {
-              final val = parsePriceText(badge['value'].toString());
-              if (val != null && val > currentPrice) candidates.add(val);
-            }
+      }
+      if (info['badges'] is List) {
+        for (final badge in info['badges']) {
+          if (badge is Map && badge['name'] == 'PRICE_PROMOTED' && badge['value'] != null) {
+            final val = parsePriceText(badge['value'].toString());
+            if (val != null && val > currentPrice) candidates.add(val);
           }
         }
       }
     }
 
     // 2. DOM: .single-price-amount (Migros specific non-Money price)
-    final singlePriceElements = document.querySelectorAll('.single-price-amount, [class*="single-price-amount"]');
+    final singlePriceElements = document.querySelectorAll(
+      '.single-price-amount, [class*="single-price-amount"]',
+    );
     for (final el in singlePriceElements) {
       final val = parsePriceText(el.text);
       if (val != null && val > currentPrice) {
@@ -206,111 +516,93 @@ class MigrosScraper extends BaseProductScraper {
     }
 
     if (candidates.isEmpty) return null;
-    candidates.sort();
-    return candidates.first;
+    final filtered = candidates.where((c) => c > currentPrice && c <= currentPrice * 5).toList();
+    if (filtered.isEmpty) return null;
+    filtered.sort();
+    return filtered.first;
   }
 
   String _cleanDescription(String desc) {
-    // Strip HTML tags
     String cleaned = desc.replaceAll(RegExp(r'<[^>]*>'), ' ');
-    // Clean up multiple spaces, newlines, etc.
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ');
     return cleaned.trim();
   }
 
-
   @override
   Future<String?> scrapeDescription(dom.Document document) async {
-    final crmEl = document.querySelector('.product-label.crm');
     String crmPrefix = '';
-    if (crmEl != null) {
-      final crmText = crmEl.text.trim().toUpperCase();
-      if (crmText.isNotEmpty) {
-        crmPrefix = '**$crmText**';
+
+    // 1. Screens API üzerinden CRM indirim etiketi
+    Map<String, dynamic>? info = _getInfo(document);
+    if (info == null) {
+      final effectiveUrl = _getUrl(document);
+      final productId = extractProductId(effectiveUrl ?? '', document);
+      if (productId != null) {
+        info = await _fetchScreensApi(productId, url: effectiveUrl);
+        if (info != null) {
+          _infoExpando[document] = info;
+          _lastProductInfo = info;
+        }
       }
     }
 
-    if (crmPrefix.isEmpty) {
-      try {
-        String imageUrl = '';
-        final productJson = findProductJsonLd(document);
-        if (productJson != null && productJson['image'] != null) {
-          imageUrl = extractImageFromProductJson(productJson['image']) ?? '';
+    if (info != null && info['crmDiscountTags'] is List) {
+      final crmTags = info['crmDiscountTags'] as List;
+      if (crmTags.isNotEmpty && crmTags[0] is Map && crmTags[0]['tag'] != null) {
+        final crmText = crmTags[0]['tag'].toString().trim().toUpperCase();
+        if (crmText.isNotEmpty && crmText != 'İYİ FİYAT' && crmText != 'IYI FIYAT' && !crmText.contains('SADECE MİGROS')) {
+          crmPrefix = '**$crmText**';
         }
-        if (imageUrl.isEmpty) {
-          final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
-          if (ogImage != null) {
-            imageUrl = ogImage;
-          }
-        }
+      }
+    }
 
-        if (imageUrl.isNotEmpty) {
-          final regExp = RegExp(r'product\/(\d+)');
-          final match = regExp.firstMatch(imageUrl);
-          if (match != null) {
-            final productId = match.group(1);
-            if (productId != null) {
-              final response = await http.get(
-                Uri.parse('https://www.migros.com.tr/rest/hemen/products/screens/$productId'),
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-                },
-              ).timeout(const Duration(seconds: 4));
-              if (response.statusCode == 200) {
-                final json = jsonDecode(response.body);
-                if (json is Map && json['data'] != null) {
-                  final data = json['data'];
-                  if (data is Map && data['storeProductInfoDTO'] != null) {
-                    final info = data['storeProductInfoDTO'];
-                    if (info is Map && info['crmDiscountTags'] != null) {
-                      final crmTags = info['crmDiscountTags'];
-                      if (crmTags is List && crmTags.isNotEmpty) {
-                        final tagObj = crmTags[0];
-                        if (tagObj is Map && tagObj['tag'] != null) {
-                          final crmText = tagObj['tag'].toString().trim().toUpperCase();
-                          if (crmText.isNotEmpty) {
-                            crmPrefix = crmText;
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+    // 2. DOM'dan CRM etiketi kontrolü
+    if (crmPrefix.isEmpty) {
+      final crmEl = document.querySelector('.product-label.crm');
+      if (crmEl != null) {
+        final crmText = crmEl.text.trim().toUpperCase();
+        if (crmText.isNotEmpty && crmText != 'İYİ FİYAT' && crmText != 'IYI FIYAT' && !crmText.contains('SADECE MİGROS')) {
+          crmPrefix = '**$crmText**';
         }
-      } catch (_) {}
+      }
     }
 
     String baseDesc = '';
 
-    // 1. JSON-LD şemasından açıklama çekmeyi dene (Öncelikli)
-    final productJson = findProductJsonLd(document);
-    if (productJson != null && productJson['description'] != null) {
-      baseDesc = _cleanDescription(productJson['description'].toString());
-    } else {
-      // 2. JSON-LD Kök seviyesindeki açıklamayı dene
-      final scripts = document.querySelectorAll('script');
-      for (final script in scripts) {
-        final type = script.attributes['type']?.trim().toLowerCase();
-        if (type == 'application/ld+json') {
-          try {
-            final sanitizedText = script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
-            final data = jsonDecode(sanitizedText);
-            if (data is Map && data['description'] != null) {
-              baseDesc = _cleanDescription(data['description'].toString());
-              break;
-            }
-          } catch (_) {}
+    // 3. Screens API'den açıklama
+    if (info != null && info['description'] != null && info['description'].toString().isNotEmpty) {
+      baseDesc = _cleanDescription(info['description'].toString());
+    }
+
+    // 4. JSON-LD şemasından açıklama çekmeyi dene
+    if (baseDesc.isEmpty) {
+      final productJson = findProductJsonLd(document);
+      if (productJson != null && productJson['description'] != null) {
+        baseDesc = _cleanDescription(productJson['description'].toString());
+      } else {
+        final scripts = document.querySelectorAll('script');
+        for (final script in scripts) {
+          final type = script.attributes['type']?.trim().toLowerCase();
+          if (type == 'application/ld+json') {
+            try {
+              final sanitizedText =
+                  script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+              final data = jsonDecode(sanitizedText);
+              if (data is Map && data['description'] != null) {
+                baseDesc = _cleanDescription(data['description'].toString());
+                break;
+              }
+            } catch (_) {}
+          }
         }
       }
     }
 
-    // 3. DOM Seçicileri (Fallback if still empty)
+    // 5. DOM meta description
     if (baseDesc.isEmpty) {
-      final descEl = document.querySelector('meta[name="description"]') ??
-                     document.querySelector('meta[property="og:description"]');
+      final descEl =
+          document.querySelector('meta[name="description"]') ??
+          document.querySelector('meta[property="og:description"]');
       if (descEl != null) {
         final content = descEl.attributes['content'];
         if (content != null) {
@@ -328,97 +620,83 @@ class MigrosScraper extends BaseProductScraper {
   @override
   FutureOr<String?> scrapePriceLabel(dom.Document document) async {
     // 1. Screens API (En doğru ve net veri kaynağı)
-    try {
-      String imageUrl = '';
-      final productJson = findProductJsonLd(document);
-      if (productJson != null && productJson['image'] != null) {
-        imageUrl = extractImageFromProductJson(productJson['image']) ?? '';
-      }
-      if (imageUrl.isEmpty) {
-        final ogImage = document.querySelector('meta[property="og:image"]')?.attributes['content'];
-        if (ogImage != null) {
-          imageUrl = ogImage;
+    Map<String, dynamic>? info = _getInfo(document);
+    if (info == null) {
+      final effectiveUrl = _getUrl(document);
+      final productId = extractProductId(effectiveUrl ?? '', document);
+      if (productId != null) {
+        info = await _fetchScreensApi(productId, url: effectiveUrl);
+        if (info != null) {
+          _infoExpando[document] = info;
+          _lastProductInfo = info;
         }
       }
+    }
 
-      if (imageUrl.isNotEmpty) {
-        final regExp = RegExp(r'product\/(\d+)');
-        final match = regExp.firstMatch(imageUrl);
-        if (match != null) {
-          final productId = match.group(1);
-          if (productId != null) {
-            final response = await http.get(
-              Uri.parse('https://www.migros.com.tr/rest/hemen/products/screens/$productId'),
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-              },
-            ).timeout(const Duration(seconds: 4));
-            if (response.statusCode == 200) {
-              final json = jsonDecode(response.body);
-              if (json is Map && json['data'] != null) {
-                final data = json['data'];
-                if (data is Map && data['storeProductInfoDTO'] != null) {
-                  final info = data['storeProductInfoDTO'];
-                  if (info is Map) {
-                    // A. crmDiscountTags (Örn: "3 Al 2'si Money Hediye", "1 ALANA 1 BEDAVA", "50 TL Sepette İndirim")
-                    if (info['crmDiscountTags'] != null) {
-                      final crmTags = info['crmDiscountTags'];
-                      if (crmTags is List && crmTags.isNotEmpty) {
-                        final tagObj = crmTags[0];
-                        if (tagObj is Map && tagObj['tag'] != null) {
-                          final rawTag = tagObj['tag'].toString().trim();
-                          final upperTag = rawTag.toUpperCase();
-                          if (upperTag != 'İYİ FİYAT' && upperTag != 'IYI FIYAT' && !upperTag.contains('SADECE MİGROS') && rawTag.isNotEmpty) {
-                            return rawTag;
-                          }
-                        }
-                      }
-                    }
-
-                    // B. badges listesi (CROSS_PROMOTED vs PRICE_PROMOTED)
-                    final badges = info['badges'] is List ? (info['badges'] as List) : [];
-                    for (final b in badges) {
-                      if (b is Map) {
-                        final bName = (b['name'] ?? '').toString();
-                        final bValue = (b['value'] ?? '').toString().trim();
-                        // 3 Al 2 Öde, 2 Al 1 Öde, 2.'si %50 İndirimli vb.
-                        if (bName == 'CROSS_PROMOTED' && bValue.isNotEmpty) {
-                          return bValue;
-                        }
-                        // Money indirimli fiyat rozeti
-                        if (bName == 'PRICE_PROMOTED') {
-                          return 'Money ile';
-                        }
-                      }
-                    }
-
-                    // C. Sadakat/Money fiyat farkı kontrolü
-                    final shownPrice = info['shownPrice'] is num ? (info['shownPrice'] as num).toDouble() : null;
-                    final regularPrice = info['regularPrice'] is num ? (info['regularPrice'] as num).toDouble() : null;
-                    final salePrice = info['salePrice'] is num ? (info['salePrice'] as num).toDouble() : null;
-                    final loyaltyPrice = info['loyaltyPrice'] is num ? (info['loyaltyPrice'] as num).toDouble() : null;
-
-                    if ((loyaltyPrice != null && regularPrice != null && loyaltyPrice < regularPrice) ||
-                        (loyaltyPrice != null && salePrice != null && loyaltyPrice < salePrice) ||
-                        (shownPrice != null && salePrice != null && shownPrice < salePrice) ||
-                        (shownPrice != null && regularPrice != null && shownPrice < regularPrice)) {
-                      return 'Money ile';
-                    }
-                  }
-                }
-              }
-            }
+    if (info != null) {
+      // A. crmDiscountTags (Örn: "3 Al 2'si Money Hediye", "1 ALANA 1 BEDAVA", "50 TL Sepette İndirim")
+      if (info['crmDiscountTags'] is List) {
+        final crmTags = info['crmDiscountTags'] as List;
+        if (crmTags.isNotEmpty && crmTags[0] is Map && crmTags[0]['tag'] != null) {
+          final rawTag = crmTags[0]['tag'].toString().trim();
+          final upperTag = rawTag.toUpperCase();
+          if (upperTag != 'İYİ FİYAT' &&
+              upperTag != 'IYI FIYAT' &&
+              !upperTag.contains('SADECE MİGROS') &&
+              rawTag.isNotEmpty) {
+            return rawTag;
           }
         }
       }
-    } catch (_) {}
+
+      // B. badges listesi (CROSS_PROMOTED vs PRICE_PROMOTED)
+      final badges = info['badges'] is List ? (info['badges'] as List) : [];
+      for (final b in badges) {
+        if (b is Map) {
+          final bName = (b['name'] ?? '').toString();
+          final bValue = (b['value'] ?? '').toString().trim();
+          // 3 Al 2 Öde, 2 Al 1 Öde, 2.'si %50 İndirimli vb.
+          if (bName == 'CROSS_PROMOTED' && bValue.isNotEmpty) {
+            return bValue;
+          }
+          // Money indirimli fiyat rozeti
+          if (bName == 'PRICE_PROMOTED') {
+            return 'Money ile';
+          }
+        }
+      }
+
+      // C. Sadakat/Money fiyat farkı veya indirim oranı kontrolü
+      dynamic shownPrice = info['shownPrice'];
+      if (shownPrice is String) shownPrice = num.tryParse(shownPrice);
+      dynamic regularPrice = info['regularPrice'];
+      if (regularPrice is String) regularPrice = num.tryParse(regularPrice);
+      dynamic salePrice = info['salePrice'];
+      if (salePrice is String) salePrice = num.tryParse(salePrice);
+      dynamic loyaltyPrice = info['loyaltyPrice'];
+      if (loyaltyPrice is String) loyaltyPrice = num.tryParse(loyaltyPrice);
+      dynamic discountRate = info['discountRate'];
+      if (discountRate is String) discountRate = num.tryParse(discountRate);
+
+      if ((loyaltyPrice is num && regularPrice is num && loyaltyPrice < regularPrice) ||
+          (loyaltyPrice is num && salePrice is num && loyaltyPrice < salePrice) ||
+          (shownPrice is num && salePrice is num && shownPrice < salePrice) ||
+          (shownPrice is num && regularPrice is num && shownPrice < regularPrice) ||
+          (discountRate is num && discountRate > 0)) {
+        return 'Money ile';
+      }
+    }
 
     // 2. DOM Kontrolü (Header/Footer menüleri hariç ürünün kendi CRM etiketi)
     final crmEl = document.querySelector('.product-label.crm, .product-badges .badge');
     if (crmEl != null) {
       final rawText = crmEl.text.trim();
       final crmText = rawText.toUpperCase();
-      if (crmText.isNotEmpty && crmText != 'İYİ FİYAT' && crmText != 'IYI FIYAT' && !crmText.contains('SADECE MİGROS') && crmText.length <= 50) {
+      if (crmText.isNotEmpty &&
+          crmText != 'İYİ FİYAT' &&
+          crmText != 'IYI FIYAT' &&
+          !crmText.contains('SADECE MİGROS') &&
+          crmText.length <= 50) {
         return rawText;
       }
     }
@@ -427,7 +705,58 @@ class MigrosScraper extends BaseProductScraper {
   }
 
   @override
+  String? scrapeBrand(dom.Document document) {
+    // 1. Screens API
+    final info = _getInfo(document);
+    if (info != null && info['brand'] is Map) {
+      final brandObj = info['brand'] as Map;
+      if (brandObj['name'] != null && brandObj['name'].toString().trim().isNotEmpty) {
+        return brandObj['name'].toString().trim();
+      }
+    }
+
+    // 2. JSON-LD
+    final productJson = findProductJsonLd(document);
+    if (productJson != null && productJson['brand'] != null) {
+      if (productJson['brand'] is String) {
+        return productJson['brand'].toString().trim();
+      } else if (productJson['brand'] is Map && productJson['brand']['name'] != null) {
+        return productJson['brand']['name'].toString().trim();
+      }
+    }
+
+    // 3. DOM
+    final brandEl = document.querySelector('a[class*="brand"], .brand-name');
+    if (brandEl != null && brandEl.text.trim().isNotEmpty) {
+      return brandEl.text.trim();
+    }
+
+    return null;
+  }
+
+  @override
   List<String> scrapeBreadcrumbs(dom.Document document) {
+    // 1. Screens API
+    final info = _getInfo(document);
+    if (info != null) {
+      final List<String> list = [];
+      if (info['categoryAscendants'] is List) {
+        for (final c in info['categoryAscendants'] as List) {
+          if (c is Map && c['name'] != null && c['name'].toString().trim().isNotEmpty) {
+            list.add(c['name'].toString().trim());
+          }
+        }
+      }
+      if (info['category'] is Map) {
+        final c = info['category'] as Map;
+        if (c['name'] != null && c['name'].toString().trim().isNotEmpty) {
+          list.add(c['name'].toString().trim());
+        }
+      }
+      if (list.isNotEmpty) return list;
+    }
+
+    // 2. JSON-LD Fallback
     final scripts = document.querySelectorAll('script');
     final productTitle = scrapeTitle(document) ?? '';
 
@@ -435,7 +764,8 @@ class MigrosScraper extends BaseProductScraper {
       final type = script.attributes['type']?.trim().toLowerCase();
       if (type == 'application/ld+json') {
         try {
-          final sanitizedText = script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
+          final sanitizedText =
+              script.text.replaceAll('\r\n', ' ').replaceAll('\n', ' ').replaceAll('\r', ' ');
           final data = jsonDecode(sanitizedText);
           final breadcrumbs = _extractBreadcrumbsFromJson(data, productTitle);
           if (breadcrumbs.isNotEmpty) {
@@ -445,15 +775,21 @@ class MigrosScraper extends BaseProductScraper {
       }
     }
 
-    // DOM Fallback
-    final breadcrumbElements = document.querySelectorAll('.breadcrumb a, .breadcrumbs a, ul.breadcrumb li a');
+    // 3. DOM Fallback
+    final breadcrumbElements = document.querySelectorAll(
+      '.breadcrumb a, .breadcrumbs a, ul.breadcrumb li a',
+    );
     if (breadcrumbElements.isNotEmpty) {
       final List<String> list = [];
       for (final el in breadcrumbElements) {
         final text = el.text.trim();
         if (text.isNotEmpty) {
           final lower = text.toLowerCase();
-          if (lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('migros') && text != productTitle && text.length < 50) {
+          if (lower != 'anasayfa' &&
+              lower != 'ana sayfa' &&
+              !lower.contains('migros') &&
+              text != productTitle &&
+              text.length < 50) {
             list.add(text);
           }
         }
@@ -466,7 +802,6 @@ class MigrosScraper extends BaseProductScraper {
 
   List<String> _extractBreadcrumbsFromJson(dynamic json, String productTitle) {
     if (json is Map) {
-      // 1. BreadcrumbList kontrolü
       if (json['@type'] == 'BreadcrumbList' || json['@type'] == 'http://schema.org/BreadcrumbList') {
         final items = json['itemListElement'];
         if (items is List) {
@@ -494,9 +829,10 @@ class MigrosScraper extends BaseProductScraper {
         }
       }
 
-      // 2. Product category kontrolü
-      if (json['@type'] == 'Product' || json['@type'] == 'http://schema.org/Product' ||
-          json['@type'] == 'ProductGroup' || json['@type'] == 'http://schema.org/ProductGroup') {
+      if (json['@type'] == 'Product' ||
+          json['@type'] == 'http://schema.org/Product' ||
+          json['@type'] == 'ProductGroup' ||
+          json['@type'] == 'http://schema.org/ProductGroup') {
         final categoryField = json['category'];
         if (categoryField is String && categoryField.isNotEmpty) {
           final parts = categoryField
@@ -505,7 +841,11 @@ class MigrosScraper extends BaseProductScraper {
               .where((e) => e.isNotEmpty)
               .where((e) {
                 final lower = e.toLowerCase();
-                return lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('migros') && e != productTitle && e.length < 50;
+                return lower != 'anasayfa' &&
+                    lower != 'ana sayfa' &&
+                    !lower.contains('migros') &&
+                    e != productTitle &&
+                    e.length < 50;
               })
               .toList();
           if (parts.isNotEmpty) return parts;
@@ -518,7 +858,11 @@ class MigrosScraper extends BaseProductScraper {
                 .where((e) => e.isNotEmpty)
                 .where((e) {
                   final lower = e.toLowerCase();
-                  return lower != 'anasayfa' && lower != 'ana sayfa' && !lower.contains('migros') && e != productTitle && e.length < 50;
+                  return lower != 'anasayfa' &&
+                      lower != 'ana sayfa' &&
+                      !lower.contains('migros') &&
+                      e != productTitle &&
+                      e.length < 50;
                 })
                 .toList();
             if (parts.isNotEmpty) return parts;
@@ -526,7 +870,6 @@ class MigrosScraper extends BaseProductScraper {
         }
       }
 
-      // Recursive arama
       for (final value in json.values) {
         if (value is Map || value is List) {
           final res = _extractBreadcrumbsFromJson(value, productTitle);

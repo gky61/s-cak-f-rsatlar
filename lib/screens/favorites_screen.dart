@@ -20,6 +20,7 @@ import '../services/ad_manager_service.dart';
 import '../widgets/ad_deal_card.dart';
 import '../widgets/app_snack_bar.dart';
 import '../widgets/floating_refresh_pill.dart';
+import '../services/notification_service.dart';
 
 class FavoritesScreen extends StatefulWidget {
   final bool isRootTab;
@@ -70,6 +71,10 @@ class FavoritesScreenState extends State<FavoritesScreen>
   bool _isRefreshingFollowed = false;
   Future<DealsPageResult>? _activeFollowedServerFuture;
   static const Duration _followedServerTimeout = Duration(milliseconds: 1400);
+
+  // Kategori Takip Durumu Kalkanı (0.1s yapay skeleton/loading jank önleyici)
+  bool _hasFollowedCategories = false;
+  bool _isFollowedCategoriesResolved = false;
 
   final Set<String> _locallyDeletedDealIds = {};
   final Set<String> _locallyRemovedFavoriteIds = {};
@@ -159,7 +164,9 @@ class FavoritesScreenState extends State<FavoritesScreen>
         final lastFetch = _lastFollowedFetchTime;
         final isStale = lastFetch != null &&
             DateTime.now().difference(lastFetch) > const Duration(minutes: 30);
-        if ((_followedDealsList.isEmpty || isStale) && !_isLoadingFollowed) {
+        // FS-18 Lansman Standardı: Yalnızca daha önce hiç çekilmediyse (lastFetch == null) veya bayatlamışsa (isStale) çek.
+        // Boş kategori listesinde her sekme tıklamasında yapay 0.1s loading/skeleton tetiklenmesini engelle
+        if ((lastFetch == null || isStale) && !_isLoadingFollowed) {
           _loadFollowedFirstPage(isRefresh: isStale);
         }
       }
@@ -178,11 +185,30 @@ class FavoritesScreenState extends State<FavoritesScreen>
       _cachedUserId = null;
       _followedDealsList = [];
       _lastFollowedDocument = null;
+      _hasFollowedCategories = false;
+      _isFollowedCategoriesResolved = false;
       return;
     }
     if (_cachedUserId != userId) {
       _cachedUserId = userId;
       _myFavoritesStream = _firestoreService.getFavoriteDeals(userId);
+
+      // Kategori takip durumu senkron bellek veya disk kalkanından anında çözülür
+      final syncHasCats = NotificationService().getCachedHasFollowedCategoriesSync(userId);
+      if (syncHasCats != null) {
+        _hasFollowedCategories = syncHasCats;
+        _isFollowedCategoriesResolved = true;
+      } else {
+        NotificationService().hasFollowedCategories(userId).then((hasCats) {
+          if (mounted && _cachedUserId == userId) {
+            setState(() {
+              _hasFollowedCategories = hasCats;
+              _isFollowedCategoriesResolved = true;
+            });
+          }
+        }).catchError((_) {});
+      }
+
       _loadFollowedFirstPage();
     }
   }
@@ -229,6 +255,8 @@ class FavoritesScreenState extends State<FavoritesScreen>
               _followedErrorMessage = null;
               _hasNewFollowedDealsPill = false;
               _lastFollowedFetchTime = DateTime.now();
+              _hasFollowedCategories = serverResult.hasFollowedCategories;
+              _isFollowedCategoriesResolved = true;
             });
           } else {
             if (_followedDealsList.isEmpty) {
@@ -270,6 +298,8 @@ class FavoritesScreenState extends State<FavoritesScreen>
             _followedErrorMessage = null;
             _hasNewFollowedDealsPill = false;
             _lastFollowedFetchTime = DateTime.now();
+            _hasFollowedCategories = serverResult.hasFollowedCategories;
+            _isFollowedCategoriesResolved = true;
           });
         }
       } catch (e) {
@@ -293,6 +323,8 @@ class FavoritesScreenState extends State<FavoritesScreen>
               _hasMoreFollowed = cacheResult.hasMore;
               _isLoadingFollowed = false;
               _isFirstLoadFollowed = false;
+              _hasFollowedCategories = cacheResult.hasFollowedCategories;
+              _isFollowedCategoriesResolved = true;
             });
           }
         } catch (_) {}
@@ -316,6 +348,8 @@ class FavoritesScreenState extends State<FavoritesScreen>
                   _isFirstLoadFollowed = false;
                   _followedErrorMessage = null;
                   _lastFollowedFetchTime = DateTime.now();
+                  _hasFollowedCategories = res.hasFollowedCategories;
+                  _isFollowedCategoriesResolved = true;
                 });
               }
             }
@@ -366,6 +400,8 @@ class FavoritesScreenState extends State<FavoritesScreen>
           _isFirstLoadFollowed = false;
           _hasNewFollowedDealsPill = false;
           _lastFollowedFetchTime = DateTime.now();
+          _hasFollowedCategories = res.hasFollowedCategories;
+          _isFollowedCategoriesResolved = true;
         });
       } else {
         // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, floating pill ile kullanıcı iradesine sun
@@ -1599,7 +1635,14 @@ class FavoritesScreenState extends State<FavoritesScreen>
       );
     }
 
-    if ((_isFirstLoadFollowed || _isLoadingFollowed) && _followedDealsList.isEmpty) {
+    // FS-18 Lansman Standardı: Kullanıcının takip ettiği kategori yoksa
+    // 0.1 saniyelik yapay skeleton loading göstermeden doğrudan temiz boş durum sun
+    if (_isFollowedCategoriesResolved && !_hasFollowedCategories) {
+      return _buildFollowedCategoriesEmptyState(currentUser, isDark, textColor, secondaryTextColor);
+    }
+
+    // Takip edilen kategoriler varsa ve ilk kez yükleniyorsa skeleton ızgara göster
+    if ((_isFirstLoadFollowed || (_isLoadingFollowed && !_isRefreshingFollowed)) && _followedDealsList.isEmpty) {
       return _buildLoadingGrid(isDark);
     }
 
@@ -1666,89 +1709,7 @@ class FavoritesScreenState extends State<FavoritesScreen>
     final deals = _followedDealsList;
 
     if (deals.isEmpty) {
-      return RefreshIndicator(
-        color: AppTheme.primary,
-        onRefresh: () => _loadFollowedFirstPage(isRefresh: true),
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 68,
-                        height: 68,
-                        decoration: BoxDecoration(
-                          color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.category_outlined,
-                          size: 34,
-                          color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Henüz Fırsat Bulunamadı',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: textColor,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Takip ettiğiniz kategorilerde son 48 saatte paylaşılan yeni bir fırsat bulunmuyor veya henüz kategori seçmediniz.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.4,
-                          color: secondaryTextColor,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          HapticFeedback.lightImpact();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CategoryPreferencesScreen(),
-                            ),
-                          ).then((_) {
-                            _loadFollowedFirstPage(isRefresh: true);
-                          });
-                        },
-                        icon: const Icon(Icons.tune_rounded, size: 18),
-                        label: const Text(
-                          'Kategorileri Yönet & Takip Et',
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+      return _buildFollowedCategoriesEmptyState(currentUser, isDark, textColor, secondaryTextColor);
     }
 
     return Column(
@@ -1785,7 +1746,14 @@ class FavoritesScreenState extends State<FavoritesScreen>
                       MaterialPageRoute(
                         builder: (_) => const CategoryPreferencesScreen(),
                       ),
-                    ).then((_) {
+                    ).then((_) async {
+                      final hasCats = await NotificationService().hasFollowedCategories(currentUser.uid);
+                      if (mounted) {
+                        setState(() {
+                          _hasFollowedCategories = hasCats;
+                          _isFollowedCategoriesResolved = true;
+                        });
+                      }
                       _loadFollowedFirstPage(isRefresh: true);
                     });
                   },
@@ -2016,6 +1984,105 @@ class FavoritesScreenState extends State<FavoritesScreen>
       itemBuilder: (context, index) {
         return const DealCardSkeleton(viewMode: CardViewMode.vertical);
       },
+    );
+  }
+
+  /// Favori Kategorilerim sekmesi için temiz, sıfır jank ve sıfır gecikmeli boş durum arayüzü
+  Widget _buildFollowedCategoriesEmptyState(
+    User currentUser,
+    bool isDark,
+    Color textColor,
+    Color secondaryTextColor,
+  ) {
+    return RefreshIndicator(
+      color: AppTheme.primary,
+      onRefresh: () => _loadFollowedFirstPage(isRefresh: true),
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.category_outlined,
+                        size: 34,
+                        color: isDark ? AppTheme.darkTextSecondary : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Henüz Fırsat Bulunamadı',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Takip ettiğiniz kategorilerde son 48 saatte paylaşılan yeni bir fırsat bulunmuyor veya henüz kategori seçmediniz.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: secondaryTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CategoryPreferencesScreen(),
+                          ),
+                        ).then((_) async {
+                          final hasCats = await NotificationService().hasFollowedCategories(currentUser.uid);
+                          if (mounted) {
+                            setState(() {
+                              _hasFollowedCategories = hasCats;
+                              _isFollowedCategoriesResolved = true;
+                            });
+                          }
+                          _loadFollowedFirstPage(isRefresh: true);
+                        });
+                      },
+                      icon: const Icon(Icons.tune_rounded, size: 18),
+                      label: const Text(
+                        'Kategorileri Yönet & Takip Et',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

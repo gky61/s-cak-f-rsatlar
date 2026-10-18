@@ -495,7 +495,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Kategori topic abonelik uyarısı: $topicErr');
       }
-      invalidateSubscriptionCaches();
+      addFollowedCategoryToCache(userId, categoryId);
       _log('✅ Category subscription added: $categoryId');
     } catch (e) {
       _log('❌ Category subscription add error: $e');
@@ -516,7 +516,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Kategori topic abonelikten çıkış uyarısı: $topicErr');
       }
-      invalidateSubscriptionCaches();
+      removeFollowedCategoryFromCache(userId, categoryId);
       _log('✅ Category subscription deleted: $categoryId');
     } catch (e) {
       _log('❌ Category subscription delete error: $e');
@@ -554,7 +554,7 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Alt kategori topic abonelik uyarısı: $topicErr');
       }
-      invalidateSubscriptionCaches();
+      addFollowedSubCategoryToCache(userId, key);
       _log('✅ Subcategory subscription added: $key');
     } catch (e) {
       _log('❌ Subcategory subscription add error: $e');
@@ -576,11 +576,158 @@ class NotificationService {
       } catch (topicErr) {
         _log('⚠️ Alt kategori topic abonelikten çıkış uyarısı: $topicErr');
       }
-      invalidateSubscriptionCaches();
+      removeFollowedSubCategoryFromCache(userId, key);
       _log('✅ Subcategory subscription deleted: $key');
     } catch (e) {
       _log('❌ Subcategory subscription delete error: $e');
       rethrow;
+    }
+  }
+
+  // --- Takip Edilen Kategoriler Çift Katmanlı Bellek & Disk Önbelleği (FS-NOTIF-09) ---
+  Future<void> setCachedFollowedCategories(String userId, List<String> categories, List<String> subCategories) async {
+    _cachedUserId = userId;
+    _cachedFollowedCategories = List<String>.from(categories);
+    _cachedFollowedSubCategories = List<String>.from(subCategories);
+    final now = DateTime.now();
+    _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
+    _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setStringList('cached_followed_categories_$userId', categories);
+      await sp.setStringList('cached_followed_subcategories_$userId', subCategories);
+    } catch (_) {}
+  }
+
+  Future<void> addFollowedCategoryToCache(String userId, String categoryId) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final diskCats = sp.getStringList('cached_followed_categories_$userId');
+      final list = (diskCats != null && (_cachedUserId != userId || _cachedFollowedCategories == null))
+          ? List<String>.from(diskCats)
+          : (_cachedFollowedCategories != null && _cachedUserId == userId
+              ? List<String>.from(_cachedFollowedCategories!)
+              : <String>[]);
+      if (!list.contains(categoryId)) {
+        list.add(categoryId);
+      }
+      _cachedUserId = userId;
+      _cachedFollowedCategories = list;
+      _cachedFollowedCategoriesExpiry = DateTime.now().add(_subscriptionCacheTtl);
+      await sp.setStringList('cached_followed_categories_$userId', list);
+    } catch (_) {
+      _cachedUserId = userId;
+      _cachedFollowedCategories ??= [];
+      if (!_cachedFollowedCategories!.contains(categoryId)) {
+        _cachedFollowedCategories!.add(categoryId);
+      }
+      _cachedFollowedCategoriesExpiry = DateTime.now().add(_subscriptionCacheTtl);
+    }
+  }
+
+  Future<void> removeFollowedCategoryFromCache(String userId, String categoryId) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final diskCats = sp.getStringList('cached_followed_categories_$userId');
+      final list = (diskCats != null && (_cachedUserId != userId || _cachedFollowedCategories == null))
+          ? List<String>.from(diskCats)
+          : (_cachedFollowedCategories != null && _cachedUserId == userId
+              ? List<String>.from(_cachedFollowedCategories!)
+              : <String>[]);
+      list.remove(categoryId);
+      _cachedUserId = userId;
+      _cachedFollowedCategories = list;
+      _cachedFollowedCategoriesExpiry = DateTime.now().add(_subscriptionCacheTtl);
+      await sp.setStringList('cached_followed_categories_$userId', list);
+    } catch (_) {
+      if (_cachedUserId == userId && _cachedFollowedCategories != null) {
+        _cachedFollowedCategories!.remove(categoryId);
+      }
+    }
+  }
+
+  Future<void> addFollowedSubCategoryToCache(String userId, String subCategoryKey) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final diskSubCats = sp.getStringList('cached_followed_subcategories_$userId');
+      final list = (diskSubCats != null && (_cachedUserId != userId || _cachedFollowedSubCategories == null))
+          ? List<String>.from(diskSubCats)
+          : (_cachedFollowedSubCategories != null && _cachedUserId == userId
+              ? List<String>.from(_cachedFollowedSubCategories!)
+              : <String>[]);
+      if (!list.contains(subCategoryKey)) {
+        list.add(subCategoryKey);
+      }
+      _cachedUserId = userId;
+      _cachedFollowedSubCategories = list;
+      _cachedFollowedSubCategoriesExpiry = DateTime.now().add(_subscriptionCacheTtl);
+      await sp.setStringList('cached_followed_subcategories_$userId', list);
+    } catch (_) {
+      _cachedUserId = userId;
+      _cachedFollowedSubCategories ??= [];
+      if (!_cachedFollowedSubCategories!.contains(subCategoryKey)) {
+        _cachedFollowedSubCategories!.add(subCategoryKey);
+      }
+      _cachedFollowedSubCategoriesExpiry = DateTime.now().add(_subscriptionCacheTtl);
+    }
+  }
+
+  Future<void> removeFollowedSubCategoryFromCache(String userId, String subCategoryKey) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final diskSubCats = sp.getStringList('cached_followed_subcategories_$userId');
+      final list = (diskSubCats != null && (_cachedUserId != userId || _cachedFollowedSubCategories == null))
+          ? List<String>.from(diskSubCats)
+          : (_cachedFollowedSubCategories != null && _cachedUserId == userId
+              ? List<String>.from(_cachedFollowedSubCategories!)
+              : <String>[]);
+      list.remove(subCategoryKey);
+      _cachedUserId = userId;
+      _cachedFollowedSubCategories = list;
+      _cachedFollowedSubCategoriesExpiry = DateTime.now().add(_subscriptionCacheTtl);
+      await sp.setStringList('cached_followed_subcategories_$userId', list);
+    } catch (_) {
+      if (_cachedUserId == userId && _cachedFollowedSubCategories != null) {
+        _cachedFollowedSubCategories!.remove(subCategoryKey);
+      }
+    }
+  }
+
+  /// Takip edilen kategori var mı bilgisini bellekten senkron olarak döner (0 gecikme)
+  bool? getCachedHasFollowedCategoriesSync(String userId) {
+    if (_cachedUserId == userId && _cachedFollowedCategories != null && _cachedFollowedSubCategories != null) {
+      return _cachedFollowedCategories!.isNotEmpty || _cachedFollowedSubCategories!.isNotEmpty;
+    }
+    return null;
+  }
+
+  /// Takip edilen kategori var mı bilgisini önce bellek, sonra disk, sonra ağdan çözer
+  Future<bool> hasFollowedCategories(String userId) async {
+    final syncVal = getCachedHasFollowedCategoriesSync(userId);
+    if (syncVal != null) return syncVal;
+
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final diskCats = sp.getStringList('cached_followed_categories_$userId');
+      final diskSubCats = sp.getStringList('cached_followed_subcategories_$userId');
+      if (diskCats != null || diskSubCats != null) {
+        _cachedUserId = userId;
+        _cachedFollowedCategories = diskCats != null ? List<String>.from(diskCats) : [];
+        _cachedFollowedSubCategories = diskSubCats != null ? List<String>.from(diskSubCats) : [];
+        final now = DateTime.now();
+        _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
+        _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+        return _cachedFollowedCategories!.isNotEmpty || _cachedFollowedSubCategories!.isNotEmpty;
+      }
+    } catch (_) {}
+
+    try {
+      final cats = await getFollowedCategories();
+      final subCats = await getFollowedSubCategories();
+      return cats.isNotEmpty || subCats.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -595,6 +742,24 @@ class NotificationService {
         _cachedFollowedCategoriesExpiry != null &&
         DateTime.now().isBefore(_cachedFollowedCategoriesExpiry!)) {
       return List<String>.from(_cachedFollowedCategories!);
+    }
+
+    // 1. SharedPreferences Yerel Disk Kalkanını Kontrol Et (0 Gecikme)
+    if (!forceRefresh) {
+      try {
+        final sp = await SharedPreferences.getInstance();
+        final diskCats = sp.getStringList('cached_followed_categories_$userId');
+        final diskSubCats = sp.getStringList('cached_followed_subcategories_$userId');
+        if (diskCats != null) {
+          _cachedUserId = userId;
+          _cachedFollowedCategories = List<String>.from(diskCats);
+          _cachedFollowedSubCategories = diskSubCats != null ? List<String>.from(diskSubCats) : [];
+          final now = DateTime.now();
+          _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
+          _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+          return List<String>.from(diskCats);
+        }
+      } catch (_) {}
     }
 
     try {
@@ -617,12 +782,7 @@ class NotificationService {
         }
       }
 
-      _cachedUserId = userId;
-      _cachedFollowedCategories = cats;
-      _cachedFollowedSubCategories = subCats;
-      final now = DateTime.now();
-      _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
-      _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+      setCachedFollowedCategories(userId, cats, subCats);
 
       return List<String>.from(cats);
     } catch (e) {
@@ -645,6 +805,24 @@ class NotificationService {
       return List<String>.from(_cachedFollowedSubCategories!);
     }
 
+    // 1. SharedPreferences Yerel Disk Kalkanını Kontrol Et (0 Gecikme)
+    if (!forceRefresh) {
+      try {
+        final sp = await SharedPreferences.getInstance();
+        final diskCats = sp.getStringList('cached_followed_categories_$userId');
+        final diskSubCats = sp.getStringList('cached_followed_subcategories_$userId');
+        if (diskSubCats != null) {
+          _cachedUserId = userId;
+          _cachedFollowedCategories = diskCats != null ? List<String>.from(diskCats) : [];
+          _cachedFollowedSubCategories = List<String>.from(diskSubCats);
+          final now = DateTime.now();
+          _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
+          _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+          return List<String>.from(diskSubCats);
+        }
+      } catch (_) {}
+    }
+
     try {
       final snap = await _firestore
           .collection('notificationSubscriptions')
@@ -665,12 +843,7 @@ class NotificationService {
         }
       }
 
-      _cachedUserId = userId;
-      _cachedFollowedCategories = cats;
-      _cachedFollowedSubCategories = subCats;
-      final now = DateTime.now();
-      _cachedFollowedCategoriesExpiry = now.add(_subscriptionCacheTtl);
-      _cachedFollowedSubCategoriesExpiry = now.add(_subscriptionCacheTtl);
+      setCachedFollowedCategories(userId, cats, subCats);
 
       return List<String>.from(subCats);
     } catch (e) {

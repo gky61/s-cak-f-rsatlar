@@ -414,7 +414,8 @@ class Deal {
         'idefix',
         'itopya',
         'incehesap',
-        'havit'
+        'havit',
+        'carrefoursa'
       ];
       
       bool isMajorStore = false;

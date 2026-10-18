@@ -69,6 +69,7 @@ class _QuickPriceEditSheetContentState extends State<_QuickPriceEditSheetContent
     "Plus'a Özel",
     'Premium ile',
     'Money ile',
+    'CarrefourSA Kart ile',
   ];
 
   @override

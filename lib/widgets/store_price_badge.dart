@@ -138,13 +138,22 @@ class StorePriceBadge extends StatelessWidget {
         (TrendyolPlusBadge.isTrendyolPlusDeal(deal) || PazaramaPlusBadge.isPazaramaPlusDeal(deal));
   }
 
-  /// Prime, Premium, Plus veya Money gibi özel üyelik/sadakat programı mı?
-  bool get isLoyaltyBadge => isMoney || isPrime || isPremium || isPlus;
+  bool get isCarrefour {
+    final lblUpper = effectiveLabel.toUpperCase();
+    if (lblUpper.isNotEmpty) {
+      return lblUpper.contains('CARREFOUR');
+    }
+    return false;
+  }
+
+  /// Prime, Premium, Plus, Money veya CarrefourSA gibi özel üyelik/sadakat programı mı?
+  bool get isLoyaltyBadge => isMoney || isPrime || isPremium || isPlus || isCarrefour;
 
   String get emblem {
     if (isMoney) return 'M';
     if (isPlus) return '+';
     if (isPrime || isPremium) return 'P';
+    if (isCarrefour) return 'C';
     return '';
   }
 

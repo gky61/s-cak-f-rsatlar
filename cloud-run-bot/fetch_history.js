@@ -256,6 +256,8 @@ function cleanFallbackTitle(rawTitle) {
     /bim(?:'de|de)?/gi,
     /şok(?:'ta|ta)?/gi,
     /migros(?:'ta|ta)?/gi,
+    /carrefoursa(?:'da|da)?/gi,
+    /carrefour(?:'da|da)?/gi,
     /günün fırsatı/gi,
     /fırsat/gi,
     /indirim(?:li)?/gi,
@@ -338,6 +340,7 @@ function extractStoreFromLink(link, text) {
 
   if (hostname.includes('getir') || lowerLink.includes('getir.com') || lowerLink.includes('getir.onelink.me') || lowerLink.includes('onelink.me')) store = 'Getir';
   else if (hostname.includes('migros') || lowerLink.includes('migros.com')) store = 'Migros';
+  else if (hostname.includes('carrefoursa') || hostname.includes('carrefour') || lowerLink.includes('carrefoursa.com')) store = 'CarrefourSA';
   else if (hostname.includes('trendyol') || lowerLink.includes('trendyol.com') || lowerLink.includes('ty.gl')) store = 'Trendyol';
   else if (hostname.includes('hepsiburada') || lowerLink.includes('hepsiburada.com') || lowerLink.includes('hb.biz')) store = 'Hepsiburada';
   else if (hostname.includes('amazon') || lowerLink.includes('amazon.') || lowerLink.includes('amzn.') || lowerLink.includes('amzlinks.')) store = 'Amazon';
@@ -361,6 +364,7 @@ function extractStoreFromLink(link, text) {
     const lowerText = text.toLowerCase();
     if (lowerText.includes('getir')) return 'Getir';
     if (lowerText.includes('migros')) return 'Migros';
+    if (lowerText.includes('carrefoursa') || lowerText.includes('carrefour')) return 'CarrefourSA';
     if (lowerText.includes('trendyol')) return 'Trendyol';
     if (lowerText.includes('hepsiburada')) return 'Hepsiburada';
     if (lowerText.includes('amazon')) return 'Amazon';

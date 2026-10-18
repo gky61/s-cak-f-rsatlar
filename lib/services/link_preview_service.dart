@@ -36,6 +36,7 @@ import 'scrapers/getir_scraper.dart';
 import 'scrapers/boyner_scraper.dart';
 import 'scrapers/gamer_gen_scraper.dart';
 import 'scrapers/gaming_gen_scraper.dart';
+import 'scrapers/carrefoursa_scraper.dart';
 import '../utils/test_logger.dart';
 
 void _log(String message) {
@@ -124,6 +125,7 @@ class LinkPreviewService {
     BoynerScraper(),
     GamerGenScraper(),
     GamingGenScraper(),
+    CarrefoursaScraper(),
   ];
   static const _defaultUserAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36';
@@ -131,6 +133,12 @@ class LinkPreviewService {
   bool _isLogoUrl(String urlString, String pageUrl) {
     final lowerUrl = urlString.toLowerCase();
     if (lowerUrl.endsWith('.svg') || lowerUrl.contains('.svg')) {
+      return true;
+    }
+    // Migros Sanalmarket / Hemen SEO afiş ve placeholder banner görselleri
+    if (lowerUrl.contains('sanalmarket-seo') ||
+        lowerUrl.contains('hemen-seo') ||
+        (lowerUrl.contains('migrosone.com') && lowerUrl.contains('/custom/'))) {
       return true;
     }
     if (lowerUrl.contains('logo') || 
@@ -166,7 +174,8 @@ class LinkPreviewService {
         lowerUrl.contains('ty.gl') ||
         lowerUrl.contains('incehesap.com') ||
         lowerUrl.contains('pttavm.com') ||
-        lowerUrl.contains('boyner.com.tr')) {
+        lowerUrl.contains('boyner.com.tr') ||
+        lowerUrl.contains('carrefoursa.com')) {
       userAgent = 'WhatsApp/2.23.4.15 A';
     } else if (lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('havitstore.com.tr') || lowerUrl.contains('mango.com')) {
       userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -199,7 +208,7 @@ class LinkPreviewService {
     
     // Akamai Bot Manager ve AWS WAF gibi sıkı korumaları aşmak için Android ve iOS'ta native HTTP kütüphanesini kullanıyoruz.
     if ((defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) && 
-        (lowerUrl.contains('zara.com') || lowerUrl.contains('getir.com') || lowerUrl.contains('itopya.com') || lowerUrl.contains('mango.com') || lowerUrl.contains('beymen.com') || lowerUrl.contains('defacto.com.tr') || lowerUrl.contains('mavi.com') || lowerUrl.contains('pttavm.com') || lowerUrl.contains('incehesap.com') || lowerUrl.contains('teknosa.com') || lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('n11.com') || lowerUrl.contains('hepsiburada.com') || lowerUrl.contains('trendyol.com') || lowerUrl.contains('boyner.com.tr'))) {
+        (lowerUrl.contains('zara.com') || lowerUrl.contains('getir.com') || lowerUrl.contains('itopya.com') || lowerUrl.contains('mango.com') || lowerUrl.contains('beymen.com') || lowerUrl.contains('defacto.com.tr') || lowerUrl.contains('mavi.com') || lowerUrl.contains('pttavm.com') || lowerUrl.contains('incehesap.com') || lowerUrl.contains('teknosa.com') || lowerUrl.contains('vatanbilgisayar.com') || lowerUrl.contains('pazarama.com') || lowerUrl.contains('idefix.com') || lowerUrl.contains('n11.com') || lowerUrl.contains('hepsiburada.com') || lowerUrl.contains('trendyol.com') || lowerUrl.contains('boyner.com.tr') || lowerUrl.contains('carrefoursa.com'))) {
       _log('🚀 Native HTTP istemcisi çağrılıyor: $url');
       try {
         final headers = _getHeadersForUrl(url);
@@ -303,6 +312,8 @@ class LinkPreviewService {
             }
             final document = await _parseHtmlSafe(htmlContent);
             if (document != null) {
+              await matchedScraper.prepare(document: document, url: targetUrl);
+
               final imageUrl = matchedScraper.scrape(
                 document: document,
                 url: targetUrl,
@@ -311,8 +322,23 @@ class LinkPreviewService {
                 log: _log,
               );
               
-              final title = matchedScraper.scrapeTitle(document) ?? 
-                            MetadataParser.parse(document, url: targetUrl).title;
+              String? title = matchedScraper.scrapeTitle(document);
+              final lowerTitle = (title ?? '').trim().toLowerCase();
+              if (lowerTitle == 'migros' || lowerTitle == 'migros sanalmarket') {
+                title = null;
+              }
+              if (title == null || title.trim().isEmpty) {
+                final parsedTitle = MetadataParser.parse(document, url: targetUrl).title;
+                final lowerParsed = (parsedTitle ?? '').trim().toLowerCase();
+                if (lowerParsed != 'migros' && lowerParsed != 'migros sanalmarket' && lowerParsed.isNotEmpty) {
+                  title = parsedTitle;
+                }
+              }
+              if (title == null || title.trim().isEmpty) {
+                if (matchedScraper is MigrosScraper) {
+                  title = matchedScraper.parseSlugTitle(targetUrl);
+                }
+              }
                             
               final description = await matchedScraper.scrapeDescription(document) ??
                                   MetadataParser.parse(document, url: targetUrl).description;
@@ -444,8 +470,14 @@ class LinkPreviewService {
       _log('   - Görsel: ${resolvedImage ?? "yok"}');
       _log('   - Provider: ${provider ?? "yok"}');
 
+      String? fallbackTitle = metadata?.title;
+      final lowerFb = (fallbackTitle ?? '').trim().toLowerCase();
+      if (lowerFb == 'migros' || lowerFb == 'migros sanalmarket') {
+        fallbackTitle = null;
+      }
+
       return LinkPreviewResult(
-        title: metadata?.title,
+        title: fallbackTitle,
         description: metadata?.description,
         imageUrl: resolvedImage,
         provider: provider,

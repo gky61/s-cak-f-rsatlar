@@ -52,6 +52,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
     'Boyner',
     'Gamer Gen',
     'Gaming Gen',
+    'CarrefourSA',
     'Diğer',
   ];
 
@@ -283,7 +284,7 @@ class _KuponFormPageState extends State<KuponFormPage> {
                           // Mağaza Dropdown
                           DropdownButtonFormField<String>(
                             // ignore: deprecated_member_use
-                            value: _secilenMagaza,
+                            value: _populerMagazalar.contains(_secilenMagaza) ? _secilenMagaza : 'Diğer',
                             menuMaxHeight: 300,
                             isExpanded: true,
                             dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,

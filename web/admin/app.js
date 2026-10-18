@@ -1628,6 +1628,8 @@ function getPriceBadgeHtml(priceLabel, store = '') {
     let emblem = 'P';
     if (labelUpper.includes('PLUS') || storeLower.includes('trendyol') || storeLower.includes('pazarama')) {
         emblem = '+';
+    } else if (labelUpper.includes('CARREFOUR') || storeLower.includes('carrefour')) {
+        emblem = 'C';
     } else if (labelUpper.includes('PRIME') || labelUpper.includes('PREMIUM')) {
         emblem = 'P';
     }
@@ -2429,6 +2431,7 @@ async function showDealModal(deal) {
                         <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400" data-label="Premium ile">Premium ile</button>
                         <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400" data-label="Plus ile">Plus ile</button>
                         <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" data-label="Money ile">Money ile</button>
+                        <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400" data-label="CarrefourSA Kart ile">CarrefourSA Kart ile</button>
                         <button type="button" class="preset-badge-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300" data-label="">✕ Temizle</button>
                     </div>
                 </div>
@@ -13554,6 +13557,7 @@ function getStoreColorClass(store) {
     if (s.includes('pazarama')) return 'bg-blue-600/10 text-blue-600 border border-blue-600/20';
     if (s.includes('incehesap')) return 'bg-cyan-600/10 text-cyan-600 border border-cyan-600/20';
     if (s.includes('migros')) return 'bg-orange-500/10 text-orange-600 border border-orange-500/20';
+    if (s.includes('carrefoursa') || s.includes('carrefour')) return 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20';
     if (s.includes('getir')) return 'bg-purple-600/10 text-purple-600 border border-purple-600/20';
     return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
 }

@@ -651,6 +651,13 @@ void showAdminEditSheet({
                                   isDark: isDark,
                                 ),
                                 _buildBadgeChip(
+                                  label: 'CarrefourSA Kart ile',
+                                  color: const Color(0xFF2563EB),
+                                  isSelected: priceLabelController.text == 'CarrefourSA Kart ile',
+                                  onTap: () => setSheetState(() => priceLabelController.text = 'CarrefourSA Kart ile'),
+                                  isDark: isDark,
+                                ),
+                                _buildBadgeChip(
                                   label: '✕ Temizle',
                                   color: Colors.grey,
                                   isSelected: priceLabelController.text.isEmpty,

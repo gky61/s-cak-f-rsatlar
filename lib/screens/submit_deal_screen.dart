@@ -32,6 +32,7 @@ void _log(String message) {
 
 class SubmitDealScreen extends StatefulWidget {
   final String? initialUrl;
+  static bool isScreenOpen = false;
   const SubmitDealScreen({super.key, this.initialUrl});
 
   @override
@@ -82,6 +83,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     'Boyner',
     'Gamer Gen',
     'Gaming Gen',
+    'CarrefourSA',
     'Diğer',
   ];
 
@@ -141,6 +143,8 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
       matchedStore = 'Gamer Gen';
     } else if (lowerName.contains('gaming.gen.tr') || lowerName.contains('gaminggen') || lowerName.contains('gaming gen')) {
       matchedStore = 'Gaming Gen';
+    } else if (lowerName.contains('carrefoursa') || lowerName.contains('carrefour')) {
+      matchedStore = 'CarrefourSA';
     }
 
     setState(() {
@@ -153,7 +157,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         _storeController.text = storeName;
       }
 
-      if (matchedStore == 'Getir' || matchedStore == 'Migros') {
+      if (matchedStore == 'Getir' || matchedStore == 'Migros' || matchedStore == 'CarrefourSA') {
         _selectedCategory = 'supermarket';
         _selectedSubCategory ??= 'Gıda Ürünleri';
       }
@@ -189,6 +193,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
   @override
   void initState() {
     super.initState();
+    SubmitDealScreen.isScreenOpen = true;
 
     _titleController.addListener(_onTextChanged);
     _descriptionController.addListener(_onTextChanged);
@@ -925,6 +930,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
 
   @override
   void dispose() {
+    SubmitDealScreen.isScreenOpen = false;
     _isDisposed = true;
     _fetchSessionId++;
     if (widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty) {
@@ -2557,7 +2563,9 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
             // Mağaza Seçimi
             DropdownButtonFormField<String>(
               // ignore: deprecated_member_use
-              value: _selectedStore,
+              value: _selectedStore == null
+                  ? null
+                  : (_stores.contains(_selectedStore) ? _selectedStore : 'Diğer'),
               menuMaxHeight: 300,
               isExpanded: true,
               dropdownColor: isDark ? AppTheme.darkSurface : Colors.white,
@@ -2892,6 +2900,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         lower.contains('hepsiburada') ||
         lower.contains('pazarama') ||
         lower.contains('migros') ||
+        lower.contains('carrefour') ||
         lower.contains('idefix');
   }
 
@@ -2915,6 +2924,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
         upper == 'MONEY İNDİRİMLİ' ||
         upper == 'MONEY INDIRIMLI' ||
         upper == 'MONEY' ||
+        upper.contains('CARREFOUR') ||
         upper.contains('PRIME') ||
         upper.contains('PLUS') ||
         upper.contains('PREMIUM');
@@ -2928,6 +2938,7 @@ class _SubmitDealScreenState extends State<SubmitDealScreen> {
     if (lower.contains('hepsiburada')) return 'Premium ile';
     if (lower.contains('pazarama')) return 'Plus ile';
     if (lower.contains('migros')) return 'Money ile';
+    if (lower.contains('carrefour')) return 'CarrefourSA Kart ile';
     if (lower.contains('idefix')) return "Premium'a Özel";
     return 'Özel Fiyat';
   }

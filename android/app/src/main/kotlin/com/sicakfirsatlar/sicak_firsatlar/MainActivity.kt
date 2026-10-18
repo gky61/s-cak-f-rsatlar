@@ -13,11 +13,27 @@ class MainActivity: FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         createNotificationChannelsIfNeeded()
+        // Son uygulamalar (Recent Apps / Overview) menüsünden açılışta eski intent tekrarını önle
+        val currentIntent = intent
+        if (currentIntent != null && (currentIntent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) {
+            intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        }
         super.onCreate(savedInstanceState)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) {
+            val neutralIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            setIntent(neutralIntent)
+            return
+        }
         setIntent(intent)
     }
 
@@ -108,10 +124,12 @@ class MainActivity: FlutterActivity() {
             when (call.method) {
                 "clearIntent" -> {
                     try {
-                        intent = Intent(Intent.ACTION_MAIN).apply {
+                        val neutralIntent = Intent(Intent.ACTION_MAIN).apply {
                             addCategory(Intent.CATEGORY_LAUNCHER)
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
+                        intent = neutralIntent
+                        setIntent(neutralIntent)
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("ERROR", e.message, null)

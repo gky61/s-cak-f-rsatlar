@@ -12,6 +12,9 @@ class BaseProductScraper {
     return url.toLowerCase().includes(this.domain);
   }
 
+  /** Scraper'ın kazıma öncesi hazırlık yapabilmesi (örneğin SPA / REST API sorguları) için çağrılır */
+  async prepare($, url) {}
+
   /** HTML'den görsel URL'sini çeker */
   scrapeImage($, url) { return null; }
 
@@ -258,6 +261,7 @@ class BaseProductScraper {
   isLogoUrl(urlString) {
     const lower = urlString.toLowerCase();
     if (lower.endsWith('.svg') || lower.includes('.svg')) return true;
+    if (lower.includes('sanalmarket-seo') || lower.includes('hemen-seo') || (lower.includes('migrosone.com') && lower.includes('/custom/'))) return true;
     if (lower.includes('logo') || lower.includes('default') || lower.includes('brand') ||
         lower.includes('banner') || lower.includes('pwa') || lower.includes('favicon') ||
         lower.includes('avatar') || lower.includes('/icons/') || lower.includes('/icon/')) {

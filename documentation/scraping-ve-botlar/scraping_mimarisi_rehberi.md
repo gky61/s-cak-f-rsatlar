@@ -1,16 +1,16 @@
 # 🕷️ FırsatKolik — Scraping Mimarisi ve Otonom Botlar Master Rehberi
 
 > [!IMPORTANT]
-> **Base Doküman & Scraping Kontratı:** Bu doküman, FırsatKolik platformunun mobil istemci (Flutter/Dart) ve sunucu (Compute Engine VM / Node.js) katmanlarındaki tüm e-ticaret veri kazıma (scraping) mekanizmasını, 23 mağaza çözümleme stratejilerini, WAF/TLS bypass motorlarını, canlı API entegrasyonlarını, Telegram botunu ve metadata katmanını yöneten **ana orkestratör (Base Contract)** dokümandır. Her bir alt mimarinin ayrıntılı teknik referansları ilgili bölümlerde doğrudan bağlantılanmıştır.
+> **Base Doküman & Scraping Kontratı:** Bu doküman, FırsatKolik platformunun mobil istemci (Flutter/Dart) ve sunucu (Compute Engine VM / Node.js) katmanlarındaki tüm e-ticaret veri kazıma (scraping) mekanizmasını, 24 mağaza çözümleme stratejilerini, WAF/TLS bypass motorlarını, canlı API entegrasyonlarını, Telegram botunu ve metadata katmanını yöneten **ana orkestratör (Base Contract)** dokümandır. Her bir alt mimarinin ayrıntılı teknik referansları ilgili bölümlerde doğrudan bağlantılanmıştır.
 
-Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu (Compute Engine VM üzerinde Docker / Node.js; `cloud-run-bot` dizin adı tarihsel kalıntıdır) ve bot katmanlarındaki tüm scraping (veri kazıma) mekanizmasını, 23 entegre mağaza için bypass stratejilerini, URL doğrulama zincirini, canlı API ve tersine mühendislik çözümlerini, metadata katmanını (`originalPrice`, `ratingValue`, `priceLabel`), kategori tespit motorunu ve deployment süreçlerini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
+Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu (Compute Engine VM üzerinde Docker / Node.js; `cloud-run-bot` dizin adı tarihsel kalıntıdır) ve bot katmanlarındaki tüm scraping (veri kazıma) mekanizmasını, 24 entegre mağaza için bypass stratejilerini, URL doğrulama zincirini, canlı API ve tersine mühendislik çözümlerini, metadata katmanını (`originalPrice`, `ratingValue`, `priceLabel`), kategori tespit motorunu ve deployment süreçlerini tanımlayan **resmi mimari sözleşmedir (Documentation Contract)**.
 
 ---
 
 ## 📑 İçindekiler
 1. [🌟 Genel Mimari ve İki Motorlu İstek Akışı](#1--genel-mimari-ve-i̇ki-motorlu-i̇stek-akışı)
 2. [🔍 URL Kontrol ve Doğrulama Zinciri (4 Aşamalı Filtre)](#2--url-kontrol-ve-doğrulama-zinciri-4-aşamalı-filtre)
-3. [🏪 23 Entegre Mağaza ve Detaylı Çözümleme Stratejileri](#3--23-entegre-mağaza-ve-detaylı-çözümleme-stratejileri)
+3. [🏪 24 Entegre Mağaza ve Detaylı Çözümleme Stratejileri](#3--24-entegre-mağaza-ve-detaylı-çözümleme-stratejileri)
 4. [🛡️ Bot Koruması ve WAF Bypass Yöntemleri (6 Katmanlı)](#4-️-bot-koruması-ve-waf-bypass-yöntemleri-6-katmanlı)
 5. [📱 İstemci Tarafı Platform-Native HTTP Bypass (MethodChannel)](#5--i̇stemci-tarafı-platform-native-http-bypass-methodchannel)
 6. [🏷️ Özel Üyelik ve Fiyat Etiketi Mekanizması (priceLabel)](#6-️-özel-üyelik-ve-fiyat-etiketi-mekanizması-pricelabel)
@@ -19,7 +19,7 @@ Bu doküman; **FırsatKolik** platformunun mobil istemci (Flutter/Dart), sunucu 
 9. [🤖 Telegram Botu ve Canlı Kanal Dinleyici Mimarisi](#9--telegram-botu-ve-canlı-kanal-dinleyici-mimarisi)
 10. [🧠 Kategori Tespit Motoru ve Reklam Mevzuatı Uyumu](#10--kategori-tespit-motoru-ve-reklam-mevzuatı-uyumu)
 11. [🚀 Bulut Altyapısı, Docker ve Deployment (deploy_to_vm.py)](#11--bulut-altyapısı-docker-ve-deployment-deploy_to_vmpy)
-12. [📊 23 Mağaza İçin Kapsamlı Özet Karar Matrisi](#12--23-mağaza-için-kapsamlı-özet-karar-matrisi)
+12. [📊 24 Mağaza İçin Kapsamlı Özet Karar Matrisi](#12--24-mağaza-için-kapsamlı-özet-karar-matrisi)
 13. [🧪 Birim Testleri ve Doğrulama Süitleri](#13--birim-testleri-ve-doğrulama-süitleri)
 14. [🔧 Sorun Giderme ve Hata Ayıklama (Troubleshooting)](#14--sorun-giderme-ve-hata-ayıklama-troubleshooting)
 15. [📂 İlgili Kaynak Kod Dosyaları ve Referanslar](#15--ilgili-kaynak-kod-dosyaları-ve-referanslar)
@@ -59,7 +59,7 @@ graph TD
     G -- Evet --> H{Çalışma Ortamı}
     
     %% İstemci Motoru
-    H -->|Mobil: Dart / Flutter| I[23 Dart Scraper Sınıfı]
+    H -->|Mobil: Dart / Flutter| I[24 Dart Scraper Sınıfı]
     I --> J{Akamai/WAF Engeli Var mı?}
     J -- Evet (Zara, Mango, vb.) --> K[Platform-Native MethodChannel\nAndroid: HttpURLConnection / iOS: URLSession]
     J -- Hayır --> L[Standart HTTP Client + WhatsApp/Chrome UA]
@@ -67,7 +67,7 @@ graph TD
     L --> M
     
     %% Sunucu Motoru
-    H -->|Sunucu: Node.js / GCE VM| N[23 Node.js Scraper Sınıfı]
+    H -->|Sunucu: Node.js / GCE VM| N[24 Node.js Scraper Sınıfı]
     N --> O{WAF Koruma Tipi?}
     O -->|Akamai / Cloudflare TLS| P[Sistem curl spawnSync + WhatsApp UA + TR Cookies]
     O -->|Datacenter IP Blok| Q[Google Translate Proxy: translate.goog]
@@ -126,12 +126,12 @@ Sisteme giren her URL veya paylaşılan metin, scraping yapılmadan önce şu 5 
 
 ---
 
-## 3. 🏪 23 Entegre Mağaza ve Detaylı Çözümleme Stratejileri
+## 3. 🏪 24 Entegre Mağaza ve Detaylı Çözümleme Stratejileri
 
 > 🔗 **Detaylı Referans Dokümanı:**
-> - [Scraping Kuralları ve Stratejileri Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_rules_and_strategies.md) — 23 mağazanın DOM seçicileri, regex desenleri ve özel çerez ayarları.
+> - [Scraping Kuralları ve Stratejileri Rehberi](file:///d:/firsatkolik/documentation/scraping-ve-botlar/scraping_rules_and_strategies.md) — 24 mağazanın DOM seçicileri, regex desenleri ve özel çerez ayarları.
 
-Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel teknikler:
+Platform bünyesinde tam desteklenen 24 e-ticaret mağazası ve uygulanan özel teknikler:
 
 ### 1. Amazon (`amazon.com.tr`, `amzn.to`, `amzn.eu`, `link.amazon`, `amzlinks.in`, `fenom.io`)
 - **Kısa Linkler & Aracı Yönlendiriciler:** `amzn.to`, `amzn.eu`, `link.amazon`, `amzlinks.in` ve `fenom.io` kısa linkleri yönlendirme zinciri takibiyle asıl ürün sayfasına çözülür. `link.amazon` linkleri `amzlinks.in` aracı servisine yönlenir; `amzlinks.in` WhatsApp UA tespit ettiğinde 302 yerine 200 OK döndüğünden, HTML gövdesindeki `<base href="...">` ve `btn_url` parametresi `Uri.decodeComponent` ile çözümlenerek doğrudan kanonik Amazon TR ürün linkine ulaşılır. `fenom.io` için ise JavaScript `appLink` / `fallbackLink` regex ayıklaması kullanılır.
@@ -231,7 +231,14 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 - **E-Ticaret Altyapısı:** Standart Chrome UA + DOM seçicileri ve JSON-LD şeması.
 
 ### 20. Migros (`migros.com.tr`)
-- **Money İndirimi:** `.money-badge` veya Money Kulüp fiyatı tespit edildiğinde `priceLabel: "Money ile"` atanır.
+- **SSR vs SPA Mimarisi (Hemen vs Sanalmarket/Pazaryeri):** Migros Hemen (`/hemen/...`) sayfaları SSR (Server-Side Rendering) ile derlenip HTML içinde zengin JSON-LD ve og:image barındırırken; Migros Sanalmarket ve Pazaryeri (`/grocery-mp/...`, `/sanalmarket/...`) sayfaları Angular SPA mimarisiyle çalışır. Ham HTML içinde yalnızca generic `<title>Migros</title>` ve standart afiş görseli (`sanalmarket-seo-34706362.png`) bulunur.
+- **Hexadecimal (On-Altılık) SKU Çözücü:** Migros web URL'lerindeki slug sonu `-p-[hex]` deseni yakalanıp onaltılık tabandan (`radix: 16`) onluk tabana çevrilerek Migros ürün SKU'su elde edilir (Örn: `soke-un-1-kg-p-4c73e1` ➔ `4c73e1` [hex] = `5010401` [dec]; `ugg-bot-p-3150731` ➔ `3150731` [hex] = `51709745` [dec]; `gepettoys-p-229439a` ➔ `229439a` [hex] = `36258714` [dec]).
+- **Çok Kanallı Paralel Screens API ve Kampanya Aday Seçimi (Multi-Channel Promotion Merging):** Migros, bazı ürünlerde Money indirimlerini yalnızca express/hemen kanalında (`/rest/hemen/products/screens/{productId}`), bazı ürünlerde ise genel pazaryeri kanalında (`/rest/products/screens/{productId}`) yayımlamaktadır. Scraper, `prepare()` aşamasında her iki uç noktayı `Future.wait` / `Promise.all` ile paralel (~150-200ms) sorgular. İki uç noktanın `storeProductInfoDTO` verileri `_scoreCandidate` algoritmasıyla incelenir; aktif indirim (`discountRate > 0`, `loyaltyPrice < regularPrice`, `shownPrice < regularPrice`, `PRICE_PROMOTED`, `CROSS_PROMOTED`, `crmDiscountTags`) veya daha düşük net satış fiyatı sunan kanal otomatik seçilir ve eksik alanlar (görsel, marka, açıklama, kategori) çapraz yedeklenir. Böylece pazar yerinden paylaşılan bir ürünün dahi express kanalındaki Money indirimi eksiksiz yakalanır.
+- **Eşzamanlılık & Bellek İzolasyonu (Expando / WeakMap):** Çift tıklama, arka arkaya paylaşım veya sunucuda eşzamanlı Telegram mesajlarında bellek karışması (race condition) ve sızıntı riskini sıfırlamak için Dart tarafında `Expando<Map<String, dynamic>>`, Node.js tarafında `WeakMap` kullanılarak önbellek doğrudan `dom.Document` / `$` referansına bağlanır; DOM çöp toplayıcı tarafından silindiğinde bellek 0ms'de otomatik temizlenir.
+- **Placeholder Afiş Filtrelemesi:** `sanalmarket-seo-...png`, `hemen-seo-...png` ve `migrosone.com/.../custom/` afişleri `_isLogoUrl` filtresiyle engellenir; daima `1650x1650` çözünürlüğündeki `PRODUCT_HD` / `PRODUCT_DETAIL` gerçek ürün görseli çekilir.
+- **CRM Kampanyaları & Money İndirimi (`priceLabel`):** API'deki `crmDiscountTags` ("1 ALANA 1 BEDAVA", "50 TL Sepette İndirim"), `CROSS_PROMOTED` badges ("3 Al 2 Öde", "2.'si %50 İndirimli") ve `PRICE_PROMOTED` / `loyaltyPrice` farkı ("Money ile") dinamik etiket olarak sunulur.
+- **İndirimsiz Liste Fiyatı (`originalPrice`):** `regularPrice`, `salePrice` ve `PRICE_PROMOTED` rozetleri kuruş/TL dönüşümü (`/ 100`) yapılarak güncel satış fiyatından yüksek ve en fazla 5 katı olduğu filtrelenir ve indirimsiz fiyat olarak atanır.
+- **Slug Fallback & Generic Başlık Kalkanı:** "Migros", "Migros Sanalmarket" gibi marka adları elenir. Ağ hatasında dahi `parseSlugTitle()` URL slug'ından temiz insan okunabilir başlık üretir.
 
 ### 21. Boyner (`boyner.com.tr`)
 - **WAF & Bot Koruması:** Cloudflare WAF koruması altındadır. Standart masaüstü User-Agent veya kütüphane TLS el sıkışmaları (Dart HTTP ve Node.js fetch) engellenerek `Just a moment...` challenge ekranı veya 403 Forbidden döndürülür.
@@ -257,20 +264,32 @@ Platform bünyesinde tam desteklenen 23 e-ticaret mağazası ve uygulanan özel 
 - **Görsel & Marka:** WooCommerce `woocommerce-product-gallery__image` veya JSON-LD `image` alanı taranır; marka ise JSON-LD `brand.name` veya breadcrumbs hiyerarşisinden (`Powered by ASUS`, `Thermalright` vb.) çıkarılır.
 - **Breadcrumbs:** WooCommerce breadcrumbs yapısı (`.woocommerce-breadcrumb`) taranarak kategori hiyerarşisi oluşturulur (`"gaming.gen.tr"` kök mağaza adı elenir, `"Gaming Laptop"` gibi kategori adları korunur).
 
+### 24. CarrefourSA (`carrefoursa.com`)
+- **Altyapı:** SAP Commerce / Hybris tabanlı kurumsal e-ticaret ve zincir market altyapısı. Ürün sayfaları `-p-[a-z0-9]+\/?$` regex deseniyle doğrulanır.
+- **Fiyat Çözümleme:** Ana ürün satış fiyatı öncelikle PDP fiyat alanlarından (`.pdp-price-card .item-price`, `.pdp-price-card-sale .js-variant-price`, `.pd-price-cont .item-price`, `.pdp-price-card .price`, `.price-card-sale .js-variant-price`) okunur. Alttaki "Tavsiye Edilen / Benzer Ürünler" (`.hover-box`) karusellerindeki yabancı fiyatların sızmaması için seçiciler ana PDP kartı ile kesin olarak sınırlandırılmıştır.
+- **İndirimsiz Liste Fiyatı (`originalPrice`):** CarrefourSA Kart indirimli ürünlerde indirimsiz liste fiyatı `.pdp-price-card-regular .js-variant-price, .pdp-price-card-regular .priceLineThrough` seçicilerinden çekilir. Tek fiyatlı ürünlerde veya indirim yoksa `null` döner.
+- **Özel Üyelik & Kampanya Rozeti (`priceLabel`):**
+  - CarrefourSA Kart indirimi olan ürünlerde: `"CarrefourSA Kart ile"`
+  - Çoklu alım / adet kampanyası olan ürünlerde (`var campaignList`, `.product-detail-badge-position`, `.disc-badge-new`): Kampanya adı rozet metnine eklenir (örn: `"CarrefourSA Kart ile 2 Al 1 Öde"` veya `"2 Al 1 Öde"`).
+  - Standart tek fiyatlı ürünlerde: `null`.
+- **Görsel & Marka:** Görsel JSON-LD `image`, `meta[property="og:image"]` ve `.product-image img` seçicilerinden çekilir (`images.csfour.com` CDN); marka ise JSON-LD `brand.name`, `meta[property="product:brand"]` ve `.product-brand` alanlarından çıkarılır.
+- **Breadcrumbs:** `.breadcrumb .breadcrumb-item a` DOM elemanları taranarak kategori hiyerarşisi oluşturulur (`"Anasayfa"` ve son eleman olan ürün adı elenir, `"Temel Gıda"`, `"Soslar"`, `"Ketçap"` gibi kategori adları korunur).
+- **Bot/WAF Koruması Bypass:** Node.js sunucu botunda `curlFetchHtml` (Chrome 124 UA) ve `translate.goog` fallback; mobil istemcide (Android/iOS) `MethodChannel` platform-native HTTP tünellemesi kullanılır.
+
 ---
 
 ## 4. 🛡️ Bot Koruması ve WAF Bypass Yöntemleri
 
 | Bypass Yöntemi | Hedef Mağazalar | Çözülen Problem / Mekanizma |
 | :--- | :--- | :--- |
-| **1. `curl` spawnSync + WhatsApp UA** (İncehesap: iPhone UA) | `Hepsiburada`, `Trendyol`, `Teknosa`, `Mavi`, `Amazon`, `PttAVM`, `İncehesap`, `Boyner` | Node.js `fetch` TLS (JA3/JA4) parmak izi engelini aşar; işletim sistemi düzeyinde OpenSSL stack'i kullanır. |
+| **1. `curl` spawnSync + WhatsApp / Chrome UA** (İncehesap: iPhone UA) | `Hepsiburada`, `Trendyol`, `Teknosa`, `Mavi`, `Amazon`, `PttAVM`, `İncehesap`, `Boyner`, `CarrefourSA` | Node.js `fetch` TLS (JA3/JA4) parmak izi engelini aşar; işletim sistemi düzeyinde OpenSSL stack'i kullanır. |
 | **2. Türkiye Lokasyon Çerezleri** | `Trendyol`, `Getir` | `Cookie: storefrontId=1; countryCode=TR; language=tr` ile yurt dışı sunucu yönlendirmesi engellenir ve yerel indirimli fiyatlar çekilir. |
-| **3. Google Translate Proxy (`translate.goog`)** | `N11`, `Vatan Bilgisayar`, `Itopya` | Datacenter IP bloklarını aşmak için meşru Google Translate IP'leri üzerinden tünelleme yapılır. |
+| **3. Google Translate Proxy (`translate.goog`)** | `N11`, `Vatan Bilgisayar`, `Itopya`, `CarrefourSA (Fallback)` | Datacenter IP bloklarını aşmak için meşru Google Translate IP'leri üzerinden tünelleme yapılır. |
 | **4. Microlink API Proxy** | `Amazon` (yalnızca `curl` boş dönerse fallback) | Üçüncü taraf HTML proxy; `prerender` parametresi kodda var ama hiçbir çağrı açmaz. PttAVM dalı ölü koddur. |
 | **5. Googlebot User-Agent Taklidi** | `MediaMarkt` | Arama motoru botlarına uygulanan beyaz liste kurallarını kullanarak doğrudan erişim sağlar. |
 | **6. Yandex Translate & Wayback Machine** | `Getir` | CloudFront WAF engellerini Yandex tüneliyle aşar; depo 404 durumunda Wayback arşiviyle görseli kurtarır. |
 
-Not: Yöntem sayısı değil, `fetchHtml()` (`link_scraper_service.js:869`) içindeki mağaza bazlı yönlendirme esastır. Listede olmayan mağazalar (Idefix, Pazarama, Mango, Zara, Beymen, Defacto, Havit, Migros, gamer/gaming.gen.tr) standart `fetch` kullanır..
+Not: Yöntem sayısı değil, `fetchHtml()` (`link_scraper_service.js:869`) içindeki mağaza bazlı yönlendirme esastır. Listede olmayan mağazalar (Idefix, Pazarama, Mango, Zara, Beymen, Defacto, Havit, Migros, gamer/gaming.gen.tr) standart `fetch` kullanır.
 
 
 ### 4.1 Bot Tarafı Mağaza Bypass Stratejileri ve Çözüm Yolları
@@ -342,6 +361,7 @@ Sunucu ortamındaki bot korumalarını aşmak için `link_scraper_service.js` i�
 | **Pazarama / Mango** | Vercel/WAF 429 | Standart Fetch + masaüstü Chrome 124 UA | `getHeadersForUrl` (`:17`) |
 | **Zara / Beymen / Defacto / Gamer.gen.tr / Gaming.gen.tr** | — | Standart Fetch + WhatsApp UA (403/401'de tarayıcı UA ile tek yeniden deneme) | `fetchHtml` (`:1083`) |
 | **Boyner** | Cloudflare WAF (TLS Parmak İzi & Bot Engeli) | `curl` spawnSync + `WhatsApp` UA (Sunucu) / Native HTTP (İstemci) | `magaza` ve `barcode` parametreleri korunur, Next.js `PriceInfo` üzerinden indirimli/liste fiyatı ve `CampaignInfo` çekilir. |
+| **CarrefourSA** | Cloudflare WAF / TLS Parmak İzi | `WhatsApp/2.23.4.15 A` UA ile `curl` spawnSync (Sunucu) / Native HTTP + WhatsApp UA (İstemci) | SAP Hybris PDP fiyat seçicileri (`.pdp-price-card`), tavsiye karuseli izolasyonu, `"CarrefourSA Kart ile"` rozeti ve çoklu alım kampanya metni tespiti. |
 | **Havit / Migros** | Bot engeli yok | Standart Fetch (Havit/Migros kodda "engel yok" notlu) | — |
 | **Getir** | CloudFront WAF Captcha (405) | `curl` (Chrome UA + cookie) → **Yandex Translate Proxy** → Wayback Machine | Sıralı fallback; Wayback eski tarihli veri verebilir |
 
@@ -399,6 +419,7 @@ Platformda hem istemci hem de sunucu scraper'larında özel kulüp ve üyelik fi
 - **Hepsiburada:** `"Premium ile"`
 - **Pazarama:** `"Plus ile"`
 - **Migros:** `"Money ile"`
+- **CarrefourSA:** `"CarrefourSA Kart ile"` (ve çoklu alım kombinasyonları: `"CarrefourSA Kart ile 2 Al 1 Öde"`)
 
 ---
 
@@ -550,7 +571,7 @@ curl http://<VM_IP>:8082/health   # prod; dev: 8081
 
 ---
 
-## 12. 📊 23 Mağaza İçin Kapsamlı Özet Karar Matrisi
+## 12. 📊 24 Mağaza İçin Kapsamlı Özet Karar Matrisi
 
 | Mağaza | İstemci (Dart) Yöntemi | Sunucu (Node.js) Yöntemi | Özel Fiyat / Rozet / Canlı Servis |
 | :--- | :--- | :--- | :--- |
@@ -577,6 +598,7 @@ curl http://<VM_IP>:8082/health   # prod; dev: 8081
 | **Boyner** | **Native MethodChannel HTTP** + WhatsApp UA | `curl` spawnSync + WhatsApp UA | Next.js `PriceInfo` Engine (Satış, Eski Fiyat & `CampaignInfo`), DOM Sepette Rozet Temizliği |
 | **Gamer Gen** | DOM (`.text-price`/`.product-price`) | Standart fetch (WhatsApp UA) + Cheerio | Sepette İndirim, Hazır Sistemler (`_h...`), Değerlendirme Yok (`null`) |
 | **Gaming Gen**| DOM (`.summary .price`) & JSON-LD | Standart fetch (WhatsApp UA) | WooCommerce Altyapısı, Bundle Fiyat Filtreleme, Yıldız Puanı (1 ondalık) & Yorum Sayısı |
+| **CarrefourSA**| Native HTTP / Chrome 124 UA | curl spawnSync (Chrome 124 UA) + Translate Proxy | CarrefourSA Kart ile (`priceLabel`), Çoklu Alım Kampanya Rozeti, PDP Fiyat Kapsayıcısı |
 
 ---
 
@@ -586,7 +608,7 @@ Scraper davranışı kayıtlı HTML örnekleriyle birim testlerle korunur (canl�
 
 | Test Dosyası | Katman | Açıklama | Komut |
 | :--- | :--- | :--- | :--- |
-| **`test/*_scraper_test.dart`** | Flutter / Dart | 23 mağazanın fiyat, başlık, görsel ve metadata birim testleri | `flutter test` |
+| **`test/*_scraper_test.dart`** | Flutter / Dart | 24 mağazanın fiyat, başlık, görsel ve metadata birim testleri | `flutter test` |
 | **`cloud-run-bot/tests/*.test.js`** | Node.js | Sunucu tarafı scraper'ların Cheerio DOM ve regex doğrulama testleri | `node cloud-run-bot/tests/<dosya>.test.js` (⚠️ `package.json`'da test script'i yoktur) |
 | **`cloud-run-bot/test_simulate_bot.js`**| Node.js | Canlı Telegram mesaj simülasyonu ve uçtan uca akış testi | `node cloud-run-bot/test_simulate_bot.js` |
 
@@ -613,10 +635,10 @@ Scraper davranışı kayıtlı HTML örnekleriyle birim testlerle korunur (canl�
 | Rol / Katman | Dosya Yolu | Açıklama |
 | :--- | :--- | :--- |
 | **Mobil Link Önizleme Servisi** | [link_preview_service.dart](file:///d:/firsatkolik/lib/services/link_preview_service.dart) | İstemci scraper koordinatörü, redirect çözücü ve native HTTP tüneli. |
-| **Dart Mağaza Scraper'ları (23 Adet)**| [lib/services/scrapers/](file:///d:/firsatkolik/lib/services/scrapers) | 23 mağazaya ait Dart scraper sınıfları. |
-| **Domain Allowlist & Regex Kuralları**| [domain_allowlist_extended.json](file:///d:/firsatkolik/assets/data/domain_allowlist_extended.json) | İzinli alan adları (`store_count` 294) ve 22 mağaza için ürün sayfası regex desenleri. |
+| **Dart Mağaza Scraper'ları (24 Adet)**| [lib/services/scrapers/](file:///d:/firsatkolik/lib/services/scrapers) | 24 mağazaya ait Dart scraper sınıfları. |
+| **Domain Allowlist & Regex Kuralları**| [domain_allowlist_extended.json](file:///d:/firsatkolik/assets/data/domain_allowlist_extended.json) | İzinli alan adları (`store_count` 294) ve 24 mağaza için ürün sayfası regex desenleri. |
 | **Sunucu Link Scraper Servisi** | [link_scraper_service.js](file:///d:/firsatkolik/cloud-run-bot/link_scraper_service.js) | Node.js scraper koordinatörü, curl, Translate Proxy ve Microlink motoru. |
-| **Node.js Mağaza Scraper'ları (23 Adet)**| [cloud-run-bot/scrapers/](file:///d:/firsatkolik/cloud-run-bot/scrapers) | 23 mağazaya ait Node.js scraper sınıfları. |
+| **Node.js Mağaza Scraper'ları (24 Adet)**| [cloud-run-bot/scrapers/](file:///d:/firsatkolik/cloud-run-bot/scrapers) | 24 mağazaya ait Node.js scraper sınıfları. |
 | **Telegram Canlı Botu** | [telegram_bot.js](file:///d:/firsatkolik/cloud-run-bot/telegram_bot.js) | Telegram kanallarını dinleyen ve fırsatları Firestore'a kaydeden ana bot. |
 | **Kategori Tespit Servisi** | [category_detection_service.js](file:///d:/firsatkolik/cloud-run-bot/category_detection_service.js) | NLP tabanlı otomatik kategori sınıflandırma motoru. |
 | **Reklam Uyum Servisi** | [advertising_compliance_service.js](file:///d:/firsatkolik/cloud-run-bot/advertising_compliance_service.js) | Yasal reklam ibaresi (#işbirliği) entegrasyonu. |

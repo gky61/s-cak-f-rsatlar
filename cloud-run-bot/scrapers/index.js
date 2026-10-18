@@ -21,6 +21,7 @@ const GetirScraper = require('./getir_scraper');
 const BoynerScraper = require('./boyner_scraper');
 const GamerGenScraper = require('./gamer_gen_scraper');
 const GamingGenScraper = require('./gaming_gen_scraper');
+const CarrefoursaScraper = require('./carrefoursa_scraper');
 
 module.exports = [
   new AmazonScraper(),
@@ -45,5 +46,6 @@ module.exports = [
   new GetirScraper(),
   new BoynerScraper(),
   new GamerGenScraper(),
-  new GamingGenScraper()
+  new GamingGenScraper(),
+  new CarrefoursaScraper()
 ];

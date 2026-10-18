@@ -266,16 +266,26 @@ function runTests() {
   assert(!isProductUrl('https://www.gaming.gen.tr/'), 'Anasayfa engellenmeli', 'gaming.gen.tr/');
 
   // ========================================
-  // 23. TANIMSIZ MAĞAZA (BYPASS - product_path_rules'da yok)
+  // 23. CARREFOURSA (carrefoursa.com)
   // ========================================
-  console.log('\n--- 23. Tanımsız Mağaza (BYPASS - kural yok) ---');
+  console.log('\n--- 23. CarrefourSA ---');
+  assert(isProductUrl('https://www.carrefoursa.com/heinz-tatli-ketcap-570-g-p-30455671'), 'Ürün sayfası (-p-ID)', 'carrefoursa.com/...-p-30455671');
+  assert(isProductUrl('https://www.carrefoursa.com/smile-bentonit-kedi-kumu-natural-5-l-p-30498020/'), 'Trailing slash', 'carrefoursa.com/...-p-30498020/');
+  assert(!isProductUrl('https://www.carrefoursa.com/temel-gida/c/1110'), 'Kategori sayfası engellenmeli', 'carrefoursa.com/temel-gida/c/1110');
+  assert(!isProductUrl('https://www.carrefoursa.com/kampanyalar'), 'Kampanya sayfası engellenmeli', 'carrefoursa.com/kampanyalar');
+  assert(!isProductUrl('https://www.carrefoursa.com/'), 'Anasayfa engellenmeli', 'carrefoursa.com/');
+
+  // ========================================
+  // 24. TANIMSIZ MAĞAZA (BYPASS - product_path_rules'da yok)
+  // ========================================
+  console.log('\n--- 24. Tanımsız Mağaza (BYPASS - kural yok) ---');
   assert(isProductUrl('https://www.boyner.com.tr/herhangi-sayfa'), 'Boyner (kural tanımsız, bypass)', 'boyner.com.tr/herhangi-sayfa');
   assert(isProductUrl('https://www.ciceksepeti.com/urun/123'), 'Çiçeksepeti (kural tanımsız, bypass)', 'ciceksepeti.com/urun/123');
 
   // ========================================
-  // 24. EDGE CASES
+  // 25. EDGE CASES
   // ========================================
-  console.log('\n--- 24. Edge Cases ---');
+  console.log('\n--- 25. Edge Cases ---');
   assert(!isProductUrl(''), 'Boş string', '(empty)');
   assert(!isProductUrl(null), 'Null değer', '(null)');
   assert(!isProductUrl(undefined), 'Undefined değer', '(undefined)');

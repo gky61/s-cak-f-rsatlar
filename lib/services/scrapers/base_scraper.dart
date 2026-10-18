@@ -13,6 +13,9 @@ abstract class BaseProductScraper {
     return lowerUrl.contains(domain);
   }
 
+  /// Kazıma öncesinde hazırlık yapabilmesi (ör. SPA veya REST API sorgusu) için çağrılır
+  Future<void> prepare({required dom.Document document, required String url}) async {}
+
   /// Belgeyi analiz ederek ürün görsel URL'sini döndürür
   String? scrape({
     required dom.Document document,
@@ -174,6 +177,7 @@ abstract class BaseProductScraper {
           final product = findProductInJson(data);
           if (product != null) return product;
         } catch (e) {
+          // ignore: avoid_print
           print('[aggregateRating] JSON-LD parse uyarısı: $e (Uzunluk: ${script.text.length})');
         }
       }

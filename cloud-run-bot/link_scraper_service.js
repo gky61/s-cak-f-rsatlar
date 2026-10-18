@@ -92,6 +92,7 @@ function getHeadersForUrl(url) {
     lowerUrl.includes('boyner.com.tr') ||
     lowerUrl.includes('gamer.gen.tr') ||
     lowerUrl.includes('gaming.gen.tr') ||
+    lowerUrl.includes('carrefoursa.com') ||
     lowerUrl.includes('incehesap.com')) {
     userAgent = 'WhatsApp/2.23.4.15 A';
   } else if (lowerUrl.includes('vatanbilgisayar.com') || lowerUrl.includes('pazarama.com') || lowerUrl.includes('mango.com')) {
@@ -1182,6 +1183,7 @@ async function fetchHtml(url) {
   let isGetir = false;
   let isIncehesap = false;
   let isBoyner = false;
+  let isCarrefoursa = false;
 
   try {
     const parsed = new URL(url);
@@ -1343,6 +1345,11 @@ async function fetchHtml(url) {
       targetUrl = cleaned.toString();
       isGetir = true;
       console.log(`[FETCH-HTML] 🔄 Getir linki tespit edildi. curl (Chrome UA + cookie) ile çekilecek: ${targetUrl}`);
+    } else if (parsed.hostname.includes('carrefoursa.com')) {
+      const cleaned = new URL(parsed.pathname, parsed.origin);
+      targetUrl = cleaned.toString();
+      isCarrefoursa = true;
+      console.log(`[FETCH-HTML] 🔄 CarrefourSA linki tespit edildi. curl ile çekilecek: ${targetUrl}`);
     }
   } catch (e) {
     console.error(`[FETCH-HTML] URL parse hatası: ${e.message}`);
@@ -1350,8 +1357,8 @@ async function fetchHtml(url) {
 
   console.log(`[FETCH-HTML] 📥 İstek başlatılıyor: ${targetUrl}`);
 
-  // ── Hepsiburada, Trendyol, Teknosa, İncehesap, Mavi, PttAVM, Amazon & Boyner: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
-  if (isHepsiburada || isTrendyol || isTeknosa || isIncehesap || isMavi || isPttavm || isAmazon || isBoyner) {
+  // ── Hepsiburada, Trendyol, Teknosa, İncehesap, Mavi, PttAVM, Amazon, Boyner & CarrefourSA: curl ile çek (Node.js fetch TLS fingerprint'i veya ülke yönlendirmesine takıldığı için) ──
+  if (isHepsiburada || isTrendyol || isTeknosa || isIncehesap || isMavi || isPttavm || isAmazon || isBoyner || isCarrefoursa) {
     const html = curlFetchHtml(targetUrl, url, fetchStartTime);
     if (html && html.length > 1000) {
       return html;
@@ -1359,6 +1366,20 @@ async function fetchHtml(url) {
     if (isAmazon) {
       console.warn(`[FETCH-HTML] ⚠️ Amazon curl çekimi başarısız/boş, Microlink fallback deneniyor...`);
       return microlinkFetchHtml(targetUrl, url, fetchStartTime, false);
+    }
+    if (isCarrefoursa) {
+      console.warn(`[FETCH-HTML] ⚠️ CarrefourSA direct curl başarısız/kısa, Google Translate Proxy deneniyor...`);
+      try {
+        const parsedCarrefour = new URL(targetUrl);
+        const proxyHostname = parsedCarrefour.hostname.replace(/\./g, '-') + '.translate.goog';
+        const proxyUrl = `https://${proxyHostname}${parsedCarrefour.pathname}?_x_tr_sl=auto&_x_tr_tl=tr&_x_tr_hl=tr`;
+        const proxyHtml = curlFetchHtmlMinimal(proxyUrl, url, fetchStartTime);
+        if (proxyHtml && proxyHtml.length > 1000) {
+          return proxyHtml;
+        }
+      } catch (proxyErr) {
+        console.error(`[FETCH-HTML] ❌ CarrefourSA translate proxy hatası: ${proxyErr.message}`);
+      }
     }
     return html;
   }
@@ -1515,9 +1536,20 @@ async function _scrapeProductFromUrlInternal(url) {
     if (matchedScraper) {
       console.log(`[SCRAPE-SERVICE] Özel Scraper akışı başlıyor...`);
 
+      if (typeof matchedScraper.prepare === 'function') {
+        try {
+          await matchedScraper.prepare($, targetUrl);
+        } catch (prepErr) {
+          console.warn(`[SCRAPE-SERVICE] ⚠️ matchedScraper.prepare hatası: ${prepErr.message}`);
+        }
+      }
+
       // 1. Başlık Çekimi
       console.log(`[SCRAPE-SERVICE] [TITLE] Başlık çekiliyor...`);
-      const title = matchedScraper.scrapeTitle($);
+      let title = matchedScraper.scrapeTitle($);
+      if (title && (title.toLowerCase() === 'migros' || title.toLowerCase() === 'migros sanalmarket')) {
+        title = (typeof matchedScraper.parseSlugTitle === 'function') ? matchedScraper.parseSlugTitle(targetUrl) : null;
+      }
       console.log(`[SCRAPE-SERVICE] [TITLE] Sonuç: "${title || 'BULUNAMADI'}"`);
 
       // 2. Fiyat Çekimi
@@ -1666,10 +1698,15 @@ async function _scrapeProductFromUrlInternal(url) {
       console.log(`[SCRAPE-SERVICE] ✅ Fallback Scrape tamamlandı! Toplam süre: ${totalDuration}ms`);
       console.log(`============================================================\n`);
 
+      let cleanTitle = title ? title.trim() : null;
+      if (cleanTitle && (cleanTitle.toLowerCase() === 'migros' || cleanTitle.toLowerCase() === 'migros sanalmarket')) {
+        cleanTitle = null;
+      }
+
       return {
         url: targetUrl,
         canonicalUrl: fallbackCanonical || null,
-        title: title ? title.trim() : null,
+        title: cleanTitle,
         price: price,
         imageUrl: imageUrl,
         description: description ? description.trim() : null,
