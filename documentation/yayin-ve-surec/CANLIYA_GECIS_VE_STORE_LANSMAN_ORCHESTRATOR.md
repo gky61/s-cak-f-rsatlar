@@ -2,7 +2,7 @@
 # (Living Release Orchestrator & Production Milestone Matrix)
 
 > **Sürüm:** v1.0.0 — Master Launch Edition  
-> **Son Güncelleme:** 2026-10-08  
+> **Son Güncelleme:** 2026-10-18  
 > **Aktif Çalışma Dalı:** `develop`  
 > **Sorumlu Orkestratör:** `firsatkolik-store-release` (Antigravity Launch Orchestrator Agent)  
 > **Temel İlke:** Sıfır Eksik, Sıfır Mağaza Reddi (Zero Store Rejection), Katı Hiyerarşi, Tam Donanımlı İki Ortam İzolasyonu.
@@ -431,8 +431,8 @@ graph TD
 ## 🛡️ FAZ 4 — Android Google Play Console & Kapalı Test (🟡 AKTİF AŞAMA)
 
 * 🟢 **Adım 4.1: Shorebird ile İmzalı PROD AAB & APK Üretimi [GÜNCELLENDİ]**  
-  *Release Versiyonu:* `1.1.0+46` (App ID: `289726d1-81cb-4fdf-97f7-5c2c07f033cc`) ✅  
-  *İmzalı AAB Çıktı Yolu:* `d:\firsatkolik\build\app\outputs\bundle\prodRelease\app-prod-release.aab`  
+  *Release Versiyonu:* `1.1.0+47` (Shorebird Release ID: `906658`, App ID: `289726d1-81cb-4fdf-97f7-5c2c07f033cc`) ✅  
+  *İmzalı AAB Çıktı Yolu:* `d:\firsatkolik\build\app\outputs\bundle\prodRelease\app-prod-release.aab` (154.3 MB / 18.10.2026)  
   *Cihaz Doğrudan Kurulum APK Yolu:* `d:\firsatkolik\build\app\outputs\flutter-apk\app-prod-release.apk`  
 * 🟢 **Adım 4.2: Play Console'da Uygulama Oluşturuldu**  
   *Uygulama Adı:* `FırsatKolik` (App ID: `4975320169857069569`, Paket: `com.firsatkolik.app`, Dil: Türkçe, Ücretsiz).  
