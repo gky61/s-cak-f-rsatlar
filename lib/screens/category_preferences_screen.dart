@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/category.dart';
-import '../models/notification_preferences.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeletons/settings_skeleton.dart';
@@ -28,7 +27,6 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
   final NotificationService _notificationService = NotificationService();
   final Map<String, bool> _categoryStates = {};
   final Map<String, Set<String>> _subCategoryStates = {};
-  NotificationPreferences? _notificationPreferences;
   StreamSubscription<User?>? _authSub;
   bool _isLoading = true;
   bool _isProcessingBulk = false;
@@ -90,11 +88,9 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
     try {
       final followedCategories = await _notificationService.getFollowedCategories();
       final followedSubCategories = await _notificationService.getFollowedSubCategories();
-      final prefs = await _notificationService.getNotificationPreferences();
 
       if (mounted) {
         setState(() {
-          _notificationPreferences = prefs;
           for (final category in _filteredCategories) {
             _categoryStates[category.id] = followedCategories.contains(category.id);
             _subCategoryStates[category.id] = {};
@@ -395,70 +391,6 @@ class _CategoryPreferencesScreenState extends State<CategoryPreferencesScreen> {
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else if (_notificationPreferences != null &&
-                    (!_notificationPreferences!.pushMasterEnabled ||
-                        !_notificationPreferences!.categoryNotificationsEnabled)) ...[
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(13),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.amber.withValues(alpha: isDark ? 0.35 : 0.5),
-                        width: 1.1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.notifications_off_outlined, color: Colors.amber.shade800, size: 22),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Kategori Bildirimleriniz Kapalı',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12.5,
-                                  color: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Tercihleriniz kaydedildi ancak telefonunuza bildirim gelebilmesi için Bildirim Ayarlarından kategori bildirimlerini açmanız gerekir.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()),
-                            ).then((_) => _loadPreferences());
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amber.shade800,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            elevation: 0,
-                          ),
-                          child: const Text('Aç'),
                         ),
                       ],
                     ),
