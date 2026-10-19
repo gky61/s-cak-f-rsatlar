@@ -496,6 +496,17 @@ graph TD
     - URL Allowlist & Regex Testleri: `cloud-run-bot/tests/product_url_validation.test.js` (130/130 PASS).  
     - Statik Analiz: `flutter analyze` 0 hata, 0 uyarı (No issues found).
 
+* 🟢 **Adım 3.36: Crashlytics Production Telemetri Temizliği, Offline Font Paketleme & ABI Dayanıklılığı Kalkanı (Issue #1, #2, #3)**  
+  - *Kapsam:* Lansman öncesi PROD ortamı Firebase Crashlytics telemetrilerinin sıfır hata prensibiyle taranması; 3 kritik kaydın kök neden analizinin yapılması ve kod tabanında kalıcı çözümlerin mühürlenmesi.  
+  - *İncelenen ve Çözülen Sorunlar:*  
+    1. *Issue 1 (ListTile Görsel Assertion & Ink Splash):* `ListTile background color or ink splashes may be invisible` framework assertion'ı. `cf1652c` ve `7dcbec4` commit'lerinde önceden çözülmüş olup `1.1.0+47` öncesi eski sürümlere aittir. `lib/main.dart` telemetri filtresiyle korunmaktadır.  
+    2. *Issue 2 (Shorebird ELF ABI Uyuşmazlığı - `UnsatisfiedLinkError`):* `libflutter.so is for EM_AARCH64 (183) instead of EM_X86_64 (62)`. Google Play Pre-Launch Test Robotu (x86_64 emülatör) üzerinde Shorebird ReLinker'ın ARM64 binary yükleme girişimi. Commit `ec0969c8` ile `android/app/build.gradle` içine `ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }` eklenerek kökten kapatılmıştır. Crashlytics panelinde "Closed/Resolved" olarak işaretlenmiştir.  
+    3. *Issue 3 (GoogleFonts Ağ Kesintisi & Fatal Crash Sızıntısı):* `Exception: Failed to load font with url: https://fonts.gstatic.com/...b1839e61...ttf`. `google_fonts` paketinin zayıf/kesintili ağda veya captive portal arkasında `fonts.gstatic.com` üzerinden `Roboto-Black` (w900) ve diğer varyantları çekerken aldığı ağ istisnasının unhandled async exception olarak Fatal Crash sayılması ve crash-free oranını yapay düşürmesi.  
+  - *İki Kademeli Dünya Standardı Çözüm Mimarisi:*  
+    1. *Kademe 1 (Sıfır Ağ Bağımlılığı - Offline Asset Bundling):* `google_fonts` paketinin `_findFamilyWithVariantAssetPath` mimarisine tam uyumlu olarak `assets/google_fonts/` dizini oluşturuldu. Uygulamanın kullandığı Roboto font ailesinin 12 tam varyantı (`Roboto-Regular`, `Roboto-Medium`, `Roboto-Bold`, `Roboto-Black`, `Roboto-Light`, `Roboto-Thin` ve bunların eşlenik `Italic` varyantları) asset olarak dahil edildi ve `pubspec.yaml`'a eklendi. Ağ bağımlılığı %100 ortadan kaldırılarak fontlar 0ms yerel disk hızında yüklendi.  
+    2. *Kademe 2 (Üçlü Global Telemetri Kalkanı):* `lib/main.dart` içerisindeki tüm 3 hata yakalama sınırına (`FlutterError.onError`, `PlatformDispatcher.instance.onError`, `runZonedGuarded`) `isFontLoadFailure` filtresi entegre edildi. Olası geçici font yükleme aksaklıkları Crashlytics'e `fatal: false` olarak iletilip `SystemLogService`'e `warning` seviyesinde kaydedilerek uygulamanın çökmesi ve Crash-Free Users oranının düşmesi kalıcı olarak engellendi.  
+  - *Doğrulama & Test:* `flutter analyze lib/main.dart` 0 hata/uyarı (No issues found), 12 font varyantı `assets/google_fonts/` altında doğrulandı.
+
 ---
 
 ## 🛡️ FAZ 4 — Android Google Play Console & Kapalı Test (🟡 AKTİF AŞAMA)

@@ -76,6 +76,7 @@ flutter:
     - assets/
     - assets/avatars/
     - assets/data/
+    - assets/google_fonts/
     - shorebird.yaml
 
 flutter_launcher_icons:

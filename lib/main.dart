@@ -248,22 +248,25 @@ void main() async {
     }
     FlutterError.presentError(details);
 
-    // Layout/RenderFlex taşmaları ve görsel UI assertion'ları uygulamayı çökertmez (Crashlytics'te fatal: false olarak izlenir)
-    // Bu tür UI durumları Crashlytics crash-free kullanıcı oranını düşürmemeli ve ana iş parçacığında kilitlenmeye yol açmamalıdır.
+    // Layout/RenderFlex taşmaları, görsel UI assertion'ları ve geçici font indirme aksaklıkları uygulamayı çökertmez (Crashlytics'te fatal: false olarak izlenir)
+    // Bu tür durumlar Crashlytics crash-free kullanıcı oranını düşürmemeli ve ana iş parçacığında kilitlenmeye yol açmamalıdır.
     final isFirebaseReady = Firebase.apps.isNotEmpty;
     final excStr = details.exceptionAsString();
     final isOverflow = excStr.contains('overflowed by');
     final isVisualAssertion = excStr.contains('ListTile background color') ||
         excStr.contains('ink splashes may be invisible');
+    final isFontLoadFailure = excStr.contains('Failed to load font');
 
-    if (isOverflow || isVisualAssertion) {
+    if (isOverflow || isVisualAssertion || isFontLoadFailure) {
       if (isFirebaseReady) {
         FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
       }
       SystemLogService.instance.logError(
         category: 'mobile',
-        subCategory: isOverflow ? 'ui_layout' : 'ui_style',
-        errorType: isOverflow ? 'RenderFlexOverflow' : 'FlutterVisualAssertion',
+        subCategory: isOverflow ? 'ui_layout' : (isFontLoadFailure ? 'ui_font' : 'ui_style'),
+        errorType: isOverflow
+            ? 'RenderFlexOverflow'
+            : (isFontLoadFailure ? 'GoogleFontsNetworkError' : 'FlutterVisualAssertion'),
         message: excStr,
         stack: details.stack,
         severity: isOverflow ? SystemErrorSeverity.error : SystemErrorSeverity.warning,
@@ -325,6 +328,23 @@ void main() async {
 
     final isFirebaseReady = Firebase.apps.isNotEmpty;
     final isPermissionDenied = error.toString().contains('permission-denied');
+    final isFontLoadFailure = error.toString().contains('Failed to load font');
+
+    if (isFontLoadFailure) {
+      if (isFirebaseReady) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: false);
+      }
+      SystemLogService.instance.logError(
+        category: 'mobile',
+        subCategory: 'ui_font',
+        errorType: 'GoogleFontsNetworkError',
+        message: error.toString(),
+        stack: stack,
+        severity: SystemErrorSeverity.warning,
+      );
+      return true;
+    }
+
     if (isPermissionDenied) {
       // Yalnızca kullanıcı oturumu kapalıyken veya çıkış esnasında beklenen durumdur
       if (!isFirebaseReady || FirebaseAuth.instance.currentUser == null) {
@@ -394,6 +414,23 @@ void main() async {
     final isFirebaseReady = Firebase.apps.isNotEmpty;
     // Güvenlik & Yetki Hata Ayrımı:
     final isPermissionDenied = error.toString().contains('permission-denied');
+    final isFontLoadFailure = error.toString().contains('Failed to load font');
+
+    if (isFontLoadFailure) {
+      if (isFirebaseReady) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: false);
+      }
+      SystemLogService.instance.logError(
+        category: 'mobile',
+        subCategory: 'ui_font',
+        errorType: 'GoogleFontsNetworkError',
+        message: error.toString(),
+        stack: stack,
+        severity: SystemErrorSeverity.warning,
+      );
+      return;
+    }
+
     if (isPermissionDenied) {
       // Yalnızca kullanıcı oturumu kapalıyken veya çıkış esnasında beklenen bir durumdur
       if (!isFirebaseReady || FirebaseAuth.instance.currentUser == null) {
