@@ -5,6 +5,15 @@
 
 const cheerio = require('cheerio');
 
+// --- Fiyat Ayrıştırma için Performans ve DoS/ReDoS Korumalı Precompiled Regex Tanımları ---
+const RAW_DUP_REGEX = /^(.+?(?:TL|₺|TRY|\$|€))\s*\1+$/i;
+const CLEAN_CURRENCY_REGEX = /[₺$€\s]|TL|tl|Tl|TRY|try/gi;
+const DECIMAL_DUP_REGEX = /^(\d+[.,]\d{1,2})\1+$/;
+const INTEGER_DUP_REGEX = /^(\d{4,})\1+$/;
+const HAS_LETTERS_OR_WORDS_REGEX = /[^\d.,]/;
+const CURRENCY_PRICE_REGEX = /(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[.,]\d{1,2})?)\s*(?:TL|₺|TRY|\$|€)/gi;
+const GENERIC_PRICE_REGEX = /(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[.,]\d{1,2})?)(?=[^\d]|$)/g;
+
 class BaseProductScraper {
   get domain() { return ''; }
 
@@ -74,36 +83,62 @@ class BaseProductScraper {
 
   /** Fiyat metnini temizleyip float değere dönüştürür */
   parsePriceText(priceText) {
-    if (!priceText) return null;
-    let cleaned = priceText
-      .replace(/TL/g, '')
-      .replace(/₺/g, '')
-      .replace(/\$/g, '')
-      .replace(/€/g, '')
-      .replace(/\s+/g, '')
-      .trim();
+    if (!priceText || typeof priceText !== 'string') return null;
+    const trimmed = priceText.trim();
+    if (!trimmed || trimmed.length > 300) return null;
 
-    if (!cleaned) return null;
-
-    // 1. Dublike fiyat savunması: Ardışık tekrarlanan aynı fiyat kalıbı (örn: 269,91269,91 veya 3816038160)
-    const dupMatch = cleaned.match(/^(\d+(?:[.,]\d{1,2})?)\1+$/);
-    if (dupMatch && dupMatch[1]) {
-      cleaned = dupMatch[1];
+    // 1. Ham metin üzerinde para birimli tekrar kontrolü:
+    // Örn: '269,91TL269,91TL' veya '99TL99TL' veya '38160 ₺ 38160 ₺'
+    const rawDupMatch = trimmed.match(RAW_DUP_REGEX);
+    if (rawDupMatch && rawDupMatch[1]) {
+      return this.parsePriceText(rawDupMatch[1]);
     }
 
-    // 2. Metin içinde harf kalmışsa (örn: "Yüzde 10 tasarruf ile 269,91"):
-    // Metin içerisindeki son geçerli fiyat kalıbını ayıkla
-    if (/[^\d.,]/.test(cleaned)) {
-      const pricePattern = /(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})*|\d+)(?:[.,]\d{2}))(?:\s*(?:TL|₺))?/gi;
-      const matches = [...priceText.matchAll(pricePattern)];
-      if (matches.length > 0) {
-        const lastCandidate = matches[matches.length - 1][1];
-        if (lastCandidate) {
-          return this.parsePriceText(lastCandidate);
+    // 2. Para birimi ve gereksiz karakterleri temizle
+    let cleaned = trimmed.replace(CLEAN_CURRENCY_REGEX, '').trim();
+    if (!cleaned) return null;
+
+    // 3. Dublike fiyat savunması:
+    // a) Ondalıklı dublike: örn. 269,91269,91 veya 299.90299.90 (ondalık ayırıcı ZORUNLU)
+    const decDupMatch = cleaned.match(DECIMAL_DUP_REGEX);
+    if (decDupMatch && decDupMatch[1]) {
+      cleaned = decDupMatch[1];
+    } else {
+      // b) Tam sayı dublike: Yalnızca en az 4 basamaklı tam sayılar tekrar ettiğinde (örn. 3816038160 -> 38160)
+      // 99, 88, 999, 1010, 2525 gibi geçerli perakende fiyatlarının bozulmasını kesinlikle engeller.
+      const intDupMatch = cleaned.match(INTEGER_DUP_REGEX);
+      if (intDupMatch && intDupMatch[1]) {
+        cleaned = intDupMatch[1];
+      }
+    }
+
+    // 4. Metin içinde halen yabancı harfler/kelimeler kalmışsa (örn: 'Sepette %10 indirimle 150 TL' veya 'Sepette 269,91'):
+    if (HAS_LETTERS_OR_WORDS_REGEX.test(cleaned)) {
+      // A) Öncelikle yanında para birimi olan gerçek fiyat kalıbını ara (yüzde indirimleri '%10' vb. elenir)
+      const currencyMatches = [...trimmed.matchAll(CURRENCY_PRICE_REGEX)];
+      if (currencyMatches.length > 0) {
+        const lastMatch = currencyMatches[currencyMatches.length - 1][1];
+        if (lastMatch && lastMatch.trim() !== trimmed) {
+          return this.parsePriceText(lastMatch);
+        }
+      }
+
+      // B) Para birimsiz genel sayı kalıbı (metindeki en son geçerli fiyat adayı)
+      const genericMatches = [...trimmed.matchAll(GENERIC_PRICE_REGEX)];
+      if (genericMatches.length > 0) {
+        for (let i = genericMatches.length - 1; i >= 0; i--) {
+          const candidate = genericMatches[i][1];
+          if (candidate && candidate.length > 0) {
+            const parsedCandidate = this.parsePriceText(candidate);
+            if (parsedCandidate != null && parsedCandidate > 0) {
+              return parsedCandidate;
+            }
+          }
         }
       }
     }
 
+    // 5. Sayısal Ayrıştırma (Türkçe / Uluslararası Format Uyumu)
     const hasDot = cleaned.includes('.');
     const hasComma = cleaned.includes(',');
 
@@ -124,7 +159,7 @@ class BaseProductScraper {
           // Binlik ayırıcı (örn. 6,447 -> 6447)
           cleaned = cleaned.replace(/,/g, '');
         } else {
-          // Ondalık ayırıcı (örn. 423,99 -> 423.99)
+          // Ondalık ayırıcı (örn. 423,99 -> 423.99 veya 75,5 -> 75.5)
           cleaned = cleaned.replace(/,/g, '.');
         }
       } else {
@@ -134,16 +169,17 @@ class BaseProductScraper {
       const parts = cleaned.split('.');
       if (parts.length === 2) {
         if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3) {
-          // Binlik ayırıcı (örn. 1.798 -> 1798)
+          // Binlik ayırıcı (örn. 1.798 -> 1798 veya 48.020 -> 48020)
           cleaned = cleaned.replace(/\./g, '');
         }
       } else {
+        // Çoklu nokta: 1.234.567 -> 1234567
         cleaned = cleaned.replace(/\./g, '');
       }
     }
 
-    const parsed = parseFloat(cleaned);
-    return isNaN(parsed) ? null : parsed;
+    const val = parseFloat(cleaned);
+    return (isNaN(val) || !isFinite(val)) ? null : val;
   }
 
   unescapeHtml(text) {

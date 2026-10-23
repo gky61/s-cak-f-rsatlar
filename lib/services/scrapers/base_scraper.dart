@@ -87,37 +87,72 @@ abstract class BaseProductScraper {
     }
   }
 
+  // --- Fiyat Ayrıştırma için Performans ve DoS/ReDoS Korumalı Statik Regex Tanımları ---
+  static final RegExp _rawDupRegex = RegExp(r'^(.+?(?:TL|₺|TRY|\$|€))\s*\1+$', caseSensitive: false);
+  static final RegExp _currencyPriceRegex = RegExp(r'(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[.,]\d{1,2})?)\s*(?:TL|₺|TRY|\$|€)', caseSensitive: false);
+  static final RegExp _cleanCurrencyRegex = RegExp(r'[₺$€\s]|TL|tl|Tl|TRY|try', caseSensitive: false);
+  static final RegExp _decimalDupRegex = RegExp(r'^(\d+[.,]\d{1,2})\1+$');
+  static final RegExp _integerDupRegex = RegExp(r'^(\d{4,})\1+$');
+  static final RegExp _hasLettersOrWordsRegex = RegExp(r'[^\d.,]');
+  static final RegExp _genericPriceRegex = RegExp(r'(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[.,]\d{1,2})?)(?=[^\d]|$)');
+
   /// Fiyat metnini temizleyip double değere dönüştüren yardımcı metot
   double? parsePriceText(String priceText) {
-    String cleaned = priceText
-        .replaceAll('TL', '')
-        .replaceAll('₺', '')
-        .replaceAll(r'$', '')
-        .replaceAll('€', '')
-        .replaceAll(RegExp(r'\s+'), '')
-        .trim();
-        
-    if (cleaned.isEmpty) return null;
+    final trimmed = priceText.trim();
+    if (trimmed.isEmpty || trimmed.length > 300) return null;
 
-    // 1. Dublike fiyat savunması: Ardışık tekrarlanan aynı fiyat kalıbı (örn: 269,91269,91 veya 3816038160)
-    final dupMatch = RegExp(r'^(\d+(?:[.,]\d{1,2})?)\1+$').firstMatch(cleaned);
-    if (dupMatch != null && dupMatch.group(1) != null) {
-      cleaned = dupMatch.group(1)!;
+    // 1. Ham metin üzerinde para birimli tekrar kontrolü:
+    // Örn: '269,91TL269,91TL' veya '99TL99TL' veya '38160 ₺ 38160 ₺'
+    final rawDupMatch = _rawDupRegex.firstMatch(trimmed);
+    if (rawDupMatch != null && rawDupMatch.group(1) != null) {
+      return parsePriceText(rawDupMatch.group(1)!);
     }
 
-    // 2. Metin içinde harf kalmışsa (örn: "Yüzde 10 tasarruf ile 269,91"):
-    // Metin içerisindeki son geçerli fiyat kalıbını ayıkla
-    if (RegExp(r'[^\d.,]').hasMatch(cleaned)) {
-      final pricePattern = RegExp(r'(?:^|[^\d])((?:\d{1,3}(?:\.\d{3})*|\d+)(?:[.,]\d{2}))(?:\s*(?:TL|₺))?', caseSensitive: false);
-      final matches = pricePattern.allMatches(priceText).toList();
-      if (matches.isNotEmpty) {
-        final lastCandidate = matches.last.group(1);
-        if (lastCandidate != null && lastCandidate.isNotEmpty) {
-          return parsePriceText(lastCandidate);
+    // 2. Para birimi ve gereksiz karakterleri temizle
+    String cleaned = trimmed.replaceAll(_cleanCurrencyRegex, '').trim();
+    if (cleaned.isEmpty) return null;
+
+    // 3. Dublike fiyat savunması:
+    // a) Ondalıklı dublike: örn. 269,91269,91 veya 299.90299.90 (ondalık ayırıcı ZORUNLU)
+    final decDupMatch = _decimalDupRegex.firstMatch(cleaned);
+    if (decDupMatch != null && decDupMatch.group(1) != null) {
+      cleaned = decDupMatch.group(1)!;
+    } else {
+      // b) Tam sayı dublike: Yalnızca en az 4 basamaklı tam sayılar tekrar ettiğinde (örn. 3816038160 -> 38160)
+      // 99, 88, 999, 1010, 2525 gibi geçerli perakende fiyatlarının bozulmasını kesinlikle engeller.
+      final intDupMatch = _integerDupRegex.firstMatch(cleaned);
+      if (intDupMatch != null && intDupMatch.group(1) != null) {
+        cleaned = intDupMatch.group(1)!;
+      }
+    }
+
+    // 4. Metin içinde halen yabancı harfler/kelimeler kalmışsa (örn: 'Sepette %10 indirimle 150 TL' veya 'Sepette 269,91'):
+    if (_hasLettersOrWordsRegex.hasMatch(cleaned)) {
+      // A) Öncelikle yanında para birimi olan gerçek fiyat kalıbını ara (yüzde indirimleri '%10' vb. elenir)
+      final currencyMatches = _currencyPriceRegex.allMatches(trimmed).toList();
+      if (currencyMatches.isNotEmpty) {
+        final lastMatch = currencyMatches.last.group(1);
+        if (lastMatch != null && lastMatch.trim() != trimmed) {
+          return parsePriceText(lastMatch);
+        }
+      }
+
+      // B) Para birimsiz genel sayı kalıbı (metindeki en son geçerli fiyat adayı)
+      final genericMatches = _genericPriceRegex.allMatches(trimmed).toList();
+      if (genericMatches.isNotEmpty) {
+        for (int i = genericMatches.length - 1; i >= 0; i--) {
+          final candidate = genericMatches[i].group(1);
+          if (candidate != null && candidate.isNotEmpty) {
+            final parsedCandidate = parsePriceText(candidate);
+            if (parsedCandidate != null && parsedCandidate > 0) {
+              return parsedCandidate;
+            }
+          }
         }
       }
     }
 
+    // 5. Sayısal Ayrıştırma (Türkçe / Uluslararası Format Uyumu)
     final hasDot = cleaned.contains('.');
     final hasComma = cleaned.contains(',');
 
@@ -134,10 +169,11 @@ abstract class BaseProductScraper {
     } else if (cleaned.contains(',')) {
       final parts = cleaned.split(',');
       if (parts.length == 2) {
-        // Örn: 6,447 (binlik basamağı) -> 6447, ama 6,44 veya 6,4 veya 423,99 -> 423.99
         if (parts[1].length == 3 && parts[0].isNotEmpty && parts[0].length <= 3) {
+          // Binlik ayırıcı: 6,447 -> 6447
           cleaned = cleaned.replaceAll(',', '');
         } else {
+          // Ondalık ayırıcı: 423,99 -> 423.99 veya 75,5 -> 75.5
           cleaned = cleaned.replaceAll(',', '.');
         }
       } else {
@@ -147,8 +183,8 @@ abstract class BaseProductScraper {
     } else if (cleaned.contains('.')) {
       final parts = cleaned.split('.');
       if (parts.length == 2) {
-        // Örn: 1.798 (binlik basamağı) -> 1798, ama 263.84 veya 12.5 -> ondalık (263.84)
         if (parts[1].length == 3 && parts[0].isNotEmpty && parts[0].length <= 3) {
+          // Binlik ayırıcı: 1.798 -> 1798 veya 48.020 -> 48020
           cleaned = cleaned.replaceAll('.', '');
         }
       } else {
@@ -156,8 +192,10 @@ abstract class BaseProductScraper {
         cleaned = cleaned.replaceAll('.', '');
       }
     }
-    
-    return double.tryParse(cleaned);
+
+    final val = double.tryParse(cleaned);
+    if (val == null || val.isNaN || val.isInfinite) return null;
+    return val;
   }
 
   /// JSON-LD şemasından Product nesnesini bulur

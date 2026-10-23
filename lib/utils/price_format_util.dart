@@ -11,7 +11,7 @@ class PriceFormatUtil {
   // tekrar tekrar RegExp derlemesini önlemek için statik precompiled regex'ler.
   static final RegExp _thousandRegex = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
   static final RegExp _nonDigitsOrSeparators = RegExp(r'[^\d.,]');
-  static final RegExp _cleanCurrencyRegex = RegExp(r'[₺$€\s]|TL|tl|Tl', caseSensitive: false);
+  static final RegExp _cleanCurrencyRegex = RegExp(r'[₺$€\s]|TL|tl|Tl|TRY|try', caseSensitive: false);
   static final RegExp _leadingZeros = RegExp(r'^0+');
   static final RegExp _onlyDigits = RegExp(r'[^\d]');
   static final RegExp _thousandPattern = RegExp(r'^\d{1,3}(\.\d{3})+$');
