@@ -56,6 +56,9 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
         _isLoading = true;
         _errorMessage = null;
         _hasNewDealsPill = false;
+        _pendingPopularServerDeals = null;
+        _pendingPopularLastDoc = null;
+        _pendingPopularHasMore = null;
       });
       _loadFirstPage(category: 'tumu');
       if (_categoryScrollController.hasClients) {
@@ -84,6 +87,9 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
   String? _errorMessage;
   bool _isRefreshing = false;
   bool _hasNewDealsPill = false;
+  List<Deal>? _pendingPopularServerDeals;
+  DocumentSnapshot? _pendingPopularLastDoc;
+  bool? _pendingPopularHasMore;
   DateTime? _lastPopularFetchTime;
   StreamSubscription<DealSyncEvent>? _dealSyncSubscription;
   Future<DealsPageResult>? _activeServerFuture;
@@ -123,12 +129,73 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
         if (isAtTop) {
           _loadFirstPage(isRefresh: true);
         } else {
-          setState(() {
-            _hasNewDealsPill = true;
-          });
+          // Kullanıcı aşağıda fırsat inceliyorken körü körüne hap butonu çıkartma!
+          // Arka planda sessizce taze fırsatları sorgula; YALNIZCA GERÇEKTEN yeni popüler fırsat varsa göster.
+          _checkNewPopularDealsSilentlyOnResume();
         }
       }
     }
+  }
+
+  /// Uygulama 30 dk sonra arka plandan döndüğünde ve kullanıcı aşağıdaysa
+  /// asılsız "Yeni Popüler Fırsatlar Var" uyarısı çıkarmamak için sessiz sunucu kontrolü
+  Future<void> _checkNewPopularDealsSilentlyOnResume() async {
+    try {
+      final requestedCategory = _selectedCategory;
+      final serverResult = await _firestoreService.getPopularDealsPaginated(
+        limit: 45,
+        category: requestedCategory == 'tumu' ? null : requestedCategory,
+        source: Source.server,
+      );
+
+      if (!mounted ||
+          _selectedCategory != requestedCategory ||
+          serverResult.isError ||
+          serverResult.deals.isEmpty) {
+        return;
+      }
+
+      final existingIds = _dealsList.map((d) => d.id).toSet();
+      final newDeals = serverResult.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+      if (newDeals.isNotEmpty && mounted) {
+        final bool isNowAtTop = !_scrollController.hasClients || _scrollController.offset <= 120;
+        if (isNowAtTop && _dealsList.isNotEmpty) {
+          // Kullanıcı bu esnada listenin tepesindeyse doğrudan taze veriyi uygula
+          setState(() {
+            _dealsList = List<Deal>.from(serverResult.deals);
+            if (_dealsList.length <= serverResult.deals.length) {
+              _lastDocument = serverResult.lastDocument;
+              _hasMore = serverResult.hasMore;
+            }
+            _hasNewDealsPill = false;
+            _pendingPopularServerDeals = null;
+            _pendingPopularLastDoc = null;
+            _pendingPopularHasMore = null;
+            _lastPopularFetchTime = DateTime.now();
+          });
+        } else {
+          setState(() {
+            _hasNewDealsPill = true;
+            _pendingPopularServerDeals = serverResult.deals;
+            _pendingPopularLastDoc = serverResult.lastDocument;
+            _pendingPopularHasMore = serverResult.hasMore;
+            _lastPopularFetchTime = DateTime.now();
+          });
+        }
+      } else if (mounted) {
+        setState(() {
+          _lastPopularFetchTime = DateTime.now();
+          final serverMap = {for (final d in serverResult.deals) d.id: d};
+          for (int i = 0; i < _dealsList.length; i++) {
+            final match = serverMap[_dealsList[i].id];
+            if (match != null) {
+              _dealsList[i] = match;
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   /// FS-18 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
@@ -136,15 +203,32 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
     _dealSyncSubscription?.cancel();
     _dealSyncSubscription = DealSyncService.instance.stream.listen((event) {
       if (!mounted) return;
+      bool needsSetState = false;
+
       final index = _dealsList.indexWhere((d) => d.id == event.dealId);
       if (index != -1) {
-        setState(() {
+        if (event.action == DealSyncAction.dealDeleted) {
+          _dealsList.removeAt(index);
+        } else {
+          _dealsList[index] = event.applyTo(_dealsList[index]);
+        }
+        needsSetState = true;
+      }
+
+      // Arka plan tampon listesinde (_pendingPopularServerDeals) güncelleme
+      if (_pendingPopularServerDeals != null) {
+        final pendingIndex = _pendingPopularServerDeals!.indexWhere((d) => d.id == event.dealId);
+        if (pendingIndex != -1) {
           if (event.action == DealSyncAction.dealDeleted) {
-            _dealsList.removeAt(index);
+            _pendingPopularServerDeals!.removeAt(pendingIndex);
           } else {
-            _dealsList[index] = event.applyTo(_dealsList[index]);
+            _pendingPopularServerDeals![pendingIndex] = event.applyTo(_pendingPopularServerDeals![pendingIndex]);
           }
-        });
+        }
+      }
+
+      if (needsSetState && mounted) {
+        setState(() {});
       }
     });
   }
@@ -203,6 +287,9 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
               _isFirstLoad = false;
               _errorMessage = null;
               _hasNewDealsPill = false;
+              _pendingPopularServerDeals = null;
+              _pendingPopularLastDoc = null;
+              _pendingPopularHasMore = null;
               _lastPopularFetchTime = DateTime.now();
             });
           } else {
@@ -244,6 +331,9 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
             _isFirstLoad = false;
             _errorMessage = null;
             _hasNewDealsPill = false;
+            _pendingPopularServerDeals = null;
+            _pendingPopularLastDoc = null;
+            _pendingPopularHasMore = null;
             _lastPopularFetchTime = DateTime.now();
           });
         }
@@ -291,6 +381,9 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
                   _isFirstLoad = false;
                   _errorMessage = null;
                   _hasNewDealsPill = false;
+                  _pendingPopularServerDeals = null;
+                  _pendingPopularLastDoc = null;
+                  _pendingPopularHasMore = null;
                   _lastPopularFetchTime = DateTime.now();
                 });
               }
@@ -343,17 +436,45 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
           _isLoading = false;
           _isFirstLoad = false;
           _hasNewDealsPill = false;
+          _pendingPopularServerDeals = null;
+          _pendingPopularLastDoc = null;
+          _pendingPopularHasMore = null;
           _lastPopularFetchTime = DateTime.now();
         });
       } else {
-        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma!
-        // Yüzen hap buton ile kullanıcı iradesine sun
-        setState(() {
-          _lastDocument = res.lastDocument ?? _lastDocument;
-          _hasMore = res.hasMore;
-          _hasNewDealsPill = true;
-          _lastPopularFetchTime = DateTime.now();
-        });
+        // Kullanıcı aşağı kaydırmışsa:
+        // KRİTİK KONTROL: Sunucudan gelen fırsatlar ile ekrandaki mevcut liste arasında
+        // GERÇEKTEN yeni bir fırsat var mı?
+        final existingIds = _dealsList.map((d) => d.id).toSet();
+        final newDeals = res.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+        if (newDeals.isNotEmpty) {
+          // Gerçekten yeni popüler fırsatlar var!
+          setState(() {
+            _hasNewDealsPill = true;
+            _pendingPopularServerDeals = res.deals;
+            _pendingPopularLastDoc = res.lastDocument;
+            _pendingPopularHasMore = res.hasMore;
+            _lastPopularFetchTime = DateTime.now();
+          });
+        } else {
+          // YENİ FIRSAT YOK! Kullanıcıya ASLA sahte hap butonu ÇIKARTMA!
+          // Sadece mevcut kartların oylarını ve metriklerini yerinde güncelle
+          setState(() {
+            if (_dealsList.length <= res.deals.length) {
+              _lastDocument = res.lastDocument ?? _lastDocument;
+              _hasMore = res.hasMore;
+            }
+            _lastPopularFetchTime = DateTime.now();
+            final serverMap = {for (final d in res.deals) d.id: d};
+            for (int i = 0; i < _dealsList.length; i++) {
+              final match = serverMap[_dealsList[i].id];
+              if (match != null) {
+                _dealsList[i] = match;
+              }
+            }
+          });
+        }
       }
     }).catchError((_) {
       // Sessizce yoksay; yerel önbellek zaten ekranda
@@ -643,6 +764,9 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
                         _isLoading = true;
                         _errorMessage = null;
                         _hasNewDealsPill = false;
+                        _pendingPopularServerDeals = null;
+                        _pendingPopularLastDoc = null;
+                        _pendingPopularHasMore = null;
                       });
                       _loadFirstPage(category: category.id);
                     },
@@ -779,18 +903,41 @@ class PopularDealsScreenState extends State<PopularDealsScreen> with WidgetsBind
                     icon: Icons.whatshot_rounded,
                     primaryColor: const Color(0xFFFF6B35),
                     gradientColor: const Color(0xFFFF3D00),
-                    onTap: () {
+                    onTap: () async {
+                      final pending = _pendingPopularServerDeals;
+                      final pendingLastDoc = _pendingPopularLastDoc;
+                      final pendingHasMore = _pendingPopularHasMore;
+
+                      // 1. Dokunulduğu anda hap butonu hemen pürüzsüzce kapansın
+                      setState(() {
+                        _hasNewDealsPill = false;
+                        _pendingPopularServerDeals = null;
+                        _pendingPopularLastDoc = null;
+                        _pendingPopularHasMore = null;
+                      });
+
+                      // 2. Önce en tepeye akıcı animasyonla kaydır (kayma esnasında liste boyutu değişmediği için 0 layout jitter)
                       if (_scrollController.hasClients) {
-                        _scrollController.animateTo(
+                        await _scrollController.animateTo(
                           0,
-                          duration: const Duration(milliseconds: 400),
+                          duration: const Duration(milliseconds: 350),
                           curve: Curves.easeOutCubic,
                         );
                       }
-                      setState(() {
-                        _hasNewDealsPill = false;
-                      });
-                      _loadFirstPage(isRefresh: true);
+
+                      // 3. Tepeye varıldığında hazır listeyi pürüzsüzce ekrana ver veya sunucudan tazele
+                      if (mounted) {
+                        if (pending != null && pending.isNotEmpty) {
+                          setState(() {
+                            _dealsList = List<Deal>.from(pending);
+                            _lastDocument = pendingLastDoc ?? _lastDocument;
+                            _hasMore = pendingHasMore ?? _hasMore;
+                            _lastPopularFetchTime = DateTime.now();
+                          });
+                        } else {
+                          await _loadFirstPage(isRefresh: true);
+                        }
+                      }
                     },
                   ),
                 ),

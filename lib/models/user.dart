@@ -12,6 +12,7 @@ class AppUser {
   final String uid;
   final String username;
   final String profileImageUrl;
+  final String? providerPhotoUrl; // Harici kimlik sağlayıcısından (Google/Apple) gelen orijinal fotoğraf URL'si (Source of Truth)
   final List<String> followedCategories;
   final List<String> watchKeywords; // Takip edilen anahtar kelimeler
   final List<String> following; // Takip edilen kullanıcılar (user ID'leri)
@@ -29,6 +30,7 @@ class AppUser {
     required this.uid,
     required this.username,
     required this.profileImageUrl,
+    this.providerPhotoUrl,
     this.followedCategories = const [],
     this.watchKeywords = const [],
     this.following = const [],
@@ -47,6 +49,19 @@ class AppUser {
   String get displayName => (nickname != null && nickname!.trim().isNotEmpty)
       ? nickname!.trim()
       : (username.trim().isNotEmpty ? username.trim() : 'Kullanıcı');
+
+  /// Kullanıcının harici sağlayıcı (Google / Apple vb.) profil fotoğrafı olup olmadığını belirtir
+  bool get hasProviderPhoto => providerPhotoUrl != null && providerPhotoUrl!.trim().isNotEmpty;
+
+  /// Kullanıcının o anda sağlayıcı fotoğrafını kullanıp kullanmadığını belirtir
+  bool get isUsingProviderPhoto =>
+      hasProviderPhoto && profileImageUrl.isNotEmpty && profileImageUrl == providerPhotoUrl;
+
+  /// Kullanıcının hazır bir avatar kullanıp kullanmadığını belirtir
+  bool get isUsingReadyAvatar => profileImageUrl.startsWith('assets/');
+
+  /// Kullanıcının herhangi bir özel profil resmi / avatarı olup olmadığını belirtir
+  bool get hasCustomAvatar => profileImageUrl.isNotEmpty;
 
   // Güvenilirlik yıldızları (0-9 arası)
   int get trustStars {
@@ -123,6 +138,7 @@ class AppUser {
     String? uid,
     String? username,
     String? profileImageUrl,
+    String? providerPhotoUrl,
     List<String>? followedCategories,
     List<String>? watchKeywords,
     List<String>? following,
@@ -140,6 +156,7 @@ class AppUser {
       uid: uid ?? this.uid,
       username: username ?? this.username,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      providerPhotoUrl: providerPhotoUrl ?? this.providerPhotoUrl,
       followedCategories: followedCategories ?? this.followedCategories,
       watchKeywords: watchKeywords ?? this.watchKeywords,
       following: following ?? this.following,
@@ -289,6 +306,13 @@ class AppUser {
         uid: doc.id,
         username: data['username']?.toString() ?? data['displayName']?.toString() ?? data['nickname']?.toString() ?? '',
         profileImageUrl: migrateAssetPath((data['profileImageUrl'] ?? data['photoURL'] ?? '').toString()),
+        providerPhotoUrl: (data['providerPhotoUrl'] != null && data['providerPhotoUrl'].toString().trim().isNotEmpty)
+            ? data['providerPhotoUrl'].toString().trim()
+            : (((data['photoURL'] is String && (data['photoURL'] as String).trim().startsWith('http')))
+                ? (data['photoURL'] as String).trim()
+                : (((data['profileImageUrl'] is String && (data['profileImageUrl'] as String).trim().startsWith('http')))
+                    ? (data['profileImageUrl'] as String).trim()
+                    : null)),
         followedCategories: followedCategories,
         watchKeywords: watchKeywords,
         following: following,
@@ -325,6 +349,13 @@ class AppUser {
         uid: doc.id,
         username: dataMap['username']?.toString() ?? dataMap['displayName']?.toString() ?? 'Kullanıcı',
         profileImageUrl: migrateAssetPath((dataMap['profileImageUrl'] ?? dataMap['photoURL'] ?? '').toString()),
+        providerPhotoUrl: (dataMap['providerPhotoUrl'] != null && dataMap['providerPhotoUrl'].toString().trim().isNotEmpty)
+            ? dataMap['providerPhotoUrl'].toString().trim()
+            : (((dataMap['photoURL'] is String && (dataMap['photoURL'] as String).trim().startsWith('http')))
+                ? (dataMap['photoURL'] as String).trim()
+                : (((dataMap['profileImageUrl'] is String && (dataMap['profileImageUrl'] as String).trim().startsWith('http')))
+                    ? (dataMap['profileImageUrl'] as String).trim()
+                    : null)),
         followedCategories: [],
         watchKeywords: [],
         following: [],
@@ -347,6 +378,9 @@ class AppUser {
       'uid': uid,
       'username': username,
       'profileImageUrl': profileImageUrl,
+      'photoURL': profileImageUrl,
+      if (providerPhotoUrl != null && providerPhotoUrl!.isNotEmpty)
+        'providerPhotoUrl': providerPhotoUrl,
       'followedCategories': followedCategories,
       'watchKeywords': watchKeywords,
       'following': following,

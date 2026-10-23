@@ -309,9 +309,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .listen((doc) {
       if (doc.exists) {
         try {
+          final parsedUser = AppUser.fromFirestore(doc);
+          AppUser effectiveUser = parsedUser;
+          if (_isOwnProfile) {
+            final currentUser = _authService.currentUser;
+            if (currentUser != null) {
+              final detectedProviderPhoto = AuthService.getProviderPhotoUrl(currentUser);
+              if (detectedProviderPhoto != null && detectedProviderPhoto.isNotEmpty && parsedUser.providerPhotoUrl != detectedProviderPhoto) {
+                // Sessiz arka plan güncellemesi: providerPhotoUrl Source of Truth olarak kaydedilir
+                unawaited(_firestore.collection('users').doc(currentUser.uid).set({
+                  'providerPhotoUrl': detectedProviderPhoto,
+                }, SetOptions(merge: true)));
+                effectiveUser = parsedUser.copyWith(providerPhotoUrl: detectedProviderPhoto);
+              }
+            }
+          }
           if (mounted) {
             setState(() {
-              _user = AppUser.fromFirestore(doc);
+              _user = effectiveUser;
               _isLoading = false;
             });
           }
@@ -330,11 +345,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
                 ? currentUser.displayName!.trim()
                 : username;
+            final providerPhoto = AuthService.getProviderPhotoUrl(currentUser);
             final newUser = AppUser(
               uid: currentUser.uid,
               username: username,
               nickname: effNickname,
-              profileImageUrl: currentUser.photoURL ?? '',
+              profileImageUrl: providerPhoto ?? (currentUser.photoURL ?? ''),
+              providerPhotoUrl: providerPhoto,
               points: 0,
               dealCount: 0,
               totalLikes: 0,
@@ -348,6 +365,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             try {
               _firestore.collection('users').doc(currentUser.uid).set({
                 ...newUser.toFirestore(),
+                if (providerPhoto != null && providerPhoto.isNotEmpty)
+                  'providerPhotoUrl': providerPhoto,
                 'createdAt': FieldValue.serverTimestamp(),
               });
             } catch (e) {
@@ -376,9 +395,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final doc = await _firestore.collection('users').doc(targetUserId).get();
       if (doc.exists) {
         try {
+          final parsedUser = AppUser.fromFirestore(doc);
+          AppUser effectiveUser = parsedUser;
+          if (_isOwnProfile) {
+            final currentUser = _authService.currentUser;
+            if (currentUser != null) {
+              final detectedProviderPhoto = AuthService.getProviderPhotoUrl(currentUser);
+              if (detectedProviderPhoto != null && detectedProviderPhoto.isNotEmpty && parsedUser.providerPhotoUrl != detectedProviderPhoto) {
+                unawaited(_firestore.collection('users').doc(currentUser.uid).set({
+                  'providerPhotoUrl': detectedProviderPhoto,
+                }, SetOptions(merge: true)));
+                effectiveUser = parsedUser.copyWith(providerPhotoUrl: detectedProviderPhoto);
+              }
+            }
+          }
           if (mounted) {
             setState(() {
-              _user = AppUser.fromFirestore(doc);
+              _user = effectiveUser;
               _isLoading = false;
             });
           }
@@ -392,11 +425,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
                   ? currentUser.displayName!.trim()
                   : username;
+              final providerPhoto = AuthService.getProviderPhotoUrl(currentUser);
               final fallbackUser = AppUser(
                 uid: currentUser.uid,
                 username: username,
                 nickname: effNickname,
-                profileImageUrl: currentUser.photoURL ?? '',
+                profileImageUrl: providerPhoto ?? (currentUser.photoURL ?? ''),
+                providerPhotoUrl: providerPhoto,
                 points: 0,
                 dealCount: 0,
                 totalLikes: 0,
@@ -427,11 +462,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
                 ? currentUser.displayName!.trim()
                 : username;
+            final providerPhoto = AuthService.getProviderPhotoUrl(currentUser);
             final newUser = AppUser(
               uid: currentUser.uid,
               username: username,
               nickname: effNickname,
-              profileImageUrl: currentUser.photoURL ?? '',
+              profileImageUrl: providerPhoto ?? (currentUser.photoURL ?? ''),
+              providerPhotoUrl: providerPhoto,
               points: 0,
               dealCount: 0,
               totalLikes: 0,
@@ -445,6 +482,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             try {
               await _firestore.collection('users').doc(currentUser.uid).set({
                 ...newUser.toFirestore(),
+                if (providerPhoto != null && providerPhoto.isNotEmpty)
+                  'providerPhotoUrl': providerPhoto,
                 'createdAt': FieldValue.serverTimestamp(),
               });
             } catch (e) {
@@ -482,357 +521,721 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
 
+  Widget _buildInitialsAvatar(
+    String displayName,
+    Color primaryColor,
+    Color fallbackTextColor, {
+    double size = 44,
+  }) {
+    final cleanName = displayName.trim();
+    String initials = '';
+    if (cleanName.isNotEmpty) {
+      final parts = cleanName.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+      if (parts.length >= 2) {
+        final firstChar = parts[0].characters.firstOrNull ?? '';
+        final secondChar = parts[1].characters.firstOrNull ?? '';
+        initials = '$firstChar$secondChar'.toUpperCase();
+      } else if (parts.isNotEmpty) {
+        final firstChar = parts[0].characters.firstOrNull ?? '';
+        initials = firstChar.toUpperCase();
+      }
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor.withValues(alpha: 0.85),
+            primaryColor,
+          ],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: initials.isNotEmpty
+          ? Text(
+              initials,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: size * 0.38,
+                letterSpacing: 0.5,
+              ),
+            )
+          : Icon(
+              Icons.person_rounded,
+              color: Colors.white,
+              size: size * 0.52,
+            ),
+    );
+  }
+
+  Widget _buildCategoryChip({
+    required String label,
+    required int count,
+    required bool isSelected,
+    required Color primaryColor,
+    required Color surfaceColor,
+    required Color borderColor,
+    required Color textMain,
+    required Color textSub,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryColor : surfaceColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? primaryColor : borderColor,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: primaryColor.withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : textMain,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : textSub.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : textSub,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showProfileImagePicker(BuildContext context) async {
     // Kullanıcı kendi profilini görüntülüyorsa veya admin ise profil fotoğrafı değiştirilebilir
     if (!_isOwnProfile && !_isAdmin) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sadece kendi profil fotoğrafınızı değiştirebilirsiniz'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        _showFloatingSnackBar('Sadece kendi profil fotoğrafınızı değiştirebilirsiniz', isSuccess: false);
       }
       return;
     }
 
     final currentAvatarPath = migrateAssetPath(_user?.profileImageUrl ?? '');
-    const avatarList = AppAvatars.all;
+    final authUser = _authService.currentUser;
+    final providerPhoto = _user?.providerPhotoUrl ?? (_isOwnProfile ? AuthService.getProviderPhotoUrl(authUser) : null);
+    final isUsingGooglePhoto = providerPhoto != null && currentAvatarPath == providerPhoto;
+    final isUsingReadyAvatar = currentAvatarPath.startsWith('assets/');
+
+    final isApple = authUser?.providerData.any((p) => p.providerId == 'apple.com') == true;
+    final providerTitle = isApple ? 'Apple Profil Fotoğrafı' : 'Google Profil Fotoğrafı';
+    final providerIcon = isApple ? Icons.apple : Icons.g_mobiledata_rounded;
+
+    const characterAvatars = [
+      AppAvatars.kuponKrali,
+      AppAvatars.dedektif,
+      AppAvatars.cat,
+      AppAvatars.duck,
+      AppAvatars.uykucu,
+    ];
+
+    const lifestyleAvatars = [
+      AppAvatars.alisverisci,
+      AppAvatars.oyuncu,
+      AppAvatars.teknoloji,
+      AppAvatars.kampci,
+      AppAvatars.fotografci,
+      AppAvatars.kahvesever,
+      AppAvatars.pizzasever,
+      AppAvatars.kitapkurdu,
+      AppAvatars.muziksever,
+      AppAvatars.fitness,
+      AppAvatars.guzellik,
+      AppAvatars.dekorasyon,
+      AppAvatars.mutfak,
+    ];
+
+    int selectedCategoryIndex = 0; // 0: Tümü, 1: Karakterler, 2: İlgi Alanları
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext bSheetContext) {
-        final isDark = Theme.of(bSheetContext).brightness == Brightness.dark;
-        final primaryColor = Theme.of(bSheetContext).colorScheme.primary;
-        final sheetBg = isDark ? AppTheme.darkSurface : Colors.white;
-        final textMain = isDark ? Colors.white : const Color(0xFF1E293B);
-        final textSub = isDark ? Colors.grey[400]! : const Color(0xFF64748B);
-        final borderColor = isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0);
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primaryColor = Theme.of(context).colorScheme.primary;
+            final sheetBg = isDark ? AppTheme.darkSurface : Colors.white;
+            final cardBg = isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC);
+            final textMain = isDark ? Colors.white : const Color(0xFF1E293B);
+            final textSub = isDark ? Colors.grey[400]! : const Color(0xFF64748B);
+            final borderColor = isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0);
+            final providerIconColor = isApple ? (isDark ? Colors.white : Colors.black87) : const Color(0xFF4285F4);
 
-        return Container(
-          height: MediaQuery.of(bSheetContext).size.height * 0.82,
-          decoration: BoxDecoration(
-            color: sheetBg,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
-                blurRadius: 24,
-                offset: const Offset(0, -6),
-              ),
-            ],
-          ),
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(bSheetContext).padding.bottom + 8,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. Drag Handle
-              const SizedBox(height: 12),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4.5,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[700] : Colors.grey[300],
-                    borderRadius: BorderRadius.circular(3),
+            final List<String> currentList;
+            if (selectedCategoryIndex == 1) {
+              currentList = characterAvatars;
+            } else if (selectedCategoryIndex == 2) {
+              currentList = lifestyleAvatars;
+            } else {
+              currentList = AppAvatars.all;
+            }
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              decoration: BoxDecoration(
+                color: sheetBg,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                    blurRadius: 28,
+                    offset: const Offset(0, -6),
                   ),
-                ),
+                ],
               ),
-              const SizedBox(height: 14),
-
-              // 2. Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 8,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Drag Handle
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4.5,
                       decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.face_retouching_natural_rounded,
-                        color: primaryColor,
-                        size: 22,
+                        color: isDark ? Colors.grey[700] : Colors.grey[300],
+                        borderRadius: BorderRadius.circular(3),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 2. Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.face_retouching_natural_rounded,
+                            color: primaryColor,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Profil Avatarı Seç',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: textMain,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Toplulukta ve fırsatlarında görünecek avatarını belirle',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: textSub,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close_rounded, color: textSub),
+                          onPressed: () => Navigator.pop(bSheetContext),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+                  Divider(height: 1, color: borderColor),
+                  const SizedBox(height: 12),
+
+                  // KATMAN 1: Aktif Görünüm & Özet Kartı
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            'Profil Avatarı Seç',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: textMain,
-                              letterSpacing: -0.3,
+                          // Aktif avatar önizleme
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: primaryColor.withValues(alpha: 0.5),
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: currentAvatarPath.isNotEmpty
+                                  ? (currentAvatarPath.startsWith('assets/')
+                                      ? Image.asset(
+                                          currentAvatarPath,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => _buildInitialsAvatar(
+                                            _user?.displayName ?? '',
+                                            primaryColor,
+                                            textSub,
+                                            size: 44,
+                                          ),
+                                        )
+                                      : CachedNetworkImage(
+                                          imageUrl: currentAvatarPath,
+                                          fit: BoxFit.cover,
+                                          memCacheWidth: 120,
+                                          memCacheHeight: 120,
+                                          placeholder: (_, __) => Container(
+                                            color: isDark ? Colors.grey[800] : Colors.grey[200],
+                                            child: const Center(
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            ),
+                                          ),
+                                          errorWidget: (_, __, ___) => _buildInitialsAvatar(
+                                            _user?.displayName ?? '',
+                                            primaryColor,
+                                            textSub,
+                                            size: 44,
+                                          ),
+                                        ))
+                                  : _buildInitialsAvatar(
+                                      _user?.displayName ?? '',
+                                      primaryColor,
+                                      textSub,
+                                      size: 44,
+                                    ),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Toplulukta ve fırsatlarında görünecek avatarını belirle',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: textSub,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isUsingGooglePhoto
+                                      ? '$providerTitle Aktif'
+                                      : (isUsingReadyAvatar
+                                          ? 'Hazır Avatar: ${AppAvatars.getLabel(currentAvatarPath)}'
+                                          : (currentAvatarPath.isNotEmpty
+                                              ? 'Özel Profil Fotoğrafı'
+                                              : 'Varsayılan Baş Harf Avatarı')),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isUsingGooglePhoto ? primaryColor : textSub,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _user?.displayName ?? 'Kullanıcı',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: textMain,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
                           ),
+                          if (currentAvatarPath.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () async {
+                                HapticFeedback.lightImpact();
+                                Navigator.pop(bSheetContext);
+                                await _updateProfileImage('');
+                              },
+                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 16),
+                              label: const Text(
+                                'Kaldır',
+                                style: TextStyle(
+                                  color: Colors.redAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.close_rounded, color: textSub),
-                      onPressed: () => Navigator.pop(bSheetContext),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              Divider(height: 1, color: borderColor),
-              const SizedBox(height: 16),
-
-              // 3. Mevcut Avatar Önizleme Çubuğu
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurfaceElevated : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: borderColor),
                   ),
-                  child: Row(
-                    children: [
-                      // Küçük avatar önizleme
-                      Container(
-                        width: 44,
-                        height: 44,
+
+                  // KATMAN 2: Harici Kimlik Sağlayıcı (Google / Apple) Orijinal Fotoğrafı
+                  if (providerPhoto != null) ...[
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
+                          color: isUsingGooglePhoto
+                              ? primaryColor.withValues(alpha: isDark ? 0.12 : 0.07)
+                              : cardBg,
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: primaryColor.withValues(alpha: 0.4),
-                            width: 1.8,
+                            color: isUsingGooglePhoto ? primaryColor : borderColor,
+                            width: isUsingGooglePhoto ? 1.5 : 1.0,
                           ),
                         ),
-                        child: ClipOval(
-                          child: currentAvatarPath.isNotEmpty
-                              ? (currentAvatarPath.startsWith('assets/')
-                                  ? Image.asset(
-                                      currentAvatarPath,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Icon(Icons.person, color: textSub),
-                                    )
-                                  : CachedNetworkImage(
-                                      imageUrl: currentAvatarPath,
-                                      fit: BoxFit.cover,
-                                      errorWidget: (_, __, ___) => Icon(Icons.person, color: textSub),
-                                    ))
-                              : Container(
-                                  color: primaryColor.withValues(alpha: 0.12),
-                                  child: Icon(Icons.person_rounded, color: primaryColor, size: 24),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
                           children: [
-                            Text(
-                              'Mevcut Profiliniz',
-                              style: TextStyle(fontSize: 11, color: textSub, fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _user?.displayName ?? 'Kullanıcı',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textMain),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (currentAvatarPath.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: () async {
-                            HapticFeedback.lightImpact();
-                            Navigator.pop(bSheetContext);
-                            await _updateProfileImage('');
-                          },
-                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 16),
-                          label: const Text(
-                            'Kaldır',
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              // 4. Hazır Avatarlar Başlığı
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Text(
-                      'HAZIR AVATARLAR',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: textSub,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${avatarList.length}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // 5. Avatarlar Grid Listesi (Kaydırılabilir 24 Avatar Galerisi)
-              Expanded(
-                child: GridView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: 0.80,
-                  ),
-                  itemCount: avatarList.length,
-                  itemBuilder: (context, index) {
-                    final avatarPath = avatarList[index];
-                    final isSelected = currentAvatarPath == avatarPath;
-                    final label = AppAvatars.getLabel(avatarPath);
-
-                    return GestureDetector(
-                      onTap: () async {
-                        HapticFeedback.lightImpact();
-                        Navigator.pop(bSheetContext);
-                        await _updateProfileImage(avatarPath);
-                      },
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Expanded(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? (isSelected ? primaryColor.withValues(alpha: 0.15) : AppTheme.darkSurfaceElevated)
-                                    : (isSelected ? primaryColor.withValues(alpha: 0.08) : Colors.grey[50]),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: isSelected ? primaryColor : borderColor,
-                                  width: isSelected ? 2.5 : 1.2,
-                                ),
-                                boxShadow: isSelected
-                                    ? [
-                                        BoxShadow(
-                                          color: primaryColor.withValues(alpha: 0.35),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Stack(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.all(7),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.asset(
-                                        avatarPath,
-                                        fit: BoxFit.cover,
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Container(
-                                            color: Colors.grey[200],
-                                            child: Icon(Icons.person, color: textSub),
-                                          );
-                                        },
-                                      ),
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isUsingGooglePhoto ? primaryColor : borderColor,
+                                      width: 1.5,
                                     ),
                                   ),
-                                  if (isSelected)
-                                    Positioned(
-                                      top: 4,
-                                      right: 4,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2.5),
-                                        decoration: BoxDecoration(
-                                          color: primaryColor,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.check_rounded,
-                                          color: Colors.white,
-                                          size: 13,
+                                  child: ClipOval(
+                                    child: CachedNetworkImage(
+                                      imageUrl: providerPhoto,
+                                      fit: BoxFit.cover,
+                                      memCacheWidth: 120,
+                                      memCacheHeight: 120,
+                                      placeholder: (_, __) => Container(
+                                        color: isDark ? Colors.grey[800] : Colors.grey[200],
+                                        child: const Center(
+                                          child: CircularProgressIndicator(strokeWidth: 2),
                                         ),
                                       ),
+                                      errorWidget: (_, __, ___) => Icon(Icons.person, color: textSub),
                                     ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: -2,
+                                  right: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.15),
+                                          blurRadius: 3,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      providerIcon,
+                                      size: 14,
+                                      color: providerIconColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    providerTitle,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: textMain,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isUsingGooglePhoto
+                                        ? 'Şu an aktif profil fotoğrafınız'
+                                        : 'Orijinal hesabınızdaki fotoğraf',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: textSub,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
+                            if (isUsingGooglePhoto)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_rounded, size: 14, color: primaryColor),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Aktif',
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              ElevatedButton(
+                                onPressed: () async {
+                                  HapticFeedback.lightImpact();
+                                  Navigator.pop(bSheetContext);
+                                  await _updateProfileImage(providerPhoto);
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: const Text(
+                                  'Kullan',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 16),
+
+                  // KATMAN 3: Hazır Avatar Dünyası & Kategori Filtreleri
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          _buildCategoryChip(
+                            label: 'Tümü',
+                            count: AppAvatars.all.length,
+                            isSelected: selectedCategoryIndex == 0,
+                            primaryColor: primaryColor,
+                            surfaceColor: cardBg,
+                            borderColor: borderColor,
+                            textMain: textMain,
+                            textSub: textSub,
+                            onTap: () => setModalState(() => selectedCategoryIndex = 0),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                              color: isSelected ? primaryColor : textSub,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(width: 8),
+                          _buildCategoryChip(
+                            label: 'Karakterler & Maskotlar',
+                            count: characterAvatars.length,
+                            isSelected: selectedCategoryIndex == 1,
+                            primaryColor: primaryColor,
+                            surfaceColor: cardBg,
+                            borderColor: borderColor,
+                            textMain: textMain,
+                            textSub: textSub,
+                            onTap: () => setModalState(() => selectedCategoryIndex = 1),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildCategoryChip(
+                            label: 'İlgi Alanları & Yaşam',
+                            count: lifestyleAvatars.length,
+                            isSelected: selectedCategoryIndex == 2,
+                            primaryColor: primaryColor,
+                            surfaceColor: cardBg,
+                            borderColor: borderColor,
+                            textMain: textMain,
+                            textSub: textSub,
+                            onTap: () => setModalState(() => selectedCategoryIndex = 2),
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Avatarlar Grid Listesi
+                  Expanded(
+                    child: GridView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(18, 4, 18, 16),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 0.80,
+                      ),
+                      itemCount: currentList.length,
+                      itemBuilder: (context, index) {
+                        final avatarPath = currentList[index];
+                        final isSelected = currentAvatarPath == avatarPath;
+                        final label = AppAvatars.getLabel(avatarPath);
+
+                        return GestureDetector(
+                          onTap: () async {
+                            HapticFeedback.lightImpact();
+                            Navigator.pop(bSheetContext);
+                            await _updateProfileImage(avatarPath);
+                          },
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Expanded(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? (isSelected ? primaryColor.withValues(alpha: 0.15) : AppTheme.darkSurfaceElevated)
+                                        : (isSelected ? primaryColor.withValues(alpha: 0.08) : Colors.grey[50]),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: isSelected ? primaryColor : borderColor,
+                                      width: isSelected ? 2.5 : 1.2,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: primaryColor.withValues(alpha: 0.35),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(7),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Image.asset(
+                                            avatarPath,
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Container(
+                                                color: Colors.grey[200],
+                                                child: Icon(Icons.person, color: textSub),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        Positioned(
+                                          top: 4,
+                                          right: 4,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(2.5),
+                                            decoration: BoxDecoration(
+                                              color: primaryColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.check_rounded,
+                                              color: Colors.white,
+                                              size: 13,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                                  color: isSelected ? primaryColor : textSub,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -845,13 +1248,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Kullanıcı kendi profilini görüntülüyorsa veya admin ise profil fotoğrafı değiştirilebilir
     if (!_isOwnProfile && !_isAdmin) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sadece kendi profil fotoğrafınızı değiştirebilirsiniz'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        _showFloatingSnackBar('Sadece kendi profil fotoğrafınızı değiştirebilirsiniz', isSuccess: false);
       }
       return;
     }
@@ -868,14 +1265,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (_isOwnProfile && targetUserId == user.uid) {
         try {
           await user.updatePhotoURL(cleanImageUrl);
-          await user.reload();
-          _log('✅ Firebase Auth photoURL güncellendi');
+          _log('✅ Firebase Auth photoURL güncellendi: $cleanImageUrl');
         } catch (authError) {
           _log('⚠️ Firebase Auth photoURL güncelleme hatası: $authError');
         }
       }
 
-      // 2. Firestore'a kaydet (merge: true ile güvenli kayıt)
+      // 2. Firestore'a kaydet (merge: true ile güvenli kayıt - Source of Truth providerPhotoUrl'e dokunulmaz!)
       await _firestore
           .collection('users')
           .doc(targetUserId)
@@ -886,45 +1282,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       _log('✅ Profil resmi Firestore\'a kaydedildi: $cleanImageUrl (userId: $targetUserId)');
 
-      // 3. CachedNetworkImage cache'ini temizle (eski resmi göstermesin)
-      if (cleanImageUrl.isNotEmpty && !cleanImageUrl.startsWith('assets/')) {
+      // 3. Eski özel network resmi varsa bellekten tahliye et
+      // DİKKAT: Kullanıcının orijinal sağlayıcı fotoğrafı (Google/Apple) bellekten ASLA silinmez!
+      // Böylece picker modalında 0ms anında ve titreşimsiz görüntülenmeye devam eder.
+      final oldImage = _user?.profileImageUrl ?? '';
+      final providerPhoto = _user?.providerPhotoUrl;
+      if (oldImage.isNotEmpty &&
+          !oldImage.startsWith('assets/') &&
+          oldImage != cleanImageUrl &&
+          oldImage != providerPhoto) {
         try {
-          await CachedNetworkImage.evictFromCache(cleanImageUrl);
-          _log('✅ Cache temizlendi');
-        } catch (e) {
-          _log('⚠️ Cache temizleme hatası: $e');
-        }
+          await CachedNetworkImage.evictFromCache(oldImage);
+          _log('✅ Eski özel profil resmi önbellekten temizlendi');
+        } catch (_) {}
       }
 
-      // 4. State'i direkt güncelle (Firestore'dan tekrar okumaya gerek yok)
-      if (_user != null) {
+      // 4. State'i copyWith ile kayıpsız güncelle (hiçbir takip, rozet, anahtar kelime kaybolmaz)
+      if (mounted) {
         setState(() {
-          _user = AppUser(
-            uid: _user!.uid,
-            username: _user!.username,
-            profileImageUrl: cleanImageUrl,
-            followedCategories: _user!.followedCategories,
-            watchKeywords: _user!.watchKeywords,
-            nickname: _user!.nickname,
-            points: _user!.points,
-            dealCount: _user!.dealCount,
-            totalLikes: _user!.totalLikes,
-            badges: _user!.badges,
-          );
+          if (_user != null) {
+            _user = _user!.copyWith(profileImageUrl: cleanImageUrl);
+          }
         });
-      } else {
-        // Eğer _user null ise, Firestore'dan tekrar yükle
-        await _loadUserData();
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profil resmi güncellendi ✅'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        final message = cleanImageUrl.isEmpty
+            ? 'Profil fotoğrafı kaldırıldı, varsayılan görünüm aktif.'
+            : (cleanImageUrl.startsWith('assets/')
+                ? 'Profil avatarınız başarıyla güncellendi ✨'
+                : 'Orijinal hesap fotoğrafınız aktif edildi ✅');
+        _showFloatingSnackBar(message, isSuccess: true);
       }
     } catch (e) {
       _log('❌ Profil resmi güncelleme hatası: $e');
@@ -1340,21 +1728,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               avatarUrl,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
-                                  Icon(Icons.person_rounded, size: 46, color: textSub),
+                                  _buildInitialsAvatar(user?.displayName ?? '', primaryColor, textSub, size: 92),
                             );
                           }
                           return CachedNetworkImage(
                             imageUrl: avatarUrl,
                             fit: BoxFit.cover,
+                            memCacheWidth: 200,
+                            memCacheHeight: 200,
                             placeholder: (context, url) => Container(
                               color: isDark ? Colors.grey[800] : Colors.grey[200],
                               child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             ),
                             errorWidget: (context, url, error) =>
-                                Icon(Icons.person_rounded, size: 46, color: textSub),
+                                _buildInitialsAvatar(user?.displayName ?? '', primaryColor, textSub, size: 92),
                           );
                         }
-                        return Icon(Icons.person_rounded, size: 46, color: textSub);
+                        return _buildInitialsAvatar(user?.displayName ?? '', primaryColor, textSub, size: 92);
                       },
                     ),
                   ),

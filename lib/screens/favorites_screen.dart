@@ -53,6 +53,9 @@ class FavoritesScreenState extends State<FavoritesScreen>
   final ThemeService _themeService = ThemeService();
   late TabController _tabController;
   bool _hasNewFollowedDealsPill = false;
+  List<Deal>? _pendingFollowedServerDeals;
+  DocumentSnapshot? _pendingFollowedLastDoc;
+  bool? _pendingFollowedHasMore;
   DateTime? _lastFollowedFetchTime;
 
   // Cached streams to prevent re-listening/recreating on rebuilds
@@ -254,6 +257,9 @@ class FavoritesScreenState extends State<FavoritesScreen>
               _isFirstLoadFollowed = false;
               _followedErrorMessage = null;
               _hasNewFollowedDealsPill = false;
+              _pendingFollowedServerDeals = null;
+              _pendingFollowedLastDoc = null;
+              _pendingFollowedHasMore = null;
               _lastFollowedFetchTime = DateTime.now();
               _hasFollowedCategories = serverResult.hasFollowedCategories;
               _isFollowedCategoriesResolved = true;
@@ -297,6 +303,9 @@ class FavoritesScreenState extends State<FavoritesScreen>
             _isFirstLoadFollowed = false;
             _followedErrorMessage = null;
             _hasNewFollowedDealsPill = false;
+            _pendingFollowedServerDeals = null;
+            _pendingFollowedLastDoc = null;
+            _pendingFollowedHasMore = null;
             _lastFollowedFetchTime = DateTime.now();
             _hasFollowedCategories = serverResult.hasFollowedCategories;
             _isFollowedCategoriesResolved = true;
@@ -399,18 +408,62 @@ class FavoritesScreenState extends State<FavoritesScreen>
           _isLoadingFollowed = false;
           _isFirstLoadFollowed = false;
           _hasNewFollowedDealsPill = false;
+          _pendingFollowedServerDeals = null;
+          _pendingFollowedLastDoc = null;
+          _pendingFollowedHasMore = null;
           _lastFollowedFetchTime = DateTime.now();
           _hasFollowedCategories = res.hasFollowedCategories;
           _isFollowedCategoriesResolved = true;
         });
       } else {
-        // Kullanıcı aşağı kaydırmışsa liste sırasını zıplatma, floating pill ile kullanıcı iradesine sun
-        setState(() {
-          _lastFollowedDocument = res.lastDocument ?? _lastFollowedDocument;
-          _hasMoreFollowed = res.hasMore;
-          _hasNewFollowedDealsPill = true;
-          _lastFollowedFetchTime = DateTime.now();
-        });
+        // Kullanıcı aşağı kaydırmışsa:
+        // KRİTİK KONTROL: Sunucudan gelen fırsatlar ile ekrandaki mevcut liste arasında
+        // GERÇEKTEN ekranda olmayan ve en son tarihten DAHA YENİ bir fırsat var mı?
+        final existingIds = _followedDealsList.map((d) => d.id).toSet();
+        final newDeals = res.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+        DateTime newestExistingCreatedAt = _followedDealsList.isEmpty
+            ? DateTime.fromMillisecondsSinceEpoch(0)
+            : _followedDealsList.first.createdAt;
+        for (final d in _followedDealsList) {
+          if (d.createdAt.isAfter(newestExistingCreatedAt)) {
+            newestExistingCreatedAt = d.createdAt;
+          }
+        }
+
+        final genuineNewDeals = newDeals.where((d) => d.createdAt.isAfter(newestExistingCreatedAt)).toList();
+
+        if (genuineNewDeals.isNotEmpty) {
+          // Gerçekten yeni kategori fırsatları var!
+          setState(() {
+            _hasNewFollowedDealsPill = true;
+            _pendingFollowedServerDeals = res.deals;
+            _pendingFollowedLastDoc = res.lastDocument;
+            _pendingFollowedHasMore = res.hasMore;
+            _lastFollowedFetchTime = DateTime.now();
+            _hasFollowedCategories = res.hasFollowedCategories;
+            _isFollowedCategoriesResolved = true;
+          });
+        } else {
+          // YENİ FIRSAT YOK! Kullanıcıya ASLA sahte hap butonu ÇIKARTMA!
+          // Sadece mevcut kartların güncel verilerini yerinde güncelle
+          setState(() {
+            if (_followedDealsList.length <= res.deals.length) {
+              _lastFollowedDocument = res.lastDocument ?? _lastFollowedDocument;
+              _hasMoreFollowed = res.hasMore;
+            }
+            _lastFollowedFetchTime = DateTime.now();
+            _hasFollowedCategories = res.hasFollowedCategories;
+            _isFollowedCategoriesResolved = true;
+            final serverMap = {for (final d in res.deals) d.id: d};
+            for (int i = 0; i < _followedDealsList.length; i++) {
+              final match = serverMap[_followedDealsList[i].id];
+              if (match != null) {
+                _followedDealsList[i] = match;
+              }
+            }
+          });
+        }
       }
     }).catchError((_) {
       // Sessizce yoksay; yerel önbellek zaten ekranda
@@ -487,12 +540,82 @@ class FavoritesScreenState extends State<FavoritesScreen>
         if (isAtTop) {
           _loadFollowedFirstPage(isRefresh: true);
         } else {
-          setState(() {
-            _hasNewFollowedDealsPill = true;
-          });
+          // Kullanıcı aşağıda fırsat inceliyorken körü körüne hap butonu çıkartma!
+          // Arka planda sessizce taze fırsatları sorgula; YALNIZCA GERÇEKTEN yeni fırsat varsa göster.
+          _checkNewFollowedDealsSilentlyOnResume();
         }
       }
     }
+  }
+
+  /// Uygulama 30 dk sonra arka plandan döndüğünde ve kullanıcı aşağıdaysa
+  /// asılsız "Yeni Kategori Fırsatları Var" uyarısı çıkarmamak için sessiz sunucu kontrolü
+  Future<void> _checkNewFollowedDealsSilentlyOnResume() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !mounted) return;
+
+    try {
+      final serverResult = await _firestoreService.getFollowedCategoriesDealsPaginated(
+        userId: user.uid,
+        limit: 45,
+        source: Source.server,
+      );
+
+      if (!mounted || serverResult.isError || serverResult.deals.isEmpty) return;
+
+      final existingIds = _followedDealsList.map((d) => d.id).toSet();
+      final newDeals = serverResult.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+      DateTime newestExistingCreatedAt = _followedDealsList.isEmpty
+          ? DateTime.fromMillisecondsSinceEpoch(0)
+          : _followedDealsList.first.createdAt;
+      for (final d in _followedDealsList) {
+        if (d.createdAt.isAfter(newestExistingCreatedAt)) {
+          newestExistingCreatedAt = d.createdAt;
+        }
+      }
+
+      final genuineNewDeals = newDeals.where((d) => d.createdAt.isAfter(newestExistingCreatedAt)).toList();
+
+      if (genuineNewDeals.isNotEmpty && mounted) {
+        final bool isNowAtTop = !_followedCategoriesScrollController.hasClients ||
+            _followedCategoriesScrollController.offset <= 120;
+        if (isNowAtTop && _followedDealsList.isNotEmpty) {
+          // Kullanıcı bu esnada listenin tepesine ulaştıysa doğrudan taze veriyi pürüzsüzce ekrana ver
+          setState(() {
+            _followedDealsList = List<Deal>.from(serverResult.deals);
+            if (_followedDealsList.length <= serverResult.deals.length) {
+              _lastFollowedDocument = serverResult.lastDocument;
+              _hasMoreFollowed = serverResult.hasMore;
+            }
+            _hasNewFollowedDealsPill = false;
+            _pendingFollowedServerDeals = null;
+            _pendingFollowedLastDoc = null;
+            _pendingFollowedHasMore = null;
+            _lastFollowedFetchTime = DateTime.now();
+          });
+        } else {
+          setState(() {
+            _hasNewFollowedDealsPill = true;
+            _pendingFollowedServerDeals = serverResult.deals;
+            _pendingFollowedLastDoc = serverResult.lastDocument;
+            _pendingFollowedHasMore = serverResult.hasMore;
+            _lastFollowedFetchTime = DateTime.now();
+          });
+        }
+      } else if (mounted) {
+        setState(() {
+          _lastFollowedFetchTime = DateTime.now();
+          final serverMap = {for (final d in serverResult.deals) d.id: d};
+          for (int i = 0; i < _followedDealsList.length; i++) {
+            final match = serverMap[_followedDealsList[i].id];
+            if (match != null) {
+              _followedDealsList[i] = match;
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   /// FS-18 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
@@ -512,16 +635,26 @@ class FavoritesScreenState extends State<FavoritesScreen>
 
       final index = _followedDealsList.indexWhere((d) => d.id == event.dealId);
       if (index != -1) {
-        setState(() {
-          if (event.action == DealSyncAction.dealDeleted) {
-            _followedDealsList.removeAt(index);
-          } else {
-            _followedDealsList[index] = event.applyTo(_followedDealsList[index]);
-          }
-        });
-      } else {
-        setState(() {});
+        if (event.action == DealSyncAction.dealDeleted) {
+          _followedDealsList.removeAt(index);
+        } else {
+          _followedDealsList[index] = event.applyTo(_followedDealsList[index]);
+        }
       }
+
+      // Arka plan tampon listesinde (_pendingFollowedServerDeals) güncelleme
+      if (_pendingFollowedServerDeals != null) {
+        final pendingIndex = _pendingFollowedServerDeals!.indexWhere((d) => d.id == event.dealId);
+        if (pendingIndex != -1) {
+          if (event.action == DealSyncAction.dealDeleted) {
+            _pendingFollowedServerDeals!.removeAt(pendingIndex);
+          } else {
+            _pendingFollowedServerDeals![pendingIndex] = event.applyTo(_pendingFollowedServerDeals![pendingIndex]);
+          }
+        }
+      }
+
+      setState(() {});
     });
   }
 
@@ -1817,18 +1950,41 @@ class FavoritesScreenState extends State<FavoritesScreen>
                   text: '🏷️ Yeni Kategori Fırsatları Var 👆',
                   icon: Icons.category_rounded,
                   primaryColor: AppTheme.primary,
-                  onTap: () {
+                  onTap: () async {
+                    final pending = _pendingFollowedServerDeals;
+                    final pendingLastDoc = _pendingFollowedLastDoc;
+                    final pendingHasMore = _pendingFollowedHasMore;
+
+                    // 1. Dokunulduğu anda hap butonu hemen pürüzsüzce kapansın
+                    setState(() {
+                      _hasNewFollowedDealsPill = false;
+                      _pendingFollowedServerDeals = null;
+                      _pendingFollowedLastDoc = null;
+                      _pendingFollowedHasMore = null;
+                    });
+
+                    // 2. Önce en tepeye akıcı animasyonla kaydır (kayma esnasında liste boyutu değişmediği için 0 layout jitter)
                     if (_followedCategoriesScrollController.hasClients) {
-                      _followedCategoriesScrollController.animateTo(
+                      await _followedCategoriesScrollController.animateTo(
                         0,
-                        duration: const Duration(milliseconds: 400),
+                        duration: const Duration(milliseconds: 350),
                         curve: Curves.easeOutCubic,
                       );
                     }
-                    setState(() {
-                      _hasNewFollowedDealsPill = false;
-                    });
-                    _loadFollowedFirstPage(isRefresh: true);
+
+                    // 3. Tepeye varıldığında hazır listeyi pürüzsüzce ekrana ver veya sunucudan tazele
+                    if (mounted) {
+                      if (pending != null && pending.isNotEmpty) {
+                        setState(() {
+                          _followedDealsList = List<Deal>.from(pending);
+                          _lastFollowedDocument = pendingLastDoc ?? _lastFollowedDocument;
+                          _hasMoreFollowed = pendingHasMore ?? _hasMoreFollowed;
+                          _lastFollowedFetchTime = DateTime.now();
+                        });
+                      } else {
+                        await _loadFollowedFirstPage(isRefresh: true);
+                      }
+                    }
                   },
                 ),
               ),

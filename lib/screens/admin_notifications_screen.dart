@@ -39,6 +39,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   bool _hasAutoOpened = false;
   final Set<String> _locallyDismissedIds = {};
   StreamSubscription<dynamic>? _authSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _notifSub;
+  List<Map<String, dynamic>>? _allNotifications;
+  bool _isLoading = true;
+  Object? _loadError;
 
   @override
   void initState() {
@@ -48,14 +52,85 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: uid, forceSync: true);
     _authSub = _authService.authStateChanges.listen((user) {
       if (mounted) {
+        _subscribeToNotifications();
         setState(() {});
       }
     });
+    _subscribeToNotifications();
+  }
+
+  void _subscribeToNotifications() {
+    _notifSub?.cancel();
+    final uid = _authService.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _allNotifications = [];
+          _isLoading = false;
+          _loadError = null;
+        });
+      }
+      return;
+    }
+
+    _notifSub = _firestoreService.getUserNotificationsStream(uid).listen(
+      (rawItems) {
+        if (!mounted) return;
+
+        // Kullanıcının sildiği ID'leri temizle (Firestore'dan tamamen düşmüşse artık locallyDismissed'da tutmaya gerek yok)
+        if (_locallyDismissedIds.isNotEmpty) {
+          _locallyDismissedIds.removeWhere((id) => !rawItems.any((i) => i['id'] == id));
+        }
+
+        // Yerel olarak silinmiş elemanları filtrele
+        final filtered = rawItems.where((i) => !_locallyDismissedIds.contains(i['id'])).toList();
+
+        // Akıllı diff: Eğer içerik ve okunma durumları aynıysa UI rebuild tetikleme (Outlook akıcılığı kalkanı)
+        if (_allNotifications != null && _areNotificationListsEqual(_allNotifications!, filtered)) {
+          return;
+        }
+
+        setState(() {
+          _allNotifications = filtered;
+          _isLoading = false;
+          _loadError = null;
+        });
+      },
+      onError: (err) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _loadError = err;
+          });
+        }
+      },
+    );
+  }
+
+  bool _areNotificationListsEqual(
+    List<Map<String, dynamic>> a,
+    List<Map<String, dynamic>> b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      final itemA = a[i];
+      final itemB = b[i];
+      if (itemA['id'] != itemB['id']) return false;
+      final readA = itemA['read'] == true || itemA['read'] == 'true';
+      final readB = itemB['read'] == true || itemB['read'] == 'true';
+      if (readA != readB) return false;
+      if (itemA['status'] != itemB['status']) return false;
+      if (itemA['title'] != itemB['title']) return false;
+      if (itemA['body'] != itemB['body']) return false;
+    }
+    return true;
   }
 
   @override
   void dispose() {
     _authSub?.cancel();
+    _notifSub?.cancel();
     super.dispose();
   }
 
@@ -97,10 +172,18 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null) return;
 
-    // Okundu işaretle
+    // Okundu işaretle (Optimistik arayüz güncellemesi)
     if (!(item['read'] == true || item['read'] == 'true')) {
-      await _firestoreService.markNotificationAsRead(currentUserId, item['id'] as String);
-      AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
+      item['read'] = true;
+      if (_allNotifications != null) {
+        final targetIdx = _allNotifications!.indexWhere((it) => it['id'] == item['id']);
+        if (targetIdx != -1) {
+          _allNotifications![targetIdx]['read'] = true;
+        }
+      }
+      if (mounted) setState(() {});
+      unawaited(_firestoreService.markNotificationAsRead(currentUserId, item['id'] as String));
+      unawaited(AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true));
     }
 
     final type = (item['type'] ?? 'deal').toString();
@@ -640,6 +723,13 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   Future<void> _markAllAsRead(String currentUserId) async {
     try {
       HapticFeedback.lightImpact();
+      if (_allNotifications != null) {
+        setState(() {
+          for (final item in _allNotifications!) {
+            item['read'] = true;
+          }
+        });
+      }
       await _firestoreService.markAllNotificationsAsRead(currentUserId);
       AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
       if (!mounted) return;
@@ -733,184 +823,173 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       );
     }
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _firestoreService.getUserNotificationsStream(currentUserId),
-      builder: (context, snapshot) {
-        final rawItems = snapshot.data ?? [];
-        if (_locallyDismissedIds.isNotEmpty) {
-          _locallyDismissedIds.removeWhere((id) => !rawItems.any((i) => i['id'] == id));
-        }
-        final allItems = rawItems.where((i) => !_locallyDismissedIds.contains(i['id'])).toList();
+    final allItems = _allNotifications ?? [];
 
-        // Sekme bazlı okunmamış sayıları
-        final unreadAll = allItems.where((i) => !(i['read'] == true || i['read'] == 'true')).length;
-        final unreadAdmin = allItems.where((i) {
-          final isUnread = !(i['read'] == true || i['read'] == 'true');
-          final type = i['type'] as String? ?? '';
-          return isUnread &&
-              (type == 'admin_message' ||
-                  type == 'admin' ||
-                  type == 'marketing' ||
-                  type == 'manual_notification' ||
-                  type == 'submission_status');
-        }).length;
-        final unreadReplies = allItems.where((i) {
-          final isUnread = !(i['read'] == true || i['read'] == 'true');
-          final type = i['type'] as String? ?? '';
-          return isUnread && (type == 'comment_reply' || type == 'comment');
-        }).length;
+    // Sekme bazlı okunmamış sayıları
+    final unreadAll = allItems.where((i) => !(i['read'] == true || i['read'] == 'true')).length;
+    final unreadAdmin = allItems.where((i) {
+      final isUnread = !(i['read'] == true || i['read'] == 'true');
+      final type = i['type'] as String? ?? '';
+      return isUnread &&
+          (type == 'admin_message' ||
+              type == 'admin' ||
+              type == 'marketing' ||
+              type == 'manual_notification' ||
+              type == 'submission_status');
+    }).length;
+    final unreadReplies = allItems.where((i) {
+      final isUnread = !(i['read'] == true || i['read'] == 'true');
+      final type = i['type'] as String? ?? '';
+      return isUnread && (type == 'comment_reply' || type == 'comment');
+    }).length;
 
-        return Scaffold(
-          backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
-          appBar: AppBar(
-            title: const Text('Bildirimler'),
-            backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
-            elevation: 0,
-            iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
-            actions: [
-              // Tümünü okundu işaretle butonu (Modern, anlaşılır ve belirgin kapsül)
-              if (unreadAll > 0)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => _markAllAsRead(currentUserId),
+    return Scaffold(
+      backgroundColor: isDark ? AppTheme.darkBackground : Colors.white,
+      appBar: AppBar(
+        title: const Text('Bildirimler'),
+        backgroundColor: isDark ? AppTheme.darkSurface : Colors.white,
+        elevation: 0,
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
+        actions: [
+          // Tümünü okundu işaretle butonu (Modern, anlaşılır ve belirgin kapsül)
+          if (unreadAll > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _markAllAsRead(currentUserId),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF10B981).withValues(alpha: 0.16)
+                          : const Color(0xFFECFDF5),
                       borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF10B981).withValues(alpha: 0.16)
-                              : const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.35 : 0.45),
-                            width: 1.0,
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.35 : 0.45),
+                        width: 1.0,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.18 : 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.done_all_rounded,
+                          size: 16,
+                          color: Color(0xFF10B981),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Tümünü Oku',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                            letterSpacing: 0.1,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.18 : 0.08),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.done_all_rounded,
-                              size: 16,
-                              color: Color(0xFF10B981),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Tümünü Oku',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
-                                letterSpacing: 0.1,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
-              // Tümünü sil butonu
-              if (allItems.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6, right: 12),
-                  child: IconButton(
-                    onPressed: () => _showDeleteAllDialog(currentUserId),
-                    icon: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 19,
-                      color: isDark ? Colors.grey[400] : Colors.grey[700],
-                    ),
-                    tooltip: 'Tümünü Sil',
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(
-                      minWidth: 36,
-                      minHeight: 36,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: isDark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.grey[100],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : Colors.grey[300]!,
-                          width: 1,
-                        ),
-                      ),
+              ),
+            ),
+          // Tümünü sil butonu
+          if (allItems.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, right: 12),
+              child: IconButton(
+                onPressed: () => _showDeleteAllDialog(currentUserId),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 19,
+                  color: isDark ? Colors.grey[400] : Colors.grey[700],
+                ),
+                tooltip: 'Tümünü Sil',
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.grey[100],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.grey[300]!,
+                      width: 1,
                     ),
                   ),
                 ),
-            ],
-          ),
-          body: Column(
-            children: [
-              // Tab bar
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurface : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildTabButton(
-                        'all',
-                        'Tümü',
-                        isDark,
-                        primaryColor,
-                        unreadCount: unreadAll,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildTabButton(
-                        'admin',
-                        'Admin',
-                        isDark,
-                        primaryColor,
-                        unreadCount: unreadAdmin,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildTabButton(
-                        'replies',
-                        'Yorumlar',
-                        isDark,
-                        primaryColor,
-                        unreadCount: unreadReplies,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-              // Content
-              Expanded(
-                child: _buildNotificationsContent(
-                  allItems,
-                  snapshot.connectionState,
-                  snapshot.error,
-                  currentUserId,
-                  isDark,
-                  primaryColor,
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Tab bar
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkSurface : Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildTabButton(
+                    'all',
+                    'Tümü',
+                    isDark,
+                    primaryColor,
+                    unreadCount: unreadAll,
+                  ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: _buildTabButton(
+                    'admin',
+                    'Admin',
+                    isDark,
+                    primaryColor,
+                    unreadCount: unreadAdmin,
+                  ),
+                ),
+                Expanded(
+                  child: _buildTabButton(
+                    'replies',
+                    'Yorumlar',
+                    isDark,
+                    primaryColor,
+                    unreadCount: unreadReplies,
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          // Content
+          Expanded(
+            child: _buildNotificationsContent(
+              allItems,
+              currentUserId,
+              isDark,
+              primaryColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -974,17 +1053,15 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
   Widget _buildNotificationsContent(
     List<Map<String, dynamic>> allItems,
-    ConnectionState connectionState,
-    Object? error,
     String currentUserId,
     bool isDark,
     Color primaryColor,
   ) {
-    if (connectionState == ConnectionState.waiting && allItems.isEmpty) {
+    if (_isLoading && _allNotifications == null) {
       return const NotificationListSkeleton();
     }
-    if (error != null) {
-      return Center(child: Text('Hata: $error'));
+    if (_loadError != null && allItems.isEmpty) {
+      return Center(child: Text('Hata: $_loadError'));
     }
 
     // Otomatik odaklama / detay açma (Push veya in-app bildirimine tıklanıp gelindiyse)
@@ -1073,6 +1150,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
 
     return ListView.separated(
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       padding: const EdgeInsets.all(12),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -1208,16 +1286,19 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         }
 
         // Dismissible yön ve arka plan mimarisi:
-        // Flutter Dismissible sözleşmesinde 'secondaryBackground == null || background != null' zorunludur.
         // isUnread == true:
         //   direction: DismissDirection.horizontal (Sağa: Okundu [background], Sola: Sil [secondaryBackground])
         // isUnread == false:
-        //   direction: DismissDirection.endToStart (Yalnızca sola kaydır: Sil [background])
-        //   secondaryBackground = null (Assertion hatasını %100 önler)
+        //   direction: DismissDirection.endToStart (Yalnızca sola kaydır: Sil [secondaryBackground])
+        //
+        // Mükemmel UI/UX Kuralı:
+        // Flutter sözleşmesinde 'secondaryBackground != null' iken 'background != null' zorunludur.
+        // background HER ZAMAN okunduBackground (Yeşil), secondaryBackground HER ZAMAN silBackground (Kırmızı)'dır.
+        // Böylece kullanıcı sağa kaydırdığında ASLA kırmızı silme arka planı görünmez (sıfır kırmızılık garantisi).
+        // Bildirim okunmuş olduğunda ise yön 'endToStart' olduğu için kullanıcı sağa kaydıramaz, sadece sola kaydırıp silebilir.
         final dismissDirection = isUnread ? DismissDirection.horizontal : DismissDirection.endToStart;
 
         final okunduBackground = Container(
-          margin: const EdgeInsets.symmetric(vertical: 2),
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.only(left: 20),
           decoration: BoxDecoration(
@@ -1256,7 +1337,6 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         );
 
         final silBackground = Container(
-          margin: const EdgeInsets.symmetric(vertical: 2),
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
           decoration: BoxDecoration(
@@ -1298,21 +1378,35 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         return Dismissible(
           key: Key(notifId),
           direction: dismissDirection,
+          movementDuration: const Duration(milliseconds: 250),
+          resizeDuration: const Duration(milliseconds: 250),
           dismissThresholds: const {
-            DismissDirection.startToEnd: 0.3,
-            DismissDirection.endToStart: 0.3,
+            // Sağa hafif çekmeyle (%20) okundu eşiği anında tetiklenir, sonuna kadar kaydırmaya gerek kalmaz
+            DismissDirection.startToEnd: 0.20,
+            // Sola silme için güvenli ve kontrollü eşik (%35)
+            DismissDirection.endToStart: 0.35,
           },
-          // Okunmamışta sağa kaydırma 'Okundu', okunmuşta tek yön sola kaydırma 'Sil'
-          background: isUnread ? okunduBackground : silBackground,
-          // Okunmamışta sola kaydırma 'Sil', okunmuşta null (assertion ihlali oluşturmaz)
-          secondaryBackground: isUnread ? silBackground : null,
+          // Sağa kaydırmada arka plan her zaman yeşil 'Okundu', sola kaydırmada her zaman kırmızı 'Sil'
+          background: okunduBackground,
+          secondaryBackground: silBackground,
           confirmDismiss: (direction) async {
             if (direction == DismissDirection.startToEnd) {
               // ─── Sağa Kaydırma: Yalnızca Okunmamış Bildirimleri Okundu İşaretle ───
               if (!isUnread) return false;
               HapticFeedback.lightImpact();
-              await _firestoreService.markNotificationAsRead(currentUserId, notifId);
-              AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
+
+              // Optimistik güncelleme: Bildirimi anında okundu yap
+              item['read'] = true;
+              if (_allNotifications != null) {
+                final targetIdx = _allNotifications!.indexWhere((it) => it['id'] == notifId);
+                if (targetIdx != -1) {
+                  _allNotifications![targetIdx]['read'] = true;
+                }
+              }
+
+              // Arka planda Firestore senkronizasyonu (UI akışını bloklamaz)
+              unawaited(_firestoreService.markNotificationAsRead(currentUserId, notifId));
+              unawaited(AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true));
 
               if (context.mounted) {
                 _showFeedbackSnackBar(
@@ -1328,8 +1422,12 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                   duration: const Duration(milliseconds: 1500),
                 );
               }
-              // Kart yaylanarak yerine döner; 'read: true' verisi geldiğinde otomatik olarak
-              // sadece sola kaydırılarak silinebilir (endToStart) moduna geçer.
+
+              // Kart yaylanarak yerine döner. Yerine döndüğünde görsel stilini yenilemek için micro-delay:
+              Future.delayed(const Duration(milliseconds: 260), () {
+                if (mounted) setState(() {});
+              });
+
               return false;
             } else if (direction == DismissDirection.endToStart) {
               // ─── Sola Kaydırma: Silme İşlemini Onayla ───
@@ -1338,24 +1436,25 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             }
             return false;
           },
-          onDismissed: (direction) async {
+          onDismissed: (direction) {
             if (direction == DismissDirection.endToStart) {
+              // Flutter Dismissible kuralı: onDismissed anında ilgili eleman veri kaynağından çıkarılmalıdır
               setState(() {
                 _locallyDismissedIds.add(notifId);
+                _allNotifications?.removeWhere((it) => it['id'] == notifId);
               });
               final notifTitle = item['title'] as String? ?? 'Bildirim';
 
-              try {
-                // Firestore'dan tamamen sil
-                await _firestoreService.deleteNotification(currentUserId, notifId);
+              // Firestore'dan tamamen ve arka planda sil (Outlook gibi akıcı silme)
+              _firestoreService.deleteNotification(currentUserId, notifId).then((_) {
                 AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: currentUserId, forceSync: true);
-              } catch (e) {
+              }).catchError((_) {
                 if (mounted) {
                   setState(() {
                     _locallyDismissedIds.remove(notifId);
                   });
                 }
-              }
+              });
 
               if (context.mounted) {
                 _showFeedbackSnackBar(
@@ -1578,8 +1677,13 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     );
 
     if (confirmed == true && mounted) {
+      final notifId = item['id'] as String;
+      setState(() {
+        _locallyDismissedIds.add(notifId);
+        _allNotifications?.removeWhere((it) => it['id'] == notifId);
+      });
       try {
-        await _firestoreService.deleteNotification(userId, item['id'] as String);
+        await _firestoreService.deleteNotification(userId, notifId);
         AppBadgeService.instance.syncBadgeWithFirestore(targetUserId: userId, forceSync: true);
         if (!mounted) return;
         _showFeedbackSnackBar(
@@ -1588,6 +1692,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         );
       } catch (e) {
         if (!mounted) return;
+        setState(() {
+          _locallyDismissedIds.remove(notifId);
+        });
         _showFeedbackSnackBar(
           content: Text('Silme hatası: $e'),
           backgroundColor: Colors.red,
@@ -1642,6 +1749,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
         if (!mounted) return;
         Navigator.pop(context); // Close loading dialog
+        setState(() {
+          _allNotifications = [];
+          _locallyDismissedIds.clear();
+        });
         _showFeedbackSnackBar(
           content: const Text('Tüm bildirimler silindi'),
           backgroundColor: const Color(0xFF10B981),

@@ -433,6 +433,11 @@ Apple iOS ve Android cihazlarda uygulama ikonu üzerindeki rozet sayısını ve 
 * **Yazar ve Kelime Takip Senkronizasyonu:** Kullanıcı bir yazarı takip ettiğinde/takipten çıktığında `UserService` anında `FirebaseMessaging` topic aboneliğini günceller; takipten çıkan kullanıcılara hayalet bildirim gitmesi engellenir.
 * **Kelime Radarı Uyarı Banner'ı:** `KeywordTrackingScreen` içinde bildirim izinleri kapalıyken kullanıcıya amber renkli rehberlik banner'ı sunulur.
 
+### 8.5 🚀 Bildirim Merkezi (`AdminNotificationsScreen`) UI/UX Mimarisi & Sıvı Akıcılık Standartları:
+* **Outlook / iOS Mail Çoklu Silme Akıcılığı (Rebuild İzolasyonu):** Eski iç içe `StreamBuilder` yapısı tasfiye edilmiş, Firestore akışı State seviyesinde dinlenerek akıllı diff algoritması (`_areNotificationListsEqual`) ile bağlanmıştır. Kullanıcı art arda veya aynı anda birden fazla bildirimi sola kaydırıp sildiğinde, Firestore'dan gelen gecikmeli veri yankıları (echo) arayüzde gereksiz liste rebuild'i tetiklemez; gesture iptali ve ekran titremesi (flicker/glitch) %100 önlenir.
+* **Sıfır Kırmızılık Garantisi (Sağa Kaydırma & Okundu İşareti):** Flutter Dismissible sözleşmesinde `background` kalıcı olarak yeşil `okunduBackground`, `secondaryBackground` ise kalıcı olarak kırmızı `silBackground` olarak sabitlenmiştir. Sağa kaydırma anında `read: true` olsa dahi arkada 1 piksel bile kırmızı silme zemini görünmez.
+* **Hafif Eşik & Elastik Geri Dönüş:** Sağa kaydırma eşiği `0.20` (%20), sola silme eşiği `0.35` (%35) olarak ayarlanmıştır. Kullanıcı ekranı boydan boya çekmek zorunda kalmadan hafif bir hareketle okundu işaretleyebilir; kart elastik olarak yerine döner (`250ms movementDuration`) ve `BouncingScrollPhysics` ile 120 FPS akıcı deneyim sunar.
+
 ---
 
 ## 9. 💬 Birebir Mesajlaşma, Anti-Spam ve Bildirim Yığınlama Mimarisi
