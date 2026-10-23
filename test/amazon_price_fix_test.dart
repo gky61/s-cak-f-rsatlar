@@ -27,11 +27,29 @@ void main() {
       expect(scraper.parsePriceText('38160TL38160TL'), 38160.0);
       expect(scraper.parsePriceText('30000TL30000TL'), 30000.0);
 
-      // Metinsel etiket içeren fiyatlar (Accessibility label)
+      // Metinsel etiket içeren fiyatlar (Accessibility ve Sepet Kampanyaları)
       expect(scraper.parsePriceText('Yüzde 10 tasarruf ile 269,91 TL'), 269.91);
       expect(scraper.parsePriceText('Sepette %20 indirimle 1.250,50 TL'), 1250.50);
+      expect(scraper.parsePriceText('Sepette %10 indirimle 150 TL'), 150.0);
+      expect(scraper.parsePriceText('Sepette 150 TL'), 150.0);
+      expect(scraper.parsePriceText('Yüzde 10 indirimle 99 TL'), 99.0);
+      expect(scraper.parsePriceText('Kuponla 450 TL'), 450.0);
+      expect(scraper.parsePriceText('1 alana 1 bedava 350 TL'), 350.0);
+      expect(scraper.parsePriceText('99 TRY'), 99.0);
+      expect(scraper.parsePriceText('TRY 159'), 159.0);
+      expect(scraper.parsePriceText('1.500 TL'), 1500.0);
+      expect(scraper.parsePriceText('48.020 TL'), 48020.0);
+      expect(scraper.parsePriceText('12.50 TL'), 12.5);
+      expect(scraper.parsePriceText('12,50 TL'), 12.5);
 
-      // Standart fiyatlar
+      // Standart ve tam sayı fiyatlar (99 TL, 999 TL gibi ardışık basamaklar bozulmamalı)
+      expect(scraper.parsePriceText('99 TL'), 99.0);
+      expect(scraper.parsePriceText('99'), 99.0);
+      expect(scraper.parsePriceText('88 TL'), 88.0);
+      expect(scraper.parsePriceText('159 TL'), 159.0);
+      expect(scraper.parsePriceText('999 TL'), 999.0);
+      expect(scraper.parsePriceText('1010 TL'), 1010.0);
+      expect(scraper.parsePriceText('2525 TL'), 2525.0);
       expect(scraper.parsePriceText('269,91 TL'), 269.91);
       expect(scraper.parsePriceText('1.234,56 TL'), 1234.56);
       expect(scraper.parsePriceText('299,90 ₺'), 299.90);
