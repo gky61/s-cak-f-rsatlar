@@ -150,6 +150,31 @@ class AuthService {
     }
     return 'Fırsat Avcısı';
   }
+
+  /// Kullanıcının bağlı harici kimlik sağlayıcılarından (Google / Apple vb.) gelen orijinal fotoğraf URL'sini ayıklar.
+  /// user.photoURL sonradan avatarla ezilmiş olsa dahi, providerData içindeki ham sağlayıcı kaydını inceler.
+  static String? getProviderPhotoUrl(User? user) {
+    if (user == null) return null;
+    try {
+      // 1. Öncelik: providerData içindeki harici sağlayıcı profilleri (google.com vb.)
+      for (final provider in user.providerData) {
+        final photo = provider.photoURL?.trim();
+        if (photo != null && photo.isNotEmpty && !photo.startsWith('assets/')) {
+          return photo;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('⚠️ providerData photoURL parse hatası: $e');
+    }
+
+    // 2. Fallback: Eğer providerData boşsa ama user.photoURL geçerli bir web bağlantısı ise
+    final rootPhoto = user.photoURL?.trim();
+    if (rootPhoto != null && rootPhoto.isNotEmpty && !rootPhoto.startsWith('assets/')) {
+      return rootPhoto;
+    }
+
+    return null;
+  }
   
   // Lazy initialization - sadece gerektiğinde oluştur
   GoogleSignIn get _googleSignInInstance {
@@ -340,15 +365,17 @@ class AuthService {
           final existingUser = app_user.AppUser.fromFirestore(existingUserDoc);
           _log('📋 Mevcut kullanıcı bulundu. Following listesi: ${existingUser.following.length} kişi');
           
-          // Mevcut kullanıcıyı güncelle (Kullanıcı kendi avatarını seçtiyse Google fotoğrafıyla ezme)
-          final hasCustomAvatar = existingUser.profileImageUrl.isNotEmpty;
-          final effectiveProfileImage = hasCustomAvatar
+          final existingData = existingUserDoc.data();
+          final bool hasProfileImageField = existingData != null && existingData.containsKey('profileImageUrl');
+          final providerPhoto = getProviderPhotoUrl(currentUser);
+          final effectiveProfileImage = hasProfileImageField
               ? existingUser.profileImageUrl
-              : (currentUser.photoURL ?? '');
+              : (providerPhoto ?? currentUser.photoURL ?? '');
 
           appUser = existingUser.copyWith(
             username: currentUser.displayName ?? existingUser.username,
             profileImageUrl: effectiveProfileImage,
+            providerPhotoUrl: providerPhoto ?? existingUser.providerPhotoUrl,
           );
           
           // Sadece değişen alanları güncelle (following listesi korunur)
@@ -358,10 +385,13 @@ class AuthService {
             updateData['displayName'] = currentUser.displayName;
             updateData['nickname'] = currentUser.displayName;
           }
-          // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
-          if (!hasCustomAvatar && currentUser.photoURL != null && currentUser.photoURL!.isNotEmpty) {
-            updateData['profileImageUrl'] = currentUser.photoURL;
-            updateData['photoURL'] = currentUser.photoURL;
+          if (providerPhoto != null && providerPhoto.isNotEmpty && existingUser.providerPhotoUrl != providerPhoto) {
+            updateData['providerPhotoUrl'] = providerPhoto;
+          }
+          // Yalnızca dokümanda profil resmi alanı daha önce hiç oluşturulmamışsa sağlayıcı fotoğrafını ata
+          if (!hasProfileImageField && providerPhoto != null && providerPhoto.isNotEmpty) {
+            updateData['profileImageUrl'] = providerPhoto;
+            updateData['photoURL'] = providerPhoto;
           }
           
           if (updateData.isNotEmpty) {
@@ -382,11 +412,13 @@ class AuthService {
           final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
               ? currentUser.displayName!.trim()
               : username;
+          final providerPhoto = getProviderPhotoUrl(currentUser);
           appUser = app_user.AppUser(
             uid: currentUser.uid,
             username: username,
             nickname: effNickname,
-            profileImageUrl: currentUser.photoURL ?? '',
+            profileImageUrl: providerPhoto ?? (currentUser.photoURL ?? ''),
+            providerPhotoUrl: providerPhoto,
             badges: [],
             points: 0,
             dealCount: 0,
@@ -403,6 +435,8 @@ class AuthService {
               'nickname': appUser.username,
               if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
               if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
+              if (appUser.providerPhotoUrl != null && appUser.providerPhotoUrl!.isNotEmpty)
+                'providerPhotoUrl': appUser.providerPhotoUrl,
               if (appUser.searchKeywords != null && appUser.searchKeywords!.isNotEmpty)
                 'searchKeywords': appUser.searchKeywords,
             });
@@ -416,11 +450,13 @@ class AuthService {
         final effNickname = (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty)
             ? currentUser.displayName!.trim()
             : username;
+        final providerPhoto = getProviderPhotoUrl(currentUser);
         appUser = app_user.AppUser(
           uid: currentUser.uid,
           username: username,
           nickname: effNickname,
-          profileImageUrl: currentUser.photoURL ?? '',
+          profileImageUrl: providerPhoto ?? (currentUser.photoURL ?? ''),
+          providerPhotoUrl: providerPhoto,
           badges: [],
           points: 0,
           dealCount: 0,
@@ -580,16 +616,20 @@ class AuthService {
         } catch (_) {}
       }
 
+      final providerPhoto = getProviderPhotoUrl(firebaseUser);
+
       if (existingUserDoc.exists) {
         try {
           final existingUser = app_user.AppUser.fromFirestore(existingUserDoc);
           _log('📋 Mevcut kullanıcı bulundu. Following listesi: ${existingUser.following.length} kişi');
           
-          // Mevcut kullanıcıyı güncelle (Kullanıcı kendi avatarını seçtiyse Google fotoğrafıyla ezme)
-          final hasCustomAvatar = existingUser.profileImageUrl.isNotEmpty;
-          final effectiveProfileImage = hasCustomAvatar
+          final existingData = existingUserDoc.data();
+          final bool hasProfileImageField = existingData != null && existingData.containsKey('profileImageUrl');
+
+          // Mevcut kullanıcıyı güncelle (Kullanıcı kendi avatarını seçtiyse veya bilerek kaldırdıysa Google fotoğrafıyla ezme)
+          final effectiveProfileImage = hasProfileImageField
               ? existingUser.profileImageUrl
-              : (firebaseUser.photoURL ?? '');
+              : (providerPhoto ?? firebaseUser.photoURL ?? '');
 
           final isUsernamePlaceholder = isPlaceholderUsername(existingUser.username, email: firebaseUser.email);
 
@@ -605,6 +645,7 @@ class AuthService {
                 ? effectiveName
                 : existingUser.nickname,
             profileImageUrl: effectiveProfileImage,
+            providerPhotoUrl: providerPhoto ?? existingUser.providerPhotoUrl,
           );
           
           // Mevcut kullanıcı varsa, sadece değişen alanları güncelle (takip verileri korunur)
@@ -619,14 +660,17 @@ class AuthService {
               } catch (_) {}
             }
           }
-          // Yalnızca kullanıcının henüz bir profil resmi yoksa Google fotoğrafını ata
-          if (!hasCustomAvatar && firebaseUser.photoURL != null && firebaseUser.photoURL!.isNotEmpty) {
-            updateData['profileImageUrl'] = firebaseUser.photoURL;
-            updateData['photoURL'] = firebaseUser.photoURL;
+          // Sağlayıcı fotoğrafı varsa ve Firestore'da eksik/farklı ise mühürle (Source of Truth)
+          if (providerPhoto != null && providerPhoto.isNotEmpty && existingUser.providerPhotoUrl != providerPhoto) {
+            updateData['providerPhotoUrl'] = providerPhoto;
+          }
+          // Yalnızca dokümanda profileImageUrl alanı daha önce hiç oluşturulmamışsa (eski hesap) sağlayıcı fotoğrafını ata
+          if (!hasProfileImageField && providerPhoto != null && providerPhoto.isNotEmpty) {
+            updateData['profileImageUrl'] = providerPhoto;
+            updateData['photoURL'] = providerPhoto;
           }
           
           // E-posta ve üyelik tarihi eksikse ekle/güncelle
-          final existingData = existingUserDoc.data();
           if (firebaseUser.email != null && (existingData == null || existingData['email'] != firebaseUser.email)) {
             updateData['email'] = firebaseUser.email;
           }
@@ -670,6 +714,8 @@ class AuthService {
               'nickname': appUser.username,
               if (appUser.profileImageUrl.isNotEmpty) 'profileImageUrl': appUser.profileImageUrl,
               if (appUser.profileImageUrl.isNotEmpty) 'photoURL': appUser.profileImageUrl,
+              if (appUser.providerPhotoUrl != null && appUser.providerPhotoUrl!.isNotEmpty)
+                'providerPhotoUrl': appUser.providerPhotoUrl,
               if (firebaseUser.email != null) 'email': firebaseUser.email,
               if (appUser.searchKeywords != null && appUser.searchKeywords!.isNotEmpty)
                 'searchKeywords': appUser.searchKeywords,
@@ -691,6 +737,8 @@ class AuthService {
           'nickname': appUser.username,
           'profileImageUrl': appUser.profileImageUrl,
           'photoURL': appUser.profileImageUrl,
+          if (appUser.providerPhotoUrl != null && appUser.providerPhotoUrl!.isNotEmpty)
+            'providerPhotoUrl': appUser.providerPhotoUrl,
           if (firebaseUser.email != null) 'email': firebaseUser.email,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -730,11 +778,17 @@ class AuthService {
     final effNickname = (effectiveName != null && effectiveName.trim().isNotEmpty)
         ? effectiveName.trim()
         : username;
+    final providerPhoto = getProviderPhotoUrl(firebaseUser);
+    final effectivePhoto = (providerPhoto != null && providerPhoto.isNotEmpty)
+        ? providerPhoto
+        : (firebaseUser.photoURL ?? '');
+
     return app_user.AppUser(
       uid: firebaseUser.uid,
       username: username,
       nickname: effNickname,
-      profileImageUrl: firebaseUser.photoURL ?? '',
+      profileImageUrl: effectivePhoto,
+      providerPhotoUrl: providerPhoto,
       badges: [],
       points: 0,
       dealCount: 0,

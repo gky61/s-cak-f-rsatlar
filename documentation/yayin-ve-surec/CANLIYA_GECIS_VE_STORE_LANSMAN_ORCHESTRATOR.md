@@ -507,6 +507,55 @@ graph TD
     2. *Kademe 2 (Üçlü Global Telemetri Kalkanı):* `lib/main.dart` içerisindeki tüm 3 hata yakalama sınırına (`FlutterError.onError`, `PlatformDispatcher.instance.onError`, `runZonedGuarded`) `isFontLoadFailure` filtresi entegre edildi. Olası geçici font yükleme aksaklıkları Crashlytics'e `fatal: false` olarak iletilip `SystemLogService`'e `warning` seviyesinde kaydedilerek uygulamanın çökmesi ve Crash-Free Users oranının düşmesi kalıcı olarak engellendi.  
   - *Doğrulama & Test:* `flutter analyze lib/main.dart` 0 hata/uyarı (No issues found), 12 font varyantı `assets/google_fonts/` altında doğrulandı.
 
+* 🟢 **Adım 3.37: Bildirim Merkezi UI/UX Sıvı Akıcılık, Rebuild İzolasyonu ve Çift-Yönlü Swipe Standartlaştırılması (`AdminNotificationsScreen`)**  
+  - *Problem:*  
+    1. Bildirimleri sola kaydırarak silerken kullanıcı art arda iki veya daha fazla bildirimi hızlıca kaydırdığında, ilk bildirimin silinmesi sonrası sayfada anlık titreme/yenilenme (rebuild glitch) yaşanması ve ikinci bildirimin silinemeyip ekranda kilitli/asılı kalması (gesture interruption).  
+    2. Okunmamış bildirimi sağa kaydırıp okundu olarak işaretlerken en sonda kırmızı "Sil" arka planının sızması/görünmesi ve sağa kaydırma eşiğinin sonuna kadar zorlaması.  
+  - *Kök Neden Analizi:*  
+    1. *İç İçe StreamBuilder Çıkmazı:* `ListView.separated` doğrudan `StreamBuilder` içerisindeydi. Bir bildirim silindiğinde `_firestoreService.deleteNotification` çağrısı sonrası Firestore anında yeni snapshot fırlatıyor ve `StreamBuilder` tüm listeyi sıfırdan yeniden inşa ediyordu. Bu rebuild, kullanıcının o sırada parmağıyla kaydırmakta olduğu 2. bildirimin dokunma hareketini yarıda kesiyor ve işlemi iptal ediyordu.  
+    2. *Dinamik Background Çelişkisi:* Flutter Dismissible sözleşmesinde `background: isUnread ? okunduBackground : silBackground` yapılmıştı. Sağa kaydırma anında bildirim `read: true` olduğu için kart yerine dönerken `isUnread` `false`'a dönüyor ve `background` tam o anda kırmızı `silBackground`'a dönüşerek kırmızı piksel sızdırıyordu.  
+  - *Mimari Çözüm:*  
+    1. *Rebuild İzolasyonu & State Seviyesinde Akıllı Diff (`_areNotificationListsEqual`):* `StreamBuilder` tasfiye edildi. Firestore akışı `initState` içinde dinlenerek yerel `_allNotifications` listesine bağlandı. `id`, `read`, `status`, `title` ve `body` alanlarını denetleyen diff algoritması kuruldu; Firestore'dan gelen veri yankıları arayüzde gereksiz rebuild tetiklemez.  
+    2. *Optimistik Çift Silme (Outlook / iOS Mail Akıcılığı):* `onDismissed` senkron olarak `_locallyDismissedIds.add(notifId)` ve `_allNotifications.removeWhere(...)` çalıştırır; Firestore arka planda unawaited silinir. Kullanıcı 4-5 bildirimi art arda fırlatsa dahi sıfır takılma ile 60/120 FPS akıcılıkta silinir.  
+    3. *Sıfır Kırmızılık Garantisi (Kalıcı Background Rolleri):* `background` her zaman yeşil `okunduBackground`, `secondaryBackground` her zaman kırmızı `silBackground` yapıldı. Yön `isUnread ? DismissDirection.horizontal : DismissDirection.endToStart` olarak bağlandı. Sağa kaydırmada arka planda tek bir kırmızı piksel dahi görünemez.  
+    4. *Akıllı Eşik & Elastik Geri Dönüş:* Sağa kaydırma eşiği `0.20` (%20), sola silme eşiği `0.35` (%35) olarak ayarlandı; `movementDuration: 250ms`, `BouncingScrollPhysics` ve `HapticFeedback.lightImpact()` entegre edildi.  
+  - *Doğrulama & Test:* `flutter analyze lib/screens/admin_notifications_screen.dart` 0 hata/0 uyarı (No issues found).
+
+* 🟢 **Adım 3.38: Dünya Standartlarında Profil Avatarı Mimarisi (Source of Truth vs Presentation Layer & Sıfır Gecikmeli 3-Katmanlı Seçim Galerisi)**  
+  - *Problem:* Kullanıcı Google veya Apple OAuth sağlayıcısı ile ilk kez kaydolduğunda profil fotoğrafı sağlayıcıdan otomatik alınıyordu. Ancak kullanıcı hazır bir avatar seçtiğinde veya fotoğrafını kaldırdığında, orijinal Google profil fotoğrafı `profileImageUrl` üzerinden ezilerek siliniyor ve kullanıcının bir daha orijinal Google fotoğrafına dönmesi imkansız hale geliyordu. Ayrıca avatar seçim modalı kategorize edilmemiş, bellek optimizasyonu eksik ve varsayılan baş harf rozeti bulunmayan donuk gri bir ikona düşüyordu.  
+  - *Kök Neden & Mimari Kural:*  
+    *"Kullanıcının harici kimlik sağlayıcısından (Google / Apple) gelen orijinal verisi bir 'Kaynak (Source of Truth)' olarak daima saklanır; kullanıcının uygulama içi tercih ettiği avatar ise bir 'Sergileme Katmanı (Presentation Layer)' olarak üzerine giydirilir."*  
+  - *4 Katmanlı Dünya Standardı Çözüm:*  
+    1. *Model Katmanı (`lib/models/user.dart`):* `AppUser` sınıfına `final String? providerPhotoUrl;` alanı eklendi. `hasProviderPhoto`, `isUsingProviderPhoto`, `isUsingReadyAvatar`, `hasCustomAvatar` yardımcı getter'ları tanımlandı. `fromFirestore`, `toFirestore` ve `copyWith` metotları savunmacı fallback parsing ile (`photoURL` ve `profileImageUrl` web bağlantılarını otomatik tanıyarak ve `toFirestore` içinde `photoURL` ile `profileImageUrl` senkronizasyonunu sağlayarak) güçlendirildi.  
+    2. *Kimlik Doğrulama & Oturum Kalkanı (`lib/services/auth_service.dart`):* `AuthService.getProviderPhotoUrl(User? user)` metodu geliştirildi (`user.providerData` içindeki ham kayıtları tarar). Giriş anında (`_handleUserAfterSignInCore` & `_createDefaultUser`) kullanıcının seçtiği hazır avatar veya kaldırma tercihi asla ezilmez (`hasProfileImageField` koruması); `providerPhotoUrl` Firestore'da değişmez bir kaynak olarak mühürlenir.  
+    3. *3 Katmanlı Dünya Standartlarında Seçim Galerisi (`lib/screens/profile_screen.dart`):*  
+       - *Katman 1 (Aktif Görünüm):* Kullanıcının aktif avatarı, adı, durumu ve tek tıkla "Kaldır" aksiyonu.  
+       - *Katman 2 (Dinamik Sağlayıcı Orijinal Fotoğraf Kartı):* Sağlayıcı fotoğrafı varsa özel kart olarak sunulur; Google veya Apple hesabı dinamik rozet ve ikonla (`Icons.g_mobiledata_rounded` veya `Icons.apple`) ayırt edilir; aktifse "Aktif" rozeti, değilse tek tıkla geri yükleyen "Kullan" butonu (`HapticFeedback` destekli).  
+       - *Katman 3 (Hazır Avatar Dünyası & Kategori Filtresi):* 18 adet WebP avatar `StatefulBuilder` ile modal kapanmadan anlık filtrelenebilir: "Tümü (18)", "Karakterler & Maskotlar (5)", "İlgi Alanları & Yaşam (13)". Mikro animasyonlar, parlayan seçim çerçevesi ve onay ikonu.  
+    4. *Sıvı Akıcılık, 120 FPS & Bellek Koruma Kalkanı:*  
+       - `_buildInitialsAvatar`: Boş veya yüklenemeyen profil fotoğrafları yerine modern gradient daire üzerinde Unicode/surrogate-pair ve Türkçe karakter güvenli dinamik baş harfler (örn: "AY").  
+       - `memCacheWidth: 120 / 200`: `CachedNetworkImage` üzerinde bellek kısıtlamaları uygulanarak yüksek çözünürlüklü fotoğrafların RAM'i şişirmesi önlendi.  
+       - Sıfır-flicker ve Kalıcı Sağlayıcı Önbelleği: Resim güncellendiğinde gereksiz `user.reload()` ağ turu elendi; `CachedNetworkImage.evictFromCache` işlemi kullanıcının `providerPhoto` fotoğrafını asla silmez, yalnızca geçici özel resimleri tahliye eder; böylece modal tekrar açıldığında orijinal fotoğraf 0ms anında ve titreşimsiz görüntülenir.  
+  - *Doğrulama & Test:* `test/user_avatar_architecture_test.dart` (7/7 %100 PASS), `flutter analyze lib/models/user.dart lib/services/auth_service.dart lib/screens/profile_screen.dart test/user_avatar_architecture_test.dart` 0 hata/uyarı (No issues found).
+
+* 🟢 **Adım 3.39: Feed Asılsız "Yeni Fırsat Var" Uyarısı Kalkanı (Delta & Diff Validation Engine) ve Zero-Jank Tap-to-Scroll Mimarisi (`FS-19 / FS-09`)**  
+  - *Problem:* Uygulama tamamen kapatılıp açıldığında (Cold Start) veya 30+ dakika sonra arka plandan ön plana döndüğünde (Hot Start), kullanıcı hızla aşağı kaydırdığında ekranın tepesinde aslında HİÇBİR YENİ FIRSAT OLMAMASINA rağmen "✨ Yeni Fırsat Var 👆" yüzen hap butonunun belirmesi. Kullanıcı butona dokunduğunda veya parmağıyla ekranı aşağı çektiğinde yeni fırsat gelmemesi ve hayal kırıklığı yaşaması. Ayrıca hap butonuna basıldığında listenin tepeye kaymadan önce eleman sayısının aniden değişmesiyle göze batan layout zıplaması (content jumping / jitter) oluşması ve sayfalama imlecinin bozulma riski (cursor corruption).  
+  - *Kök Neden Analizi (Chain of Failure):*  
+    1. *Kör Arka Plan Tetikleyicisi (`_attachBackgroundServerListener`):* 1400ms timeout sonrasında ekrana yerel önbellek basılmışken, arka plandaki tekil sunucu isteği (`serverFuture`) tamamlandığında; sunucudan gelen ilk 20 doküman ile ekrandaki mevcut liste diff edilmeksizin, kullanıcı `offset > 10 / 120` pozisyonundaysa doğrudan `_hasNewDealsPill = true` yapılıyordu.  
+    2. *Hot Start Sessiz Kontrol Eksikliği:* 30 dakika sonra ön plana dönüldüğünde (`didChangeAppLifecycleState`), kullanıcı aşağıdaysa sessiz sorgu yapılmadan doğrudan hap butonu açılıyordu.  
+    3. *Scroll Öncesi Liste Mutasyonu & Layout Snap:* Hap butonuna dokunulduğunda henüz `_scrollController.animateTo(0)` başlamadan `_dealsList = pending` atanarak liste küçülüyor; Flutter viewport'u ani sınırlandırma (clamp) ile sertçe zıplattıktan sonra tepeye kayıyordu.  
+    4. *Sayfalama İmlecinin Ezilmesi (Cursor Corruption):* Kullanıcı 2. veya 3. sayfayı okurken, arka plandan gelen 1. sayfa yanıtı `_lastDealDocument` imlecini ilk sayfa sonuna çekiyor ve sonraki sayfalarda mükerrer fırsatlar basılıyordu.  
+  - *Mimari Çözüm:*  
+    1. *İki Katmanlı Delta & Diff Motoru (`genuineNewDeals`):* Sunucu verisi hem `!existingIds.contains(d.id)` hem de `d.createdAt.isAfter(newestExistingCreatedAt)` süzgecinden geçirilir. Yalnızca ekrandaki en güncel tarihten DAHA YENİ bir fırsat varsa hap butonu gösterilir ve veri `_pendingServerDeals` tamponunda saklanır.  
+    2. *Yerinde Veri Güncellemesi (In-Place Mutation — 0 Jank):* Gerçekte yeni fırsat yoksa hap butonu ASLA tetiklenmez. Sunucudan gelen taze oy, yorum ve fiyat metrikleri mevcut kartlara yerinde enjekte edilir.  
+    3. *Zero-Jank Tap-to-Scroll UX Standardı:*  
+       - Adım 1: Dokunulduğu anda hap butonu hemen kapanır (`_hasNewDealsPill = false`).  
+       - Adım 2: `await _scrollController.animateTo(0, duration: 350ms, curve: Curves.easeOutCubic)` ile liste boyutu korunarak tepeye pürüzsüzce kayılır (sıfır layout snap / jitter).  
+       - Adım 3: Tepeye varıldığında hazır bekleyen tampon liste (`List<Deal>.from(pending)`) ekrana basılır. Sıfır ek Firestore maliyeti, sıfır gecikme.  
+    4. *İmleç Koruma Kalkanı (Cursor Corruption Shield):* `_dealsList.length <= res.deals.length` şartı sağlanmadıkça sayfalama imleci arka plan yanıtıyla ezilmez; kullanıcının aktif infinite scroll oturumu korunur.  
+    5. *Arama Modu & DealSync Senkronizasyonu:* `_isSearchMode` etkinken hap butonu bastırılır; `DealSyncService` silme ve güncelleme olayları arka plandaki `pending` tamponunu da reaktif günceller. Bu mimari `home_screen.dart`, `popular_deals_screen.dart` ve `favorites_screen.dart` olmak üzere tüm ilgili ekranlara %100 uygulandı.  
+  - *Doğrulama & Test:* `flutter analyze lib/screens/home_screen.dart lib/screens/popular_deals_screen.dart lib/screens/favorites_screen.dart` 0 hata/uyarı (No issues found).
+
 ---
 
 ## 🛡️ FAZ 4 — Android Google Play Console & Kapalı Test (🟡 AKTİF AŞAMA)

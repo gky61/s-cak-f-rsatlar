@@ -156,6 +156,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String? _dealsError;
   int _newDealsCount = 0;
   bool _hasNewDealsPill = false;
+  List<Deal>? _pendingServerDeals;
+  DocumentSnapshot? _pendingServerLastDoc;
+  bool? _pendingServerHasMore;
   StreamSubscription<Deal?>? _latestDealSubscription;
   
   // Engelleme kontrolü için
@@ -338,13 +341,91 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (isAtTop) {
           _fetchInitialDeals(isRefresh: true);
         } else {
-          setState(() {
-            _hasNewDealsPill = true;
-            _newDealsCount = 1;
-          });
+          // Kullanıcı aşağıda fırsat inceliyorken körü körüne hap butonu çıkartma!
+          // Arka planda sessizce en son fırsatları kontrol et; YALNIZCA GERÇEKTEN yeni fırsat varsa göster.
+          _checkNewDealsSilentlyOnResume();
         }
       }
     }
+  }
+
+  /// Uygulama 30 dk sonra arka plandan döndüğünde ve kullanıcı aşağıdaysa
+  /// asılsız "Yeni Fırsat Var" uyarısı çıkarmamak için sessiz sunucu kontrolü
+  Future<void> _checkNewDealsSilentlyOnResume() async {
+    if (_isSearchMode && _searchQuery.trim().isNotEmpty) return;
+
+    try {
+      final requestedCategory = _selectedCategory;
+      final requestedSubCategory = _selectedSubCategory;
+      final serverResult = await _firestoreService.getDealsPaginated(
+        limit: 20,
+        category: requestedCategory,
+        subCategory: requestedSubCategory,
+        source: Source.server,
+      );
+
+      if (!mounted ||
+          _selectedCategory != requestedCategory ||
+          _selectedSubCategory != requestedSubCategory ||
+          serverResult.isError ||
+          serverResult.deals.isEmpty) {
+        return;
+      }
+
+      final existingIds = _dealsList.map((d) => d.id).toSet();
+      final newDeals = serverResult.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+      DateTime newestExistingCreatedAt = _dealsList.isEmpty
+          ? DateTime.fromMillisecondsSinceEpoch(0)
+          : _dealsList.first.createdAt;
+      for (final d in _dealsList) {
+        if (d.createdAt.isAfter(newestExistingCreatedAt)) {
+          newestExistingCreatedAt = d.createdAt;
+        }
+      }
+
+      final genuineNewDeals = newDeals.where((d) => d.createdAt.isAfter(newestExistingCreatedAt)).toList();
+
+      if (genuineNewDeals.isNotEmpty && mounted) {
+        final bool isNowAtTop = !_scrollController.hasClients || _scrollController.offset <= 120;
+        if (isNowAtTop && _dealsList.isNotEmpty) {
+          // Kullanıcı bu esnada zaten listenin tepesine ulaştıysa doğrudan taze veriyi pürüzsüzce ekrana ver
+          setState(() {
+            _dealsList = List<Deal>.from(serverResult.deals);
+            if (_dealsList.length <= serverResult.deals.length) {
+              _lastDealDocument = serverResult.lastDocument;
+              _hasMore = serverResult.hasMore;
+            }
+            _hasNewDealsPill = false;
+            _newDealsCount = 0;
+            _pendingServerDeals = null;
+            _pendingServerLastDoc = null;
+            _pendingServerHasMore = null;
+            _lastDealsFetchTime = DateTime.now();
+          });
+        } else {
+          setState(() {
+            _hasNewDealsPill = true;
+            _newDealsCount = genuineNewDeals.length;
+            _pendingServerDeals = serverResult.deals;
+            _pendingServerLastDoc = serverResult.lastDocument;
+            _pendingServerHasMore = serverResult.hasMore;
+            _lastDealsFetchTime = DateTime.now();
+          });
+        }
+      } else if (mounted) {
+        setState(() {
+          _lastDealsFetchTime = DateTime.now();
+          final serverMap = {for (final d in serverResult.deals) d.id: d};
+          for (int i = 0; i < _dealsList.length; i++) {
+            final match = serverMap[_dealsList[i].id];
+            if (match != null) {
+              _dealsList[i] = match;
+            }
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   /// FS-09 Kalkanı: İstemci içi reaktif senkronizasyon dinleyicisi
@@ -380,11 +461,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         needsSetState = true;
       }
 
+      // 3. Arka plan tampon listesinde (_pendingServerDeals) güncelleme
+      if (_pendingServerDeals != null) {
+        final pendingIndex = _pendingServerDeals!.indexWhere((d) => d.id == event.dealId);
+        if (pendingIndex != -1) {
+          if (event.action == DealSyncAction.dealDeleted) {
+            _pendingServerDeals!.removeAt(pendingIndex);
+          } else {
+            _pendingServerDeals![pendingIndex] = event.applyTo(_pendingServerDeals![pendingIndex]);
+          }
+        }
+      }
+
       if (needsSetState && mounted) {
         setState(() {});
       }
     });
   }
+
 
   /// Fırsat detayına gidiş ve güvenli çift katmanlı senkronizasyon köprüsü
   Future<void> _openDealDetail(BuildContext context, Deal deal) async {
@@ -725,6 +819,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               _dealsError = null;
               _hasNewDealsPill = false;
               _newDealsCount = 0;
+              _pendingServerDeals = null;
+              _pendingServerLastDoc = null;
+              _pendingServerHasMore = null;
               _lastDealsFetchTime = DateTime.now();
             });
             _initialLoadingTimeoutTimer?.cancel();
@@ -768,6 +865,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               _dealsError = null;
               _hasNewDealsPill = false;
               _newDealsCount = 0;
+              _pendingServerDeals = null;
+              _pendingServerLastDoc = null;
+              _pendingServerHasMore = null;
               _lastDealsFetchTime = DateTime.now();
             });
             _initialLoadingTimeoutTimer?.cancel();
@@ -887,16 +987,63 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _isLoadingDeals = false;
           _hasServerData = true;
           _dealsError = null;
+          _hasNewDealsPill = false;
+          _newDealsCount = 0;
+          _pendingServerDeals = null;
+          _pendingServerLastDoc = null;
+          _pendingServerHasMore = null;
           _lastDealsFetchTime = DateTime.now();
         });
       } else {
-        // Kullanıcı aşağı kaydırıp bir fırsatı inceliyorsa kartları zıplatma;
-        // Yüzen hap ("Yeni Fırsatlar Var") ile kullanıcı iradesine sun
-        setState(() {
-          _hasServerData = true;
-          _hasNewDealsPill = true;
-          _newDealsCount = 1;
-        });
+        // Kullanıcı aşağı kaydırıp bir fırsatı inceliyor.
+        // KRİTİK KONTROL (Sıfır Sahte Alarm Kalkanı):
+        // Sunucudan gelen fırsatlar ile ekrandaki mevcut fırsatlar arasında
+        // GERÇEKTEN ekranda olmayan ve ekrandaki en güncel tarihten DAHA YENİ bir fırsat var mı?
+        final existingIds = _dealsList.map((d) => d.id).toSet();
+        final newDeals = serverResult.deals.where((d) => !existingIds.contains(d.id)).toList();
+
+        DateTime newestExistingCreatedAt = _dealsList.isEmpty
+            ? DateTime.fromMillisecondsSinceEpoch(0)
+            : _dealsList.first.createdAt;
+        for (final d in _dealsList) {
+          if (d.createdAt.isAfter(newestExistingCreatedAt)) {
+            newestExistingCreatedAt = d.createdAt;
+          }
+        }
+
+        final genuineNewDeals = newDeals.where((d) => d.createdAt.isAfter(newestExistingCreatedAt)).toList();
+
+        if (genuineNewDeals.isNotEmpty) {
+          // Gerçekten yeni fırsatlar var! Kullanıcıyı rahatsız etmeden yüzen hap ile bildir
+          setState(() {
+            _hasServerData = true;
+            _hasNewDealsPill = true;
+            _newDealsCount = genuineNewDeals.length;
+            _pendingServerDeals = serverResult.deals;
+            _pendingServerLastDoc = serverResult.lastDocument;
+            _pendingServerHasMore = serverResult.hasMore;
+            _lastDealsFetchTime = DateTime.now();
+          });
+        } else {
+          // YENİ FIRSAT YOK! Kullanıcıya ASLA sahte "Yeni Fırsat Var" uyarısı ÇIKARTMA!
+          // Sadece mevcut kartların güncel verilerini (oy, yorum, fiyat) yerinde güncelle
+          // ve sayfalama imlecini senkronize et (0 jank, 0 layout zıplaması)
+          setState(() {
+            _hasServerData = true;
+            if (_dealsList.length <= serverResult.deals.length) {
+              _lastDealDocument = serverResult.lastDocument ?? _lastDealDocument;
+              _hasMore = serverResult.hasMore;
+            }
+            _lastDealsFetchTime = DateTime.now();
+            final serverMap = {for (final d in serverResult.deals) d.id: d};
+            for (int i = 0; i < _dealsList.length; i++) {
+              final match = serverMap[_dealsList[i].id];
+              if (match != null) {
+                _dealsList[i] = match;
+              }
+            }
+          });
+        }
       }
       _initialLoadingTimeoutTimer?.cancel();
     }).catchError((e) {
@@ -929,16 +1076,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // 2. İlk sayfa sunucudan gelene kadar yarış durumunu (Race Condition) önle.
+      // 2. Arama modundayken genel akış için hap butonu gösterilmemeli
+      if (_isSearchMode && _searchQuery.trim().isNotEmpty) {
+        return;
+      }
+
+      // 3. İlk sayfa sunucudan gelene kadar yarış durumunu (Race Condition) önle.
       // Açılışta veya kategori değişiminde ilk yükleme devam ederken sahte bildirim çıkarma.
       if (!_hasServerData || _isLoadingDeals) {
         return;
       }
 
-      // 3. Fırsat zaten mevcut ekrandaki listede varsa gösterme
+      // 4. Fırsat zaten mevcut ekrandaki listede varsa gösterme
       if (_dealsList.any((d) => d.id == latestDeal.id)) return;
 
-      // 4. Liste BOŞ ise ve sunucu verisi taze ise (Sıfır fırsat senaryosu)
+      // 5. Liste BOŞ ise ve sunucu verisi taze ise (Sıfır fırsat senaryosu)
       if (_dealsList.isEmpty) {
         if (_hasServerData) {
           setState(() {
@@ -949,7 +1101,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // 5. Liste DOLU ise:
+      // 6. Liste DOLU ise:
       // Eğer en üstteki fırsat zaten bu fırsatsa, yeni fırsat yok
       if (_dealsList.first.id == latestDeal.id) return;
 
@@ -986,6 +1138,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _hasMore = true;
       _hasNewDealsPill = false;
       _newDealsCount = 0;
+      _pendingServerDeals = null;
+      _pendingServerLastDoc = null;
+      _pendingServerHasMore = null;
     });
     _fetchInitialDeals();
     _listenToLatestDeal();
@@ -1000,18 +1155,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           : '✨ Yeni Fırsat Var 👆',
       primaryColor: primaryColor,
       onTap: () async {
+        final pending = _pendingServerDeals;
+        final pendingLastDoc = _pendingServerLastDoc;
+        final pendingHasMore = _pendingServerHasMore;
+
+        // 1. Dokunulduğu anda hap butonu hemen pürüzsüzce kapansın
         setState(() {
           _hasNewDealsPill = false;
           _newDealsCount = 0;
+          _pendingServerDeals = null;
+          _pendingServerLastDoc = null;
+          _pendingServerHasMore = null;
         });
+
+        // 2. Önce en tepeye akıcı animasyonla kaydır (kayma esnasında liste boyutu değişmediği için 0 layout jitter)
         if (_scrollController.hasClients) {
-          _scrollController.animateTo(
+          await _scrollController.animateTo(
             0,
-            duration: const Duration(milliseconds: 400),
+            duration: const Duration(milliseconds: 350),
             curve: Curves.easeOutCubic,
           );
         }
-        await _fetchInitialDeals(isRefresh: true);
+
+        // 3. Tepeye varıldığında hazır listeyi pürüzsüzce ekrana ver veya sunucudan tazele
+        if (mounted) {
+          if (pending != null && pending.isNotEmpty) {
+            setState(() {
+              _dealsList = List<Deal>.from(pending);
+              _lastDealDocument = pendingLastDoc ?? _lastDealDocument;
+              _hasMore = pendingHasMore ?? _hasMore;
+              _lastDealsFetchTime = DateTime.now();
+            });
+          } else {
+            await _fetchInitialDeals(isRefresh: true);
+          }
+        }
       },
     );
   }
